@@ -20,7 +20,6 @@ import { conversationMonitor, type ToolCallLog } from '../services/conversation-
 import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
 
 // ── 스키마 정의 ────────────────────────────────────
-
 const CreateSessionSchema = z.object({
   personaId: z.enum(['research-bot', 'english-tutor']),
   userId: z.string().optional(),
@@ -39,7 +38,6 @@ const EndSessionSchema = z.object({
 });
 
 // ── 라우트 등록 ────────────────────────────────────
-
 export async function voiceChatbotRoutes(app: FastifyInstance) {
 
   /**
@@ -77,49 +75,51 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
             model: 'gpt-4o-realtime-preview-2025-06-03',
             voice: persona.voiceId,
             instructions: persona.systemPrompt,
-            tools: body.personaId === 'research-bot' ? [
-              {
-                type: 'function',
-                name: 'search_papers',
-                description: 'Search research papers in the vector database by semantic query',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    query: { type: 'string', description: 'Semantic search query for papers' },
-                    limit: { type: 'number', description: 'Max results', default: 5 },
+            tools: body.personaId === 'research-bot'
+              ? [
+                  {
+                    type: 'function',
+                    name: 'search_papers',
+                    description: 'Search research papers in the vector database by semantic query',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        query: { type: 'string', description: 'Semantic search query for papers' },
+                        limit: { type: 'number', description: 'Max results', default: 5 },
+                      },
+                      required: ['query'],
+                    },
                   },
-                  required: ['query'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'get_paper_details',
-                description: 'Get full details of a specific paper by its ID',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    paperId: { type: 'string', description: 'Paper ID from search results' },
+                  {
+                    type: 'function',
+                    name: 'get_paper_details',
+                    description: 'Get full details of a specific paper by its ID',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        paperId: { type: 'string', description: 'Paper ID from search results' },
+                      },
+                      required: ['paperId'],
+                    },
                   },
-                  required: ['paperId'],
-                },
-              },
-            ] : [
-              {
-                type: 'function',
-                name: 'save_correction',
-                description: 'Save a pronunciation or grammar correction for review',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    original: { type: 'string', description: 'What the student said' },
-                    corrected: { type: 'string', description: 'The correct version' },
-                    type: { type: 'string', enum: ['pronunciation', 'grammar', 'vocabulary'] },
-                    explanation: { type: 'string', description: 'Brief explanation' },
+                ]
+              : [
+                  {
+                    type: 'function',
+                    name: 'save_correction',
+                    description: 'Save a pronunciation or grammar correction for review',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        original: { type: 'string', description: 'What the student said' },
+                        corrected: { type: 'string', description: 'The correct version' },
+                        type: { type: 'string', enum: ['pronunciation', 'grammar', 'vocabulary'] },
+                        explanation: { type: 'string', description: 'Brief explanation' },
+                      },
+                      required: ['original', 'corrected', 'type'],
+                    },
                   },
-                  required: ['original', 'corrected', 'type'],
-                },
-              },
-            ],
+                ],
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: { type: 'server_vad' },
           }),
@@ -128,10 +128,16 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
         if (tokenResponse.ok) {
           const tokenData = await tokenResponse.json() as { client_secret?: { value?: string } };
           ephemeralToken = tokenData.client_secret?.value || null;
+          console.log('[Voice] Ephemeral token obtained successfully');
+        } else {
+          const errBody = await tokenResponse.text();
+          console.error(`[Voice] OpenAI Realtime token failed: ${tokenResponse.status} ${errBody}`);
         }
       } catch (err) {
         console.error('[Voice] Failed to get ephemeral token:', err);
       }
+    } else {
+      console.warn('[Voice] OPENAI_API_KEY not set, skipping ephemeral token');
     }
 
     return reply.send({
@@ -157,7 +163,9 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   app.post('/api/voice/session/end', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = EndSessionSchema.parse(req.body);
     const { summary, turns } = conversationMonitor.endSession(
-      body.sessionId, body.personaId, body.userId
+      body.sessionId,
+      body.personaId,
+      body.userId
     );
 
     return reply.send({
@@ -249,11 +257,9 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   });
 }
 
-// ── 유틸리티 ────────────────────────────────────────
-
+// ── 유틸리티 ──────────────────────────────────────────
 function generateSessionId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
   return `voice-${timestamp}-${random}`;
 }
-
