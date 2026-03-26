@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LabFlow v3 — AI Research Lab OS</title>
+<script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg: #0F172A; --bg-card: #1E293B; --bg-input: #334155;
+    --text: #F1F5F9; --text-sec: #94A3B8; --text-muted: #64748B;
+    --primary: #6366F1; --primary-light: #818CF8;
+    --idea: #F59E0B; --task: #3B82F6; --memo: #10B981;
+    --danger: #EF4444;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+  .lucide { display: inline-block; vertical-align: middle; }
+
+  /* ── App Shell ── */
+  .app { display: flex; flex-direction: column; height: 100vh; max-width: 430px; margin: 0 auto; position: relative; }
+  .header { padding: 12px 20px; background: var(--bg); display: flex; align-items: center; gap: 8px; }
+  .header h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .tab-content { flex: 1; overflow-y: auto; }
+  .tab-bar { display: flex; background: var(--bg-card); border-top: 0.5px solid var(--bg-input); padding: 8px 0 28px; }
+  .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
+  .tab-item.active { opacity: 1; }
+  .tab-item .tab-icon { height: 24px; display: flex; align-items: center; justify-content: center; }
+  .tab-item .tab-label { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .tab-item.active .tab-label { color: var(--primary-light); }
+
+  /* ── 캡처 탭 ── */
+  .filter-row { display: flex; gap: 8px; padding: 8px 20px; }
+  .chip { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 7px 0; border-radius: 20px; background: var(--bg-card); border: 1px solid var(--bg-input); cursor: pointer; white-space: nowrap; font-size: 13px; color: var(--text-sec); font-weight: 500; transition: all 0.2s; }
+  .chip.active { background: rgba(99,102,241,0.12); border-color: var(--primary); color: var(--primary-light); font-weight: 700; }
+  .chip .count { background: var(--bg-input); min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: var(--text-muted); padding: 0 4px; }
+  .chip.active .count { background: rgba(99,102,241,0.25); color: var(--primary-light); }
+
+  /* ── 정렬 바 ── */
+  .sort-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 20px; }
+  .sort-toggle { display: flex; background: var(--bg-card); border: 1px solid var(--bg-input); border-radius: 8px; overflow: hidden; }
+  .sort-seg { display: flex; align-items: center; gap: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; transition: all 0.2s; }
+  .sort-seg:first-child { border-right: 1px solid var(--bg-input); }
+  .sort-seg.active { background: rgba(99,102,241,0.15); color: var(--primary-light); font-weight: 700; }
+  .sort-row-right { display: flex; align-items: center; gap: 8px; }
+  .progress-text { font-size: 13px; color: var(--memo); font-weight: 700; white-space: nowrap; }
+  .clear-btn { display: flex; align-items: center; gap: 3px; padding: 4px 8px; border-radius: 20px; background: rgba(239,68,68,0.08); font-size: 11px; color: var(--danger); font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .clear-btn:hover { background: rgba(239,68,68,0.15); }
+
+  .capture-list { padding: 4px 0; }
+  .capture-card { background: var(--bg-card); border-radius: 12px; padding: 0; margin: 4px 20px; border: 1px solid var(--bg-input); transition: transform 0.1s; overflow: hidden; }
+  .capture-card:active { transform: scale(0.98); }
+
+  .capture-card.completed { opacity: 0.5; }
+  .capture-card.completed .card-content { text-decoration: line-through; color: var(--text-muted); }
+
+  .checkbox { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--bg-input); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: all 0.2s; color: transparent; }
+  .checkbox:hover { border-color: var(--text-sec); }
+  .capture-card.completed .checkbox { background: var(--memo); border-color: var(--memo); color: white; }
+
+  .card-inner { padding: 16px; padding-left: 12px; display: flex; gap: 12px; }
+  .card-content-wrapper { flex: 1; display: flex; flex-direction: column; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .cat-badge { display: flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+  .cat-badge.idea { background: rgba(245,158,11,0.12); color: var(--idea); }
+  .cat-badge.task { background: rgba(59,130,246,0.12); color: var(--task); }
+  .cat-badge.memo { background: rgba(16,185,129,0.12); color: var(--memo); }
+  .card-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+  .priority-high { color: var(--danger); display: flex; align-items: center; }
+  .action-date { color: #60A5FA; font-weight: 600; display: flex; align-items: center; gap: 3px; }
+  .card-content { font-size: 15px; color: var(--text); line-height: 1.5; margin-bottom: 8px; }
+  .tags-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { background: rgba(99,102,241,0.15); padding: 2px 10px; border-radius: 20px; font-size: 11px; color: var(--primary-light); font-weight: 500; }
+
+  .due-date-bar { background: var(--bg-input); padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; border-top: 1px solid var(--bg-input); margin-top: 8px; border-radius: 8px; }
+  .due-date-bar.overdue { background: rgba(239,68,68,0.1); color: var(--danger); }
+  .due-date-bar.today { background: rgba(239,68,68,0.1); color: var(--danger); }
+  .due-date-bar.tomorrow { background: rgba(245,158,11,0.1); color: var(--idea); }
+  .due-date-bar.upcoming { background: rgba(59,130,246,0.1); color: var(--task); }
+
+  .actions-bar { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--bg-input); display: none; }
+  .capture-card.expanded .actions-bar { display: block; }
+  .reclassify-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .reclassify-label { font-size: 11px; color: var(--text-muted); }
+  .reclass-chip { display: flex; align-items: center; gap: 3px; padding: 4px 10px; border-radius: 20px; background: var(--bg-input); border: 1px solid transparent; cursor: pointer; font-size: 11px; color: var(--text-sec); font-weight: 600; }
+  .reclass-chip.active { border-color: currentColor; }
+  .delete-btn { display: flex; align-items: center; gap: 4px; color: var(--danger); font-size: 11px; font-weight: 600; cursor: pointer; float: right; }
+
+  .completion-banner { background: rgba(16,185,129,0.1); border-top: 1px solid var(--bg-input); padding: 8px 12px; color: var(--memo); font-size: 12px; font-weight: 600; display: none; text-align: center; }
+  .capture-card.completed .completion-banner { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+  .processing-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(99,102,241,0.3); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .processing-text { color: var(--primary-light); font-size: 13px; font-weight: 500; }
+
+  .empty-state { text-align: center; padding: 80px 32px 20px; }
+  .empty-icon { color: var(--primary-light); margin-bottom: 16px; opacity: 0.7; }
+  .empty-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .empty-desc { font-size: 15px; color: var(--text-sec); line-height: 1.8; }
+  .empty-desc .desc-row { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+  .input-bar { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 8px; background: var(--bg); }
+  .recording-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: rgba(239,68,68,0.08); border-radius: 12px; display: none; }
+  .recording-bar.active { display: flex; }
+  .recording-left { display: flex; align-items: center; gap: 8px; }
+  .record-dot { width: 10px; height: 10px; border-radius: 5px; background: var(--danger); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.3); opacity:0.6; } }
+  .recording-time { font-size: 15px; font-weight: 700; color: var(--danger); font-variant-numeric: tabular-nums; }
+  .recording-label { font-size: 13px; color: var(--text-sec); }
+  .recording-cancel { cursor: pointer; color: var(--danger); padding: 4px; }
+  .processing-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(99,102,241,0.08); border-radius: 12px; display: none; }
+  .processing-bar.active { display: flex; }
+  .processing-bar-text { font-size: 13px; color: var(--primary-light); font-weight: 500; }
+  .input-row { display: flex; align-items: center; gap: 6px; background: var(--bg-card); border-radius: 24px; border: 1px solid var(--bg-input); padding: 0 4px; }
+  .mic-btn { width: 38px; height: 38px; border-radius: 19px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(99,102,241,0.15); color: var(--primary); transition: all 0.2s; border: none; }
+  .mic-btn.recording { background: var(--danger); color: white; }
+  .mic-btn.processing { background: var(--bg-input); color: var(--text-muted); opacity: 0.5; pointer-events: none; }
+  .input-row input { flex: 1; background: none; border: none; color: var(--text); font-size: 15px; padding: 10px 4px; outline: none; }
+  .input-row input::placeholder { color: var(--text-muted); }
+  .send-btn { width: 36px; height: 36px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; color: white; transition: opacity 0.2s; }
+  .send-btn:disabled { opacity: 0.3; }
+
+  .email-screen { padding: 20px; }
+  .connect-card { background: var(--bg-card); border-radius: 16px; padding: 32px; text-align: center; border: 1px solid var(--bg-input); }
+  .connect-icon { color: var(--primary-light); margin-bottom: 16px; opacity: 0.8; }
+  .connect-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .connect-desc { font-size: 15px; color: var(--text-sec); line-height: 1.6; margin-bottom: 24px; }
+  .feature-list { text-align: left; margin-bottom: 24px; }
+  .feature-item { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 13px; color: var(--text-sec); }
+  .feature-icon { color: var(--primary-light); display: flex; align-items: center; }
+  .connect-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--primary); color: white; padding: 12px 24px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; border: none; margin-bottom: 12px; }
+  .connect-btn:hover { opacity: 0.9; }
+  .connect-note { font-size: 11px; color: var(--text-muted); }
+
+  .meeting-screen { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .record-card { background: var(--bg-card); border-radius: 16px; padding: 32px; text-align: center; border: 1px solid var(--bg-input); }
+  .record-btn { width: 88px; height: 88px; border-radius: 50%; background: var(--primary); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border: none; margin-bottom: 12px; box-shadow: 0 4px 24px rgba(99,102,241,0.3); color: white; transition: all 0.2s; }
+  .record-btn.active { background: var(--bg-card); border: 3px solid var(--danger); box-shadow: 0 4px 24px rgba(239,68,68,0.3); color: var(--danger); }
+  .record-label { font-size: 15px; color: var(--text-sec); font-weight: 500; }
+  .features-card { background: var(--bg-card); border-radius: 16px; padding: 20px; border: 1px solid var(--bg-input); }
+  .features-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .feat-row { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-start; }
+  .feat-icon-box { width: 40px; height: 40px; border-radius: 12px; background: var(--bg-input); display: flex; align-items: center; justify-content: center; color: var(--primary-light); flex-shrink: 0; }
+  .feat-name { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .feat-desc { font-size: 13px; color: var(--text-sec); }
+  .recent-card { background: var(--bg-card); border-radius: 16px; padding: 20px; border: 1px solid var(--bg-input); text-align: center; }
+  .recent-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; text-align: left; }
+  .empty-meetings { padding: 24px 0; color: var(--text-muted); font-size: 14px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header" id="header">
+    <h1 id="headerTitle"><i data-lucide="zap" style="width:20px;height:20px;color:var(--primary-light)"></i> 빠른 캡처</h1>
+  </div>
+
+  <div class="tab-content" id="tabContent">
+    <div id="captureTab">
+      <div class="filter-row" id="filterRow"></div>
+      <div class="sort-progress-row" id="sortProgressRow"></div>
+      <div id="processingBar" class="processing-bar hidden">
+        <div class="spinner"></div>
+        <span class="processing-text">AI가 분류하고 있습니다...</span>
+      </div>
+      <div class="capture-list" id="captureList"></div>
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon"><i data-lucide="sparkles" style="width:56px;height:56px"></i></div>
+        <div class="empty-title">빠른 캡처</div>
+        <div class="empty-desc">
+          아무거나 입력하거나 말하세요<br>AI가 자동으로 분류합니다<br><br>
+          <div class="desc-row"><i data-lucide="mic" style="width:16px;height:16px;color:var(--primary)"></i> 음성 — 운전/운동 중 핸즈프리</div>
+          <div class="desc-row"><i data-lucide="keyboard" style="width:16px;height:16px;color:var(--text-sec)"></i> 텍스트 — 빠른 메모</div>
+          <br>
+          <div class="desc-row"><i data-lucide="lightbulb" style="width:16px;height:16px;color:var(--idea)"></i> 아이디어 — 나중에 발전시킬 것</div>
+          <div class="desc-row"><i data-lucide="circle-check-big" style="width:16px;height:16px;color:var(--task)"></i> 할일 — 기한 있는 액션</div>
+          <div class="desc-row"><i data-lucide="file-text" style="width:16px;height:16px;color:var(--memo)"></i> 메모 — 기억할 정보</div>
+          <br>
+          <div class="desc-row" style="color:var(--text-muted)"><i data-lucide="hand" style="width:14px;height:14px"></i> 카드를 탭하면 분류 수정/삭제</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="emailTab" class="hidden email-screen">
+      <div class="connect-card">
+        <div class="connect-icon"><i data-lucide="mail" style="width:56px;height:56px"></i></div>
+        <div class="connect-title">이메일 브리핑</div>
+        <div class="connect-desc">Gmail 계정을 연결하면<br>AI가 매일 이메일을 분류하고 요약합니다</div>
+        <div class="feature-list">
+          <div class="feature-item"><span class="feature-icon"><i data-lucide="building-2" style="width:18px;height:18px"></i></span> 기관별 자동 분류 (학교/회사/개인)</div>
+          <div class="feature-item"><span class="feature-icon"><i data-lucide="alert-circle" style="width:18px;height:18px;color:var(--danger)"></i></span> 긴급 메일 우선 하이라이트</div>
+          <div class="feature-item"><span class="feature-icon"><i data-lucide="calendar" style="width:18px;height:18px"></i></span> 일정 관련 메일 자동 감지</div>
+          <div class="feature-item"><span class="feature-icon"><i data-lucide="sparkles" style="width:18px;height:18px"></i></span> AI 한줄 요약으로 빠른 확인</div>
+        </div>
+        <button class="connect-btn" onclick="alert('Gmail OAuth 연동은 백엔드 구현 후 활성화됩니다.')">
+          <i data-lucide="mail" style="width:20px;height:20px"></i> Gmail 연결하기
+        </button>
+        <div class="connect-note">연세대 / 링크솔루텍 / 개인 계정 통합 지원</div>
+      </div>
+    </div>
+
+    <div id="meetingTab" class="hidden meeting-screen">
+      <div class="record-card">
+        <button class="record-btn" id="recordBtn" onclick="toggleRecord()"><i data-lucide="mic" style="width:36px;height:36px"></i></button>
+        <div class="record-label" id="recordLabel">탭하여 회의 녹음 시작</div>
+      </div>
+      <div class="features-card">
+        <div class="features-title">회의 노트 기능</div>
+        <div class="feat-row"><div class="feat-icon-box"><i data-lucide="mic" style="width:20px;height:20px"></i></div><div><div class="feat-name">실시간 녹음 & 전사</div><div class="feat-desc">Gemini 2.5 Flash가 음성을 텍스트로 변환</div></div></div>
+        <div class="feat-row"><div class="feat-icon-box"><i data-lucide="sparkles" style="width:20px;height:20px"></i></div><div><div class="feat-name">AI 2단계 요약</div><div class="feat-desc">Gemini STT → Sonnet 교정/구조화 (안건·논의·액션·다음할일)</div></div></div>
+        <div class="feat-row"><div class="feat-icon-box"><i data-lucide="layout-grid" style="width:20px;height:20px"></i></div><div><div class="feat-name">Notion 연동</div><div class="feat-desc">회의록을 Notion DB에 자동 저장</div></div></div>
+      </div>
+      <div class="recent-card">
+        <div class="recent-title">최근 회의</div>
+        <div class="empty-meetings">
+          <i data-lucide="file-x" style="width:24px;height:24px;opacity:0.5"></i>
+          아직 녹음된 회의가 없습니다
+          <small style="color:var(--text-muted)">위의 녹음 버튼으로 첫 회의를 시작하세요</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-bar" id="inputBar">
+    <div class="recording-bar" id="recordingBar">
+      <div class="recording-left">
+        <div class="record-dot"></div>
+        <span class="recording-time" id="recordingTime">0:00</span>
+        <span class="recording-label">녹음 중...</span>
+      </div>
+      <div class="recording-cancel" onclick="cancelVoiceRecording()"><i data-lucide="x" style="width:18px;height:18px"></i></div>
+    </div>
+    <div class="processing-bar" id="processingBar">
+      <i data-lucide="sparkles" style="width:16px;height:16px;color:var(--primary)"></i>
+      <span class="processing-bar-text">AI가 음성을 분석하고 있습니다...</span>
+    </div>
+    <div class="input-row">
+      <button class="mic-btn" id="micBtn" onclick="toggleVoiceRecording()"><i data-lucide="mic" style="width:20px;height:20px"></i></button>
+      <input type="text" id="captureInput" placeholder="입력 또는 🎤 음성 캡처">
+      <button class="send-btn" id="sendBtn" disabled onclick="handleSend()"><i data-lucide="arrow-up" style="width:18px;height:18px"></i></button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab-item active" data-tab="capture" onclick="switchTab('capture')">
+      <span class="tab-icon"><i data-lucide="zap" style="width:22px;height:22px"></i></span>
+      <span class="tab-label">캡처</span>
+    </div>
+    <div class="tab-item" data-tab="email" onclick="switchTab('email')">
+      <span class="tab-icon"><i data-lucide="mail" style="width:22px;height:22px"></i></span>
+      <span class="tab-label">이메일</span>
+    </div>
+    <div class="tab-item" data-tab="meeting" onclick="switchTab('meeting')">
+      <span class="tab-icon"><i data-lucide="mic" style="width:22px;height:22px"></i></span>
+      <span class="tab-label">회의</span>
+    </div>
+  </div>
+</div>
+
+<script>
+let captures = [];
+let currentFilter = 'all';
+let currentTab = 'capture';
+let currentSort = 'oldest';
+let isRecording = false;
+let voiceRecording = false;
+let voiceTimer = null;
+let voiceSeconds = 0;
+
+// ── 음성 녹음 시뮬레이션 ─────────────────────
+const voiceDemos = [
+  { text: '내일 오전까지 실험 데이터 정리해서 김교수님께 보내기', cat: 'task', pri: 'high', tags: ['실험','데이터','김교수'] },
+  { text: '하이드로겔 전극에 카본나노튜브를 도핑하면 전도도가 올라갈 텐데 한번 테스트해볼까', cat: 'idea', pri: 'medium', tags: ['하이드로겔','CNT','전도도'] },
+  { text: '세미나실 A동 301호 예약코드는 BLISS2026', cat: 'memo', pri: 'low', tags: ['세미나실','예약'] },
+];
+
+function toggleVoiceRecording() {
+  if (voiceRecording) {
+    stopVoiceRecording();
+  } else {
+    startVoiceRecording();
+  }
+}
+
+function startVoiceRecording() {
+  voiceRecording = true;
+  voiceSeconds = 0;
+  document.getElementById('recordingBar').classList.add('active');
+  document.getElementById('micBtn').classList.add('recording');
+  document.getElementById('micBtn').innerHTML = ic('square', 20);
+  document.getElementById('captureInput').style.display = 'none';
+  document.getElementById('sendBtn').style.display = 'none';
+  updateVoiceTimer();
+  voiceTimer = setInterval(updateVoiceTimer, 1000);
+  lucide.createIcons();
+}
+
+function stopVoiceRecording() {
+  voiceRecording = false;
+  clearInterval(voiceTimer);
+  document.getElementById('recordingBar').classList.remove('active');
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('micBtn').classList.add('processing');
+  document.getElementById('processingBar').classList.add('active');
+  lucide.createIcons();
+
+  // 시뮬레이션: 2초 후 AI 분석 결과
+  setTimeout(() => {
+    document.getElementById('processingBar').classList.remove('active');
+    document.getElementById('micBtn').classList.remove('processing');
+    document.getElementById('micBtn').innerHTML = ic('mic', 20);
+    document.getElementById('captureInput').style.display = '';
+    document.getElementById('sendBtn').style.display = '';
+    lucide.createIcons();
+
+    // 랜덤 음성 캡처 결과 추가
+    const demo = voiceDemos[Math.floor(Math.random() * voiceDemos.length)];
+    addCaptureItem(demo.text, demo.cat, demo.pri, demo.tags, 'gemini-flash-voice');
+  }, 2000);
+}
+
+function cancelVoiceRecording() {
+  voiceRecording = false;
+  clearInterval(voiceTimer);
+  document.getElementById('recordingBar').classList.remove('active');
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('micBtn').innerHTML = ic('mic', 20);
+  document.getElementById('captureInput').style.display = '';
+  document.getElementById('sendBtn').style.display = '';
+  lucide.createIcons();
+}
+
+function updateVoiceTimer() {
+  voiceSeconds++;
+  const m = Math.floor(voiceSeconds / 60);
+  const s = voiceSeconds % 60;
+  document.getElementById('recordingTime').textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+
+function ic(name, size=16, extra='') {
+  return `<i data-lucide="${name}" style="width:${size}px;height:${size}px;${extra}"></i>`;
+}
+function refreshIcons() { if(window.lucide) lucide.createIcons(); }
+
+const TAG_DICT = {
+  '논문': ['논문','paper','리뷰','review','저널','journal','출판'],
+  '실험': ['실험','experiment','측정','샘플','protocol'],
+  '데이터': ['데이터','data','분석','analysis','통계','그래프'],
+  '센서': ['센서','sensor','감지','바이오센서'],
+  '바이오': ['바이오','bio','하이드로겔','hydrogel','세포','cell'],
+  '하드웨어': ['pcb','회로','circuit','기판','부품'],
+  '미팅': ['미팅','회의','세미나','meeting','발표'],
+  '연구실': ['학생','연구실','lab','랩','인턴','석사','박사'],
+  '개발': ['코드','개발','code','프로그래밍','api','서버','앱'],
+  '과제': ['예산','과제','지원사업','연구비','grant','제안서'],
+  '수업': ['수업','강의','시험','성적','채점'],
+  '행정': ['서류','증명서','출장','정산','보고서'],
+};
+
+const TASK_HIGH = ['오늘','지금','당장','급히','urgent','즉시'];
+const TASK_MED = ['내일','이번주','까지','마감','deadline','제출','보내','해야','해줘','하자','준비','확인','검토','수정','완료','예약'];
+const TASK_LOW = ['나중에','언제','시간날때','해놓','잊지마','todo','해볼'];
+const IDEA_KW = ['아이디어','어떨까','하면 좋겠','생각','떠올','시도해볼','가능할까','만들면','개발하면','idea','가설','제안','전략','새로운','혹시','만약','해볼까','영감'];
+
+function classify(text) {
+  const l = text.toLowerCase();
+  let tScore=0, iScore=0, pri='medium';
+  TASK_HIGH.forEach(p => { if(l.includes(p)){tScore+=3; pri='high';} });
+  TASK_MED.forEach(p => { if(l.includes(p)) tScore+=2; });
+  TASK_LOW.forEach(p => { if(l.includes(p)){tScore+=1; if(pri!=='high')pri='low';} });
+  IDEA_KW.forEach(p => { if(l.includes(p)) iScore+=2; });
+  if(text.includes('?')||text.includes('？')) iScore+=1;
+
+  let cat, conf;
+  if(tScore>iScore&&tScore>=2){ cat='task'; conf=Math.min(0.95,0.6+tScore*0.05); }
+  else if(iScore>tScore&&iScore>=2){ cat='idea'; conf=Math.min(0.95,0.6+iScore*0.05); }
+  else if(tScore>0&&iScore>0){ cat=tScore>=iScore?'task':'idea'; conf=0.55; }
+  else { cat='memo'; conf=0.8; pri='low'; }
+
+  const tags=[];
+  for(const[tag,kws]of Object.entries(TAG_DICT)){
+    if(kws.some(kw=>l.includes(kw))) tags.push(tag);
+    if(tags.length>=3) break;
+  }
+
+  let actionDate=null;
+  const today=new Date();
+  if(l.includes('오늘')) actionDate=fmt(today);
+  else if(l.includes('내일')){ const d=new Date(today); d.setDate(d.getDate()+1); actionDate=fmt(d); }
+  else if(l.includes('이번주')){ const d=new Date(today); d.setDate(d.getDate()+(5-d.getDay())); actionDate=fmt(d); }
+
+  const summary = text.length>50 ? text.substring(0,47)+'...' : text;
+  return { category:cat, confidence:conf, summary, tags, actionDate, priority:pri };
+}
+
+function fmt(d){ return d.toISOString().split('T')[0]; }
+
+function getDueDateInfo(actionDate) {
+  if(!actionDate) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dueDate = new Date(actionDate); dueDate.setHours(0,0,0,0);
+  const diff = Math.floor((dueDate - today) / (1000*60*60*24));
+  if(diff < 0) return { text: Math.abs(diff)+'일 지남', color:'overdue' };
+  if(diff === 0) return { text: '오늘 마감', color:'today' };
+  if(diff === 1) return { text: '내일', color:'tomorrow' };
+  if(diff <= 7) return { text: diff+'일 남음', color:'upcoming' };
+  return null;
+}
+
+function sortCaptures(items) {
+  const incomplete = items.filter(c => !c.completed);
+  const complete = items.filter(c => c.completed);
+  if(currentSort === 'oldest') {
+    incomplete.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+  } else if(currentSort === 'duedate') {
+    incomplete.sort((a,b) => {
+      if(!a.actionDate && !b.actionDate) return new Date(a.timestamp) - new Date(b.timestamp);
+      if(!a.actionDate) return 1;
+      if(!b.actionDate) return -1;
+      return new Date(a.actionDate) - new Date(b.actionDate);
+    });
+  }
+  return [...incomplete, ...complete];
+}
+
+const meta = {
+  idea: { icon:'lightbulb', label:'아이디어', cls:'idea' },
+  task: { icon:'circle-check-big', label:'할일', cls:'task' },
+  memo: { icon:'file-text', label:'메모', cls:'memo' },
+};
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-item').forEach(el => el.classList.toggle('active', el.dataset.tab===tab));
+  document.getElementById('captureTab').classList.toggle('hidden', tab!=='capture');
+  document.getElementById('emailTab').classList.toggle('hidden', tab!=='email');
+  document.getElementById('meetingTab').classList.toggle('hidden', tab!=='meeting');
+  document.getElementById('inputBar').classList.toggle('hidden', tab!=='capture');
+  const titles = {
+    capture: `${ic('zap',20,'color:var(--primary-light)')} 빠른 캡처`,
+    email: `${ic('mail',20,'color:var(--primary-light)')} 이메일 브리핑`,
+    meeting: `${ic('mic',20,'color:var(--primary-light)')} 회의 노트`
+  };
+  document.getElementById('headerTitle').innerHTML = titles[tab];
+  refreshIcons();
+}
+
+function renderFilters() {
+  const counts = {
+    all: captures.length,
+    idea: captures.filter(c=>c.category==='idea').length,
+    task: captures.filter(c=>c.category==='task').length,
+    memo: captures.filter(c=>c.category==='memo').length,
+  };
+  const opts = [
+    {key:'all',label:'전체',icon:'layers'},
+    {key:'idea',label:'아이디어',icon:'lightbulb'},
+    {key:'task',label:'할일',icon:'circle-check-big'},
+    {key:'memo',label:'메모',icon:'file-text'},
+  ];
+  document.getElementById('filterRow').innerHTML = opts.map(o =>
+    `<div class="chip ${currentFilter===o.key?'active':''}" onclick="setFilter('${o.key}')">
+      ${ic(o.icon, 14)} ${o.label}
+      ${counts[o.key]>0?`<span class="count">${counts[o.key]}</span>`:''}
+    </div>`
+  ).join('');
+}
+
+function setFilter(f) { currentFilter=f; renderFilters(); renderList(); }
+
+function renderSortAndProgress() {
+  const completedCount = captures.filter(c => c.completed).length;
+  const taskFiltered = captures.filter(c => c.category === 'task');
+  const taskCompleted = taskFiltered.filter(c => c.completed).length;
+
+  let rightHtml = '';
+  if(currentFilter === 'task' && taskFiltered.length > 0) {
+    rightHtml += `<span class="progress-text">${taskCompleted}/${taskFiltered.length} 완료</span>`;
+  }
+  if(completedCount > 0) {
+    rightHtml += `<div class="clear-btn" onclick="clearCompleted()">${ic('trash-2',12)} 완료 삭제</div>`;
+  }
+
+  document.getElementById('sortProgressRow').innerHTML = `
+    <div class="sort-toggle">
+      <div class="sort-seg ${currentSort==='oldest'?'active':''}" onclick="setSort('oldest')">${ic('clock',13)} 등록순</div>
+      <div class="sort-seg ${currentSort==='duedate'?'active':''}" onclick="setSort('duedate')">${ic('calendar',13)} 마감일순</div>
+    </div>
+    <div class="sort-row-right">${rightHtml}</div>
+  `;
+}
+
+function setSort(mode) { currentSort = mode; renderSortAndProgress(); renderList(); }
+
+function clearCompleted() {
+  const n = captures.filter(c => c.completed).length;
+  if(confirm(`완료된 ${n}개 항목을 삭제하시겠습니까?`)) {
+    captures = captures.filter(c => !c.completed);
+    renderAll();
+  }
+}
+
+function renderList() {
+  const filtered = currentFilter==='all' ? captures : captures.filter(c=>c.category===currentFilter);
+  const sorted = sortCaptures(filtered);
+  const el = document.getElementById('captureList');
+  const empty = document.getElementById('emptyState');
+
+  if(sorted.length===0) { el.innerHTML=''; empty.classList.remove('hidden'); refreshIcons(); return; }
+  empty.classList.add('hidden');
+
+  el.innerHTML = sorted.map(c => {
+    const m = meta[c.category];
+    const t = new Date(c.timestamp);
+    const time = t.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+    const date = t.toLocaleDateString('ko-KR',{month:'short',day:'numeric'});
+    const dueInfo = getDueDateInfo(c.actionDate);
+    const dueBar = !c.completed && dueInfo ? `<div class="due-date-bar ${dueInfo.color}">${ic('calendar-clock',14)} ${dueInfo.text}</div>` : '';
+
+    return `<div class="capture-card ${c.expanded?'expanded':''} ${c.completed?'completed':''}" onclick="toggleCard('${c.id}')">
+      <div class="card-inner">
+        <div class="checkbox" onclick="event.stopPropagation();toggleCompleted('${c.id}')">
+          ${c.completed?ic('check',14):''}
+        </div>
+        <div class="card-content-wrapper">
+          <div class="card-header">
+            <div class="cat-badge ${m.cls}">${ic(m.icon,13)} ${m.label}${c.confidence<0.7?' <small style="opacity:0.5">?</small>':''}</div>
+            <div class="card-meta">
+              ${c.priority==='high'?`<span class="priority-high">${ic('alert-circle',12)}</span>`:''}
+              ${c.actionDate&&!c.completed?`<span class="action-date">${ic('calendar',11)} ${c.actionDate}</span>`:''}
+              <span>${date} ${time}</span>
+            </div>
+          </div>
+          <div class="card-content">${c.content}</div>
+          ${c.tags.length?`<div class="tags-row">${c.tags.map(t=>`<span class="tag">#${t}</span>`).join('')}</div>`:''}
+          ${dueBar}
+          <div class="actions-bar" style="padding:12px 0 0 0">
+            <div class="reclassify-row">
+              <span class="reclassify-label">분류 변경:</span>
+              ${['idea','task','memo'].map(cat => {
+                const cm = meta[cat];
+                return `<div class="reclass-chip ${cat===c.category?'active':''}" style="${cat===c.category?'border-color:currentColor;background:rgba(99,102,241,0.1)':''}" onclick="event.stopPropagation();reclassify('${c.id}','${cat}')">${ic(cm.icon,12)} ${cm.label}</div>`;
+              }).join('')}
+            </div>
+            <div class="delete-btn" onclick="event.stopPropagation();deleteCapture('${c.id}')">${ic('trash-2',12)} 삭제</div>
+          </div>
+          <div class="completion-banner">${ic('circle-check',14)} 완료됨</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  refreshIcons();
+}
+
+function toggleCard(id) { const c=captures.find(x=>x.id===id); if(c){c.expanded=!c.expanded; renderList();} }
+function toggleCompleted(id) { const c=captures.find(x=>x.id===id); if(c){c.completed=!c.completed; renderSortAndProgress(); renderList();} }
+function reclassify(id, newCat) { const c=captures.find(x=>x.id===id); if(c&&c.category!==newCat){c.category=newCat; c.expanded=false; renderAll();} }
+function deleteCapture(id) { if(confirm('이 캡처를 삭제하시겠습니까?')){captures=captures.filter(x=>x.id!==id); renderAll();} }
+
+function renderAll() { renderFilters(); renderSortAndProgress(); renderList(); refreshIcons(); }
+
+const input = document.getElementById('captureInput');
+const sendBtn = document.getElementById('sendBtn');
+input.addEventListener('input', () => { sendBtn.disabled = !input.value.trim(); });
+input.addEventListener('keydown', (e) => { if(e.key==='Enter'&&!e.shiftKey&&input.value.trim()){e.preventDefault(); handleSend();} });
+
+function addCaptureItem(text, cat, pri, tags, modelUsed) {
+  captures.unshift({
+    id: 'cap-'+Date.now()+'-'+Math.random().toString(36).substr(2,4),
+    content: text, category: cat, priority: pri, tags: tags||[],
+    summary: text.length>50 ? text.substring(0,47)+'...' : text,
+    confidence: modelUsed?.includes('voice') ? 0.92 : 0.85,
+    actionDate: null, modelUsed: modelUsed||'local',
+    timestamp: new Date().toISOString(), expanded: false, completed: false,
+  });
+  document.getElementById('emptyState')?.classList.add('hidden');
+  renderAll();
+}
+
+function handleSend() {
+  const text = input.value.trim();
+  if(!text) return;
+  input.value=''; sendBtn.disabled=true;
+  document.getElementById('emptyState')?.classList.add('hidden');
+  setTimeout(() => {
+    const result = classify(text);
+    addCaptureItem(text, result.category, result.priority, result.tags, 'local');
+  }, 400+Math.random()*600);
+}
+
+function toggleRecord() {
+  isRecording = !isRecording;
+  const btn = document.getElementById('recordBtn');
+  const label = document.getElementById('recordLabel');
+  if(isRecording) { btn.classList.add('active'); btn.innerHTML=ic('square',28); label.textContent='녹음 중... 탭하여 중지'; }
+  else { btn.classList.remove('active'); btn.innerHTML=ic('mic',36); label.textContent='탭하여 회의 녹음 시작'; }
+  refreshIcons();
+}
+
+function loadSamples() {
+  const samples = [
+    '하이드로겔 기반 pH 센서를 웨어러블 패치로 만들면 어떨까? 땀 모니터링에 적용 가능할 것 같다',
+    '내일까지 MDPI Sensors 저널에 리뷰 코멘트 보내야 함',
+    'PCB 발주 업체 연락처: 한국회로 김팀장 010-1234-5678',
+    '오늘 3시 랩미팅 준비 — 실험 데이터 그래프 정리하기',
+    '유연 기판 위에 은나노와이어 패터닝하는 새로운 방법 생각남. 레이저 소결 대신 잉크젯으로 접근해볼까?',
+    'NRF 과제 중간보고서 이번주 금요일까지 제출',
+  ];
+  samples.forEach((text,i) => {
+    setTimeout(()=>{
+      const result = classify(text);
+      captures.push({ id:'sample-'+i, content:text, ...result,
+        timestamp: new Date(Date.now()-i*3600000).toISOString(), expanded:false, completed: i===3 });
+      renderAll();
+    }, i*100);
+  });
+}
+
+renderAll();
+loadSamples();
+</script>
+</body>
+</html>

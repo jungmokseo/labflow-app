@@ -1,0 +1,28 @@
+# Render Blueprint — LabFlow API
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: labflow-api
+    runtime: node
+    region: singapore  # 한국에서 가장 가까운 리전
+    plan: free
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: CORS_ORIGINS
+        value: "https://labflow-app.vercel.app,exp://localhost:8081"
+    healthCheckPath: /health
+    autoDeploy: true

@@ -1,0 +1,132 @@
+// LabFlow API — Prisma Schema for Supabase PostgreSQL
+// Run: npx prisma db push (개발) or npx prisma migrate dev (프로덕션)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ── 사용자 (Clerk 연동) ────────────────────────────────
+model User {
+  id          String    @id @default(cuid())
+  clerkId     String    @unique @map("clerk_id")
+  email       String    @unique
+  name        String?
+  labName     String?   @map("lab_name")
+  plan        Plan      @default(BASIC)
+  credits     Int       @default(100) // AI 분류 크레딧
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  captures     Capture[]
+  gmailToken   GmailToken?
+  emailProfile EmailProfile?
+  meetings     Meeting[]
+
+  @@map("users")
+}
+
+enum Plan {
+  BASIC
+  PRO
+  MAX
+}
+
+// ── 캡처 (핵심 데이터) ─────────────────────────────────
+model Capture {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  content     String          // 원본 텍스트
+  summary     String          // AI 요약
+  category    CaptureCategory @default(MEMO)
+  tags        String[]        // AI 태그 배열
+  priority    Priority        @default(MEDIUM)
+  confidence  Float?          // AI 분류 신뢰도 0~1
+  actionDate  DateTime?       @map("action_date")
+  modelUsed   String?         @map("model_used") // local | gemini-flash
+  completed   Boolean         @default(false)
+  completedAt DateTime?       @map("completed_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, category])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, completed])
+  @@map("captures")
+}
+
+enum CaptureCategory {
+  IDEA
+  TASK
+  MEMO
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// ── 회의 노트 ───────────────────────────────────────────
+model Meeting {
+  id             String   @id @default(cuid())
+  userId         String   @map("user_id")
+  title          String
+  transcription  String?  // Gemini STT 전사 결과
+  summary        String?  // Sonnet 구조화 요약 (JSON 또는 마크다운)
+  agenda         String[] // 📋 안건 목록
+  discussions    String?  // 📝 논의 내용 (소주제별, JSON 문자열)
+  actionItems    String[] @map("action_items") // ✅ 액션 아이템
+  nextSteps      String[] @map("next_steps")   // 📌 다음 할 일
+  duration       Int?     // 녹음 시간 (초)
+  modelUsed      String?  @map("model_used")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("meetings")
+}
+
+// ── Gmail 인증 토큰 ─────────────────────────────────────
+model GmailToken {
+  id           String    @id @default(cuid())
+  userId       String    @unique @map("user_id")
+  accessToken  String    @map("access_token")
+  refreshToken String?   @map("refresh_token")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("gmail_tokens")
+}
+
+// ── 이메일 프로필 (다계정 분류 설정 + T_last) ─────────────
+model EmailProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique @map("user_id")
+  classifyByGroup  Boolean   @default(false) @map("classify_by_group") // true: 기관별+성격별 이중 분류
+  groups           Json      @default("[]") // [{ name, domains[], emoji }]
+  lastBriefingAt   DateTime? @map("last_briefing_at") // T_last: 마지막 브리핑 시각
+  excludePatterns  Json      @default("[]") // 제외 패턴: [{ field, pattern }]
+  keywords         Json      @default("[]") // 중요도 상향 키워드 목록
+  importanceRules  Json      @default("[]") @map("importance_rules") // [{ condition, action, description }]
+  senderTimezones  Json      @default("[]") @map("sender_timezones") // [{ domains[], timezone, label }]
+  timezone         String    @default("America/New_York") // 기본 시간대
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_profiles")
+}

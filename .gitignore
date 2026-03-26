@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+.expo/
+ios/
+android/
+*.tsbuildinfo
+.DS_Store
+server/node_modules/
+server/dist/
+server/.env
