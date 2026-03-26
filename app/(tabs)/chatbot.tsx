@@ -153,14 +153,24 @@ export default function ChatbotScreen() {
     if (!session) return;
 
     try {
-      await fetch(`${API_BASE}/api/voice/end-session`, {
+      // Try new endpoint first, fallback to old one
+      const endBody = JSON.stringify({
+        sessionId: session.sessionId,
+        personaId: session.persona.id,
+      });
+      const endRes = await fetch(`${API_BASE}/api/voice/end-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: session.sessionId,
-          personaId: session.persona.id,
-        }),
+        body: endBody,
       });
+      if (!endRes.ok) {
+        // Fallback to old endpoint (pre-Session 18 servers)
+        await fetch(`${API_BASE}/api/voice/session/end`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: endBody,
+        });
+      }
     } catch (err) {
       console.error('Session end error:', err);
     }
