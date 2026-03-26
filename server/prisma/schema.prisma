@@ -71,15 +71,23 @@ model Lab {
 
 // ── 연구실 구성원 ─────────────────────────────────────
 model LabMember {
-  id       String  @id @default(cuid())
-  labId    String  @map("lab_id")
-  name     String
-  email    String?
-  role     String  @default("학생") // PI, 교수, 박사과정, 석사과정, 학부연구생, 포닥, etc
-  phone    String?
-  active   Boolean @default(true)
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  name          String
+  email         String?
+  role          String    @default("학생") // PI, 교수, 박사과정, 석사과정, 학부연구생, 포닥, etc
+  phone         String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  lab      Lab     @relation(fields: [labId], references: [id], onDelete: Cascade)
+  // ── Layer 4: 메타기억 ──
+  lastVerified  DateTime? @map("last_verified")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastAccessed  DateTime? @map("last_accessed")
+  source        String?   // onboarding, manual, chat
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId])
   @@map("lab_members")
@@ -99,6 +107,13 @@ model Project {
   status           String    @default("active") // active, completed, pending
   createdAt        DateTime  @default(now()) @map("created_at")
 
+  // ── Layer 4: 메타기억 ──
+  lastVerified     DateTime? @map("last_verified")
+  confidence       Float     @default(1.0)
+  accessCount      Int       @default(0) @map("access_count")
+  lastAccessed     DateTime? @map("last_accessed")
+  source           String?   // onboarding, manual, chat
+
   lab              Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId])
@@ -107,16 +122,24 @@ model Project {
 
 // ── 연구실 논문 (Lab Memory) ───────────────────────────
 model Publication {
-  id        String   @id @default(cuid())
-  labId     String   @map("lab_id")
-  title     String
-  journal   String?
-  year      Int?
-  doi       String?
-  authors   String?
-  projectId String?  @map("project_id") // 사사 과제 연결
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  title         String
+  journal       String?
+  year          Int?
+  doi           String?
+  authors       String?
+  projectId     String?   @map("project_id") // 사사 과제 연결
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  lab       Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  // ── Layer 4: 메타기억 ──
+  lastVerified  DateTime? @map("last_verified")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastAccessed  DateTime? @map("last_accessed")
+  source        String?   // seed_paper, manual, chat
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId])
   @@map("publications")
@@ -138,20 +161,27 @@ model DomainDict {
   @@map("domain_dict")
 }
 
-// ── 메모 (미니브레인 영구 기억) ───────────────────────
+// ── 메모 (미니브레인 영구 기억 + 메타기억 4층) ──────────
 model Memo {
-  id        String   @id @default(cuid())
-  labId     String   @map("lab_id")
-  userId    String   @map("user_id")
-  content   String   // 원본 내용
-  title     String?  // AI 자동 생성 제목
-  tags      String[] // AI 자동 태그
-  source    String   @default("manual") // manual, chat, meeting, email
-  createdAt DateTime @default(now()) @map("created_at")
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  userId        String    @map("user_id")
+  content       String    // 원본 내용
+  title         String?   // AI 자동 생성 제목
+  tags          String[]  // AI 자동 태그
+  source        String    @default("manual") // manual, chat, meeting, email, onboarding, seed_paper
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  lab       Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+  // ── Layer 4: 메타기억 (Metamemory) ──
+  lastVerified  DateTime? @map("last_verified")   // 마지막 검증 날짜
+  confidence    Float     @default(1.0)            // 정보 신뢰도 (시간에 따라 감소, 0~1)
+  accessCount   Int       @default(0) @map("access_count")  // 조회 횟수
+  lastAccessed  DateTime? @map("last_accessed")    // 마지막 조회 시간
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId, createdAt(sort: Desc)])
+  @@index([labId, confidence])
   @@map("memos")
 }
 
