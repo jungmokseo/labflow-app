@@ -26,11 +26,23 @@ import VoiceWebRTC from '../components/VoiceWebRTC';
 
 // ── 타입 정의 ──────────────────────────────────────
 
+interface VoiceOption {
+  id: string;
+  name: string;
+  nameKo: string;
+  gender: 'male' | 'female' | 'neutral';
+  description: string;
+  descriptionKo: string;
+  tags: string[];
+}
+
 interface Persona {
   id: string;
   name: string;
   nameKo: string;
   description: string;
+  defaultVoiceId: string;
+  recommendedVoices: VoiceOption[];
 }
 
 interface SessionInfo {
@@ -68,6 +80,9 @@ export default function ChatbotScreen() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [statusText, setStatusText] = useState('');
+  const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
   const [conversation, setConversation] = useState<Array<{
     role: 'user' | 'assistant';
     text: string;
@@ -76,21 +91,42 @@ export default function ChatbotScreen() {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  // 페르소나 목록
+  // 전체 음성 목록 (하드코딩 — 서버에서도 동일 데이터)
+  const ALL_VOICES: VoiceOption[] = [
+    { id: 'alloy', name: 'Alloy', nameKo: '알로이', gender: 'neutral', description: 'Neutral and balanced', descriptionKo: '중성적이고 균형 잡힌 목소리', tags: [] },
+    { id: 'ash', name: 'Ash', nameKo: '애쉬', gender: 'male', description: 'Soft-spoken male', descriptionKo: '부드러운 남성 음성 — 차분하고 편안함', tags: [] },
+    { id: 'ballad', name: 'Ballad', nameKo: '발라드', gender: 'male', description: 'Warm male voice', descriptionKo: '따뜻한 남성 음성 — 이야기하듯 부드러움', tags: [] },
+    { id: 'coral', name: 'Coral', nameKo: '코랄', gender: 'female', description: 'Warm and friendly female', descriptionKo: '따뜻하고 친근한 여성 음성', tags: ['default'] },
+    { id: 'echo', name: 'Echo', nameKo: '에코', gender: 'male', description: 'Calm and composed male', descriptionKo: '차분하고 침착한 남성 음성 — 설명에 적합', tags: [] },
+    { id: 'fable', name: 'Fable', nameKo: '페이블', gender: 'female', description: 'Expressive female', descriptionKo: '표현력 풍부한 여성 음성', tags: [] },
+    { id: 'nova', name: 'Nova', nameKo: '노바', gender: 'female', description: 'Energetic and bright', descriptionKo: '밝고 에너지 넘치는 여성 음성', tags: [] },
+    { id: 'onyx', name: 'Onyx', nameKo: '오닉스', gender: 'male', description: 'Deep authoritative male', descriptionKo: '깊고 권위 있는 남성 음성', tags: [] },
+    { id: 'sage', name: 'Sage', nameKo: '세이지', gender: 'female', description: 'Wise and measured', descriptionKo: '지적이고 차분한 여성 음성', tags: [] },
+    { id: 'shimmer', name: 'Shimmer', nameKo: '쉬머', gender: 'female', description: 'Light and encouraging', descriptionKo: '가볍고 격려하는 여성 음성 — 교정에 최적', tags: [] },
+    { id: 'verse', name: 'Verse', nameKo: '버스', gender: 'male', description: 'Clear articulate male', descriptionKo: '또렷하고 명확한 남성 음성 — 학술 토론용', tags: [] },
+  ];
+
+  // 페르소나 목록 (추천 음성 포함)
   const personas: Persona[] = [
     {
       id: 'research-bot',
       name: 'Research Discussion Bot',
       nameKo: '연구 토론 봇',
       description: '논문에 대해 음성으로 토론하세요. RAG 기반으로 관련 논문을 검색하며 대화합니다.',
+      defaultVoiceId: 'coral',
+      recommendedVoices: ALL_VOICES.filter(v => ['coral', 'echo', 'sage', 'verse', 'onyx'].includes(v.id)),
     },
     {
       id: 'english-tutor',
       name: 'English Voice Tutor',
       nameKo: '영어 음성 튜터',
       description: '학술 영어 발음과 문법을 실시간으로 교정받으세요. 학회 발표 연습도 가능합니다.',
+      defaultVoiceId: 'shimmer',
+      recommendedVoices: ALL_VOICES.filter(v => ['shimmer', 'nova', 'fable', 'coral', 'alloy'].includes(v.id)),
     },
   ];
+
+  const genderIcon = (g: string) => g === 'male' ? '♂' : g === 'female' ? '♀' : '◎';
 
   // 맥박 애니메이션 (녹음 중)
   useEffect(() => {
@@ -116,16 +152,24 @@ export default function ChatbotScreen() {
     }
   }, [isListening]);
 
-  // 세션 시작
-  const startSession = useCallback(async (personaId: string) => {
+  // 페르소나 선택 → 음성 선택 화면 표시
+  const handlePersonaSelect = useCallback((persona: Persona) => {
+    setSelectedPersona(persona);
+    setSelectedVoiceId(persona.defaultVoiceId);
+    setShowVoicePicker(true);
+  }, []);
+
+  // 세션 시작 (음성 선택 완료 후)
+  const startSession = useCallback(async (personaId: string, voiceId?: string) => {
     setState('connecting');
+    setShowVoicePicker(false);
     setStatusText('서버에 연결 중...');
 
     try {
       const response = await fetch(`${API_BASE}/api/voice/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personaId }),
+        body: JSON.stringify({ personaId, voiceId }),
       });
 
       if (!response.ok) throw new Error('Session creation failed');
@@ -267,28 +311,101 @@ export default function ChatbotScreen() {
           음성으로 대화할 AI를 선택하세요
         </Text>
 
-        {personas.map(persona => (
-          <TouchableOpacity
-            key={persona.id}
-            style={styles.personaCard}
-            onPress={() => startSession(persona.id)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.personaIcon}>
-              <Ionicons
-                name={persona.id === 'research-bot' ? 'library-outline' : 'language-outline'}
-                size={32}
-                color={colors.primary}
-              />
+        {!showVoicePicker ? (
+          <>
+            {personas.map(persona => (
+              <TouchableOpacity
+                key={persona.id}
+                style={styles.personaCard}
+                onPress={() => handlePersonaSelect(persona)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.personaIcon}>
+                  <Ionicons
+                    name={persona.id === 'research-bot' ? 'library-outline' : 'language-outline'}
+                    size={32}
+                    color={colors.primary}
+                  />
+                </View>
+                <View style={styles.personaInfo}>
+                  <Text style={styles.personaName}>{persona.nameKo}</Text>
+                  <Text style={styles.personaNameEn}>{persona.name}</Text>
+                  <Text style={styles.personaDesc}>{persona.description}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : selectedPersona && (
+          <>
+            {/* 음성 선택 화면 */}
+            <View style={styles.voicePickerHeader}>
+              <TouchableOpacity onPress={() => setShowVoicePicker(false)}>
+                <Ionicons name="arrow-back" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={styles.voicePickerTitle}>
+                🔊 {selectedPersona.nameKo} — 음성 선택
+              </Text>
             </View>
-            <View style={styles.personaInfo}>
-              <Text style={styles.personaName}>{persona.nameKo}</Text>
-              <Text style={styles.personaNameEn}>{persona.name}</Text>
-              <Text style={styles.personaDesc}>{persona.description}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
-        ))}
+
+            <Text style={styles.voicePickerSubtitle}>추천 음성</Text>
+            {selectedPersona.recommendedVoices.map(voice => (
+              <TouchableOpacity
+                key={voice.id}
+                style={[
+                  styles.voiceCard,
+                  selectedVoiceId === voice.id && styles.voiceCardSelected,
+                ]}
+                onPress={() => setSelectedVoiceId(voice.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.voiceGender}>{genderIcon(voice.gender)}</Text>
+                <View style={styles.voiceInfo}>
+                  <Text style={styles.voiceName}>
+                    {voice.nameKo} ({voice.name})
+                    {voice.id === selectedPersona.defaultVoiceId && (
+                      <Text style={styles.defaultBadge}>  기본</Text>
+                    )}
+                  </Text>
+                  <Text style={styles.voiceDesc}>{voice.descriptionKo}</Text>
+                </View>
+                {selectedVoiceId === voice.id && (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+
+            <Text style={[styles.voicePickerSubtitle, { marginTop: 16 }]}>전체 음성</Text>
+            {ALL_VOICES.filter(v => !selectedPersona.recommendedVoices.some(rv => rv.id === v.id)).map(voice => (
+              <TouchableOpacity
+                key={voice.id}
+                style={[
+                  styles.voiceCard,
+                  selectedVoiceId === voice.id && styles.voiceCardSelected,
+                ]}
+                onPress={() => setSelectedVoiceId(voice.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.voiceGender}>{genderIcon(voice.gender)}</Text>
+                <View style={styles.voiceInfo}>
+                  <Text style={styles.voiceName}>{voice.nameKo} ({voice.name})</Text>
+                  <Text style={styles.voiceDesc}>{voice.descriptionKo}</Text>
+                </View>
+                {selectedVoiceId === voice.id && (
+                  <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+
+            <TouchableOpacity
+              style={styles.startButton}
+              onPress={() => startSession(selectedPersona.id, selectedVoiceId || undefined)}
+            >
+              <Ionicons name="mic" size={20} color="#FFF" />
+              <Text style={styles.startButtonText}>대화 시작</Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <View style={styles.infoBox}>
           <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
@@ -466,6 +583,82 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 4,
     lineHeight: 18,
+  },
+
+  // Voice picker
+  voicePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  voicePickerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  voicePickerSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  voiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.bgCard,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  voiceCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}08`,
+  },
+  voiceGender: {
+    fontSize: 18,
+    width: 32,
+    textAlign: 'center',
+    color: colors.textMuted,
+  },
+  voiceInfo: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  voiceName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  voiceDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  defaultBadge: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 16,
+    marginBottom: 8,
+    gap: 8,
+  },
+  startButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 
   // Info box

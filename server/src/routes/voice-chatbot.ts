@@ -14,13 +14,16 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { env } from '../config/env.js';
-import { personas, getPersona, listPersonas } from '../config/personas.js';
+import { personas, getPersona, listPersonas, listVoices, VOICE_OPTIONS } from '../config/personas.js';
 import { conversationMonitor, type ToolCallLog } from '../services/conversation-monitor.js';
 
 // ── 스키마 정의 ────────────────────────────────────
 
+const validVoiceIds = VOICE_OPTIONS.map(v => v.id) as [string, ...string[]];
+
 const CreateSessionSchema = z.object({
   personaId: z.enum(['research-bot', 'english-tutor']),
+  voiceId: z.enum(validVoiceIds).optional(), // 사용자 선택 음성 (없으면 페르소나 기본값)
   userId: z.string().optional(),
 });
 
@@ -41,11 +44,20 @@ const EndSessionSchema = z.object({
 export async function voiceChatbotRoutes(app: FastifyInstance) {
 
   /**
-   * GET /api/voice/personas — 사용 가능한 페르소나 목록
+   * GET /api/voice/personas — 사용 가능한 페르소나 목록 (추천 음성 포함)
    */
   app.get('/api/voice/personas', async (_req: FastifyRequest, reply: FastifyReply) => {
     return reply.send({
       personas: listPersonas(),
+    });
+  });
+
+  /**
+   * GET /api/voice/voices — 사용 가능한 전체 음성 목록
+   */
+  app.get('/api/voice/voices', async (_req: FastifyRequest, reply: FastifyReply) => {
+    return reply.send({
+      voices: listVoices(),
     });
   });
 
@@ -57,6 +69,9 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
     const body = CreateSessionSchema.parse(req.body);
     const persona = getPersona(body.personaId);
     const sessionId = generateSessionId();
+
+    // 음성 결정: 사용자 선택 > 페르소나 기본값
+    const selectedVoiceId = body.voiceId || persona.defaultVoiceId;
 
     // 모니터링 시작
     conversationMonitor.startSession(sessionId, body.personaId, body.userId);
@@ -73,7 +88,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
           },
           body: JSON.stringify({
             model: 'gpt-4o-realtime-preview-2025-06-03',
-            voice: persona.voiceId,
+            voice: selectedVoiceId,
             instructions: persona.systemPrompt,
             tools: body.personaId === 'research-bot' ? [
               {
@@ -138,7 +153,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
         id: persona.id,
         name: persona.name,
         nameKo: persona.nameKo,
-        voiceId: persona.voiceId,
+        voiceId: selectedVoiceId,
         toolAnnouncements: persona.toolAnnouncements,
       },
       ephemeralToken,
