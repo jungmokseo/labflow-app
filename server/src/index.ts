@@ -15,7 +15,6 @@ import { captureRoutes } from './routes/captures.js';
 import { emailCallbackRoute, emailRoutes } from './routes/email.js';
 import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
-import { paperRoutes } from './routes/papers.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -27,7 +26,7 @@ async function buildApp() {
     },
   });
 
-  // ── 플러그인 ──────────────────────────────────────────
+  // ── 플러그인 ──────────────────────────────────────
   await app.register(cors, {
     origin: env.CORS_ORIGINS.split(',').map(s => s.trim()),
     credentials: true,
@@ -54,19 +53,18 @@ async function buildApp() {
     });
   });
 
-  // ── 라우트 등록 ────────────────────────────────────────
+  // ── 라우트 등록 ────────────────────────────────────
   await app.register(healthRoutes);
   await app.register(captureRoutes);
   await app.register(emailCallbackRoute);  // auth 없는 OAuth 콜백 (반드시 emailRoutes보다 먼저)
   await app.register(emailRoutes);
   await app.register(meetingRoutes);
   await app.register(voiceChatbotRoutes);
-  await app.register(paperRoutes);
 
   return app;
 }
 
-// ── 서버 시작 ──────────────────────────────────────────
+// ── 서버 시작 ──────────────────────────────────────
 async function start() {
   try {
     const app = await buildApp();
@@ -89,4 +87,3 @@ async function start() {
 }
 
 start();
-

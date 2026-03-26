@@ -14,12 +14,11 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { env } from '../config/env.js';
-import { prisma } from '../config/prisma.js';
 import { personas, getPersona, listPersonas } from '../config/personas.js';
 import { conversationMonitor, type ToolCallLog } from '../services/conversation-monitor.js';
-import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
 
 // ── 스키마 정의 ────────────────────────────────────
+
 const CreateSessionSchema = z.object({
   personaId: z.enum(['research-bot', 'english-tutor']),
   userId: z.string().optional(),
@@ -38,6 +37,7 @@ const EndSessionSchema = z.object({
 });
 
 // ── 라우트 등록 ────────────────────────────────────
+
 export async function voiceChatbotRoutes(app: FastifyInstance) {
 
   /**
@@ -75,51 +75,49 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
             model: 'gpt-4o-realtime-preview-2025-06-03',
             voice: persona.voiceId,
             instructions: persona.systemPrompt,
-            tools: body.personaId === 'research-bot'
-              ? [
-                  {
-                    type: 'function',
-                    name: 'search_papers',
-                    description: 'Search research papers in the vector database by semantic query',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        query: { type: 'string', description: 'Semantic search query for papers' },
-                        limit: { type: 'number', description: 'Max results', default: 5 },
-                      },
-                      required: ['query'],
-                    },
+            tools: body.personaId === 'research-bot' ? [
+              {
+                type: 'function',
+                name: 'search_papers',
+                description: 'Search research papers in the vector database by semantic query',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    query: { type: 'string', description: 'Semantic search query for papers' },
+                    limit: { type: 'number', description: 'Max results', default: 5 },
                   },
-                  {
-                    type: 'function',
-                    name: 'get_paper_details',
-                    description: 'Get full details of a specific paper by its ID',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        paperId: { type: 'string', description: 'Paper ID from search results' },
-                      },
-                      required: ['paperId'],
-                    },
+                  required: ['query'],
+                },
+              },
+              {
+                type: 'function',
+                name: 'get_paper_details',
+                description: 'Get full details of a specific paper by its ID',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    paperId: { type: 'string', description: 'Paper ID from search results' },
                   },
-                ]
-              : [
-                  {
-                    type: 'function',
-                    name: 'save_correction',
-                    description: 'Save a pronunciation or grammar correction for review',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        original: { type: 'string', description: 'What the student said' },
-                        corrected: { type: 'string', description: 'The correct version' },
-                        type: { type: 'string', enum: ['pronunciation', 'grammar', 'vocabulary'] },
-                        explanation: { type: 'string', description: 'Brief explanation' },
-                      },
-                      required: ['original', 'corrected', 'type'],
-                    },
+                  required: ['paperId'],
+                },
+              },
+            ] : [
+              {
+                type: 'function',
+                name: 'save_correction',
+                description: 'Save a pronunciation or grammar correction for review',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    original: { type: 'string', description: 'What the student said' },
+                    corrected: { type: 'string', description: 'The correct version' },
+                    type: { type: 'string', enum: ['pronunciation', 'grammar', 'vocabulary'] },
+                    explanation: { type: 'string', description: 'Brief explanation' },
                   },
-                ],
+                  required: ['original', 'corrected', 'type'],
+                },
+              },
+            ],
             input_audio_transcription: { model: 'whisper-1' },
             turn_detection: { type: 'server_vad' },
           }),
@@ -128,16 +126,10 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
         if (tokenResponse.ok) {
           const tokenData = await tokenResponse.json() as { client_secret?: { value?: string } };
           ephemeralToken = tokenData.client_secret?.value || null;
-          console.log('[Voice] Ephemeral token obtained successfully');
-        } else {
-          const errBody = await tokenResponse.text();
-          console.error(`[Voice] OpenAI Realtime token failed: ${tokenResponse.status} ${errBody}`);
         }
       } catch (err) {
         console.error('[Voice] Failed to get ephemeral token:', err);
       }
-    } else {
-      console.warn('[Voice] OPENAI_API_KEY not set, skipping ephemeral token');
     }
 
     return reply.send({
@@ -158,15 +150,17 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   });
 
   /**
-   * POST /api/voice/session/end — 대화 세션 종료 및 요약 저장
+   * POST /api/voice/end-session — 대화 세션 종료 및 요약 저장
+   * (기존 /api/voice/session/end에서 변경: POST /api/voice/session에 먼저 매칭되는 충돌 해소)
    */
-  app.post('/api/voice/session/end', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/voice/end-session', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = EndSessionSchema.parse(req.body);
     const { summary, turns } = conversationMonitor.endSession(
-      body.sessionId,
-      body.personaId,
-      body.userId
+      body.sessionId, body.personaId, body.userId
     );
+
+    // TODO: Supabase에 세션 요약 및 턴 데이터 저장
+    // await saveSessionToSupabase(summary, turns);
 
     return reply.send({
       summary,
@@ -176,26 +170,29 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
 
   /**
    * POST /api/voice/search-papers — RAG 논문 검색 (Research Bot용)
-   * 실제 pgvector 임베딩 검색 연결
+   * Tool execution 안내 음성을 위해 별도 엔드포인트
    */
   app.post('/api/voice/search-papers', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = z.object({
       sessionId: z.string(),
       query: z.string().min(1),
       limit: z.number().default(5),
+      threshold: z.number().min(0).max(1).default(0.3),
     }).parse(req.body);
 
     const startTime = Date.now();
 
     try {
-      // 실제 임베딩 생성 + pgvector 검색
-      const { embedding } = await generateEmbedding(body.query);
-      const paperResults = await searchPapers(prisma, embedding, body.limit);
+      // TODO: OpenAI embedding → Supabase pgvector RPC 연결
+      // 1. const embedding = await openai.embeddings.create({ model: 'text-embedding-3-small', input: body.query });
+      // 2. const papers = await prisma.$queryRaw`SELECT * FROM search_papers(${embedding}::vector, ${body.limit}, ${body.threshold})`;
 
+      // 임시 mock 결과 (pgvector 연결 전)
       const results = {
-        papers: paperResults,
+        papers: [],
         query: body.query,
-        totalResults: paperResults.length,
+        threshold: body.threshold,
+        totalResults: 0,
       };
 
       const toolCall: ToolCallLog = {
@@ -234,6 +231,9 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
       explanation: z.string().optional(),
     }).parse(req.body);
 
+    // TODO: Supabase에 교정 기록 저장
+    // await saveCorrectionToSupabase(body);
+
     conversationMonitor.logToolCall(body.sessionId, {
       toolName: 'save_correction',
       input: body,
@@ -250,6 +250,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   app.get('/api/voice/corrections/:userId', async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req.params as { userId: string };
 
+    // TODO: Supabase에서 교정 히스토리 조회
     return reply.send({
       corrections: [],
       userId,
@@ -257,7 +258,8 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   });
 }
 
-// ── 유틸리티 ──────────────────────────────────────────
+// ── 유틸리티 ────────────────────────────────────────
+
 function generateSessionId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 8);
