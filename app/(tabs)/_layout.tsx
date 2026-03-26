@@ -30,11 +30,22 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          title: '미니브레인',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bulb-outline" size={size} color={color} />
+          ),
+          headerTitle: '🧠 미니브레인',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+      <Tabs.Screen
+        name="memo"
+        options={{
           title: '캡처',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="flash-outline" size={size} color={color} />
           ),
-          headerTitle: '🧠 빠른 캡처',
+          headerTitle: '📝 빠른 캡처',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />

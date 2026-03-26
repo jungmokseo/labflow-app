@@ -171,6 +171,157 @@ export async function deleteMeeting(id: string) {
   return apiFetch<{ success: boolean }>(`/api/meetings/${id}`, { method: 'DELETE' });
 }
 
+// ── 미니브레인 (Lab Memory) ──────────────────────────
+export interface BrainChannel {
+  id: string;
+  type: string;
+  name: string | null;
+  createdAt: string;
+  _count: { messages: number };
+}
+
+export interface BrainMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+}
+
+export async function brainChat(message: string, channelId?: string) {
+  return apiFetch<{ response: string; channelId: string; intent: string; dbResult: boolean }>('/api/brain/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, channelId }),
+  });
+}
+
+export async function getBrainChannels() {
+  return apiFetch<BrainChannel[]>('/api/brain/channels');
+}
+
+export async function getChannelMessages(channelId: string) {
+  return apiFetch<BrainMessage[]>(`/api/brain/channels/${channelId}`);
+}
+
+export async function searchBrainMemory(query: string) {
+  return apiFetch<any>(`/api/brain/search?query=${encodeURIComponent(query)}`);
+}
+
+export async function saveMemo(content: string, source = 'manual') {
+  return apiFetch<any>('/api/brain/memo', {
+    method: 'POST',
+    body: JSON.stringify({ content, source }),
+  });
+}
+
+// ── Lab Profile ─────────────────────────────────────
+export interface Lab {
+  id: string;
+  name: string;
+  institution: string | null;
+  department: string | null;
+  piName: string | null;
+  researchFields: string[];
+  onboardingDone: boolean;
+  members: LabMember[];
+  projects: LabProject[];
+  domainDict: DictEntry[];
+  _count: { publications: number; memos: number };
+}
+
+export interface LabMember {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string;
+}
+
+export interface LabProject {
+  id: string;
+  name: string;
+  number: string | null;
+  funder: string | null;
+  status: string;
+}
+
+export interface DictEntry {
+  id: string;
+  wrongForm: string;
+  correctForm: string;
+  category: string | null;
+}
+
+export async function getLabProfile() {
+  return apiFetch<Lab>('/api/lab');
+}
+
+export async function createLab(data: { name: string; institution?: string; department?: string; piName?: string; researchFields?: string[] }) {
+  return apiFetch<Lab>('/api/lab', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function updateLab(data: Partial<Lab>) {
+  return apiFetch<Lab>('/api/lab', { method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function completeOnboarding(data: { homepageUrl?: string; keywords?: string[] }) {
+  return apiFetch<{ lab: Lab; extractedKeywords: string[] }>('/api/lab/onboarding', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function addLabMember(data: { name: string; email?: string; role?: string }) {
+  return apiFetch<LabMember>('/api/lab/members', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function addLabProject(data: { name: string; number?: string; funder?: string; acknowledgment?: string }) {
+  return apiFetch<LabProject>('/api/lab/projects', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function addDictEntry(data: { wrongForm: string; correctForm: string; category?: string }) {
+  return apiFetch<DictEntry>('/api/lab/dictionary', { method: 'POST', body: JSON.stringify(data) });
+}
+
+// ── 논문 알림 ──────────────────────────────────────
+export interface PaperAlertSetting {
+  id: string;
+  keywords: string[];
+  journals: string[];
+  schedule: string;
+  lastRunAt: string | null;
+}
+
+export interface PaperAlertResult {
+  id: string;
+  title: string;
+  authors: string | null;
+  journal: string | null;
+  url: string | null;
+  aiSummary: string | null;
+  relevance: number | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export async function getPaperAlerts() {
+  return apiFetch<{ alerts: PaperAlertSetting[]; availableJournals: string[] }>('/api/papers/alerts');
+}
+
+export async function savePaperAlert(data: { keywords: string[]; journals?: string[]; schedule?: string }) {
+  return apiFetch<PaperAlertSetting>('/api/papers/alerts', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function runPaperCrawl() {
+  return apiFetch<{ totalFetched: number; matched: number; newSaved: number }>('/api/papers/alerts/run', { method: 'POST' });
+}
+
+export async function getPaperAlertResults(unread = false) {
+  return apiFetch<{ results: PaperAlertResult[]; unreadCount: number }>(`/api/papers/alerts/results${unread ? '?unread=true' : ''}`);
+}
+
+export async function markPaperRead(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/papers/alerts/results/${id}`, { method: 'PATCH' });
+}
+
 // ── 헬스 체크 ──────────────────────────────────────
 export async function checkHealth() {
   try {
