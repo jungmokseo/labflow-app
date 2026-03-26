@@ -15,6 +15,7 @@ import { captureRoutes } from './routes/captures.js';
 import { emailCallbackRoute, emailRoutes } from './routes/email.js';
 import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
+import { paperRoutes } from './routes/papers.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -60,6 +61,7 @@ async function buildApp() {
   await app.register(emailRoutes);
   await app.register(meetingRoutes);
   await app.register(voiceChatbotRoutes);
+  await app.register(paperRoutes);
 
   return app;
 }
