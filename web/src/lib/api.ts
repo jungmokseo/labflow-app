@@ -281,6 +281,31 @@ export async function addDictEntry(data: { wrongForm: string; correctForm: strin
   return apiFetch<DictEntry>('/api/lab/dictionary', { method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function analyzeSeedPapers(papers: string[]) {
+  return apiFetch<{
+    papers: Array<{ title: string; authors: string[]; abstract: string; journal: string; year: number; doi: string; citationCount: number; url: string; extractedKeywords: string[]; extractedTerms: Array<{ term: string; definition: string; category: string }>; coauthors: Array<{ name: string }>; relatedJournals: string[]; suggestedRssKeywords: string[] }>;
+    mergedKeywords: string[];
+    mergedTerms: Array<{ term: string; definition: string; category: string }>;
+    mergedJournals: string[];
+    mergedRssKeywords: string[];
+  }>('/api/lab/seed-paper', { method: 'POST', body: JSON.stringify({ papers }) });
+}
+
+export async function applySeedPaperResults(data: {
+  keywords?: string[];
+  terms?: Array<{ term: string; definition: string; category: string }>;
+  papers?: Array<{ title: string; authors?: string; journal?: string; year?: number; doi?: string }>;
+  rssKeywords?: string[];
+  rssJournals?: string[];
+  setupPaperAlert?: boolean;
+}) {
+  return apiFetch<{ success: boolean; applied: string[] }>('/api/lab/seed-paper/apply', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function getLabCompleteness() {
+  return apiFetch<{ percentage: number; checks: Array<{ item: string; done: boolean; weight: number }>; missingItems: string[]; suggestions: string[] }>('/api/lab/completeness');
+}
+
 // ── 논문 알림 ──────────────────────────────────────
 export interface PaperAlertSetting {
   id: string;

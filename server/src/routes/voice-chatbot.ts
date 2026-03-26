@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { personas, getPersona, listPersonas, listVoices, VOICE_OPTIONS } from '../config/personas.js';
 import { conversationMonitor, type ToolCallLog } from '../services/conversation-monitor.js';
+import { prisma } from '../config/prisma.js';
 
 // ── 스키마 정의 ────────────────────────────────────
 
@@ -73,6 +74,24 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
     // 음성 결정: 사용자 선택 > 페르소나 기본값
     const selectedVoiceId = body.voiceId || persona.defaultVoiceId;
 
+    // 도메인 사전에서 Whisper 커스텀 어휘 로드
+    let whisperPrompt = '';
+    try {
+      const userId = body.userId || 'dev-user-001';
+      const lab = await prisma.lab.findFirst({
+        where: { owner: { id: userId } },
+        include: { domainDict: { take: 100 } },
+      }).catch(() => null);
+
+      if (lab && lab.domainDict.length > 0) {
+        // Whisper prompt: 전문용어 목록을 쉼표로 나열하면 인식률 향상
+        const terms = lab.domainDict.map(d => d.correctForm);
+        whisperPrompt = `Specialized vocabulary: ${terms.join(', ')}. Lab: ${lab.name}.`;
+      }
+    } catch {
+      // 사전 로드 실패해도 세션 생성은 진행
+    }
+
     // 모니터링 시작
     conversationMonitor.startSession(sessionId, body.personaId, body.userId);
 
@@ -89,7 +108,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
           body: JSON.stringify({
             model: 'gpt-4o-realtime-preview-2025-06-03',
             voice: selectedVoiceId,
-            instructions: persona.systemPrompt,
+            instructions: persona.systemPrompt + (whisperPrompt ? `\n\n${whisperPrompt}` : ''),
             tools: body.personaId === 'research-bot' ? [
               {
                 type: 'function',
