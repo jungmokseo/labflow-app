@@ -8,6 +8,7 @@ const envSchema = z.object({
   CLERK_PUBLISHABLE_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().optional(), // Claude Sonnet (이메일 분류 + 회의 요약)
+  OPENAI_API_KEY: z.string().optional(), // OpenAI Realtime API (Voice Chatbot)
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-api.onrender.com/api/email/auth/callback'),
