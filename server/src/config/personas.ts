@@ -12,7 +12,7 @@ export interface PersonaConfig {
   nameKo: string;
   description: string;
   systemPrompt: string;
-  voiceId: string; // OpenAI Realtime API voice: alloy, echo, fable, onyx, nova, shimmer
+  voiceId: string; // OpenAI Realtime API voice: alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar
   toolAnnouncements: {
     searching: string;
     processing: string;
@@ -42,7 +42,7 @@ When using tools:
 - Always announce what you're doing: "Let me search for that paper..."
 - Summarize findings clearly after retrieval
 - If no results found, suggest alternative search terms`,
-    voiceId: 'nova',
+    voiceId: 'coral',
     toolAnnouncements: {
       searching: '잠시만요, 관련 논문을 찾고 있습니다...',
       processing: '분석 중입니다...',
