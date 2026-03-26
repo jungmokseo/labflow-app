@@ -2,7 +2,7 @@
  * LabFlow API Server
  *
  * Fastify + Prisma + Supabase PostgreSQL + Gemini Flash
- * 캡처 CRUD, AI 자동분류, Clerk 인증, 미니브레인, Lab Profile, 논문 알림
+ * 캡처 CRUD, AI 자동분류, Clerk 인증 (준비됨)
  */
 
 import Fastify from 'fastify';
@@ -15,9 +15,7 @@ import { captureRoutes } from './routes/captures.js';
 import { emailCallbackRoute, emailRoutes } from './routes/email.js';
 import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
-import { labProfileRoutes } from './routes/lab-profile.js';
-import { brainRoutes } from './routes/brain.js';
-import { paperAlertRoutes } from './routes/paper-alerts.js';
+import { knowledgeGraphRoutes } from './routes/knowledge-graph.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -63,9 +61,7 @@ async function buildApp() {
   await app.register(emailRoutes);
   await app.register(meetingRoutes);
   await app.register(voiceChatbotRoutes);
-  await app.register(labProfileRoutes);    // Lab Profile + 온보딩
-  await app.register(brainRoutes);         // 미니브레인 (3층 기억 구조)
-  await app.register(paperAlertRoutes);    // 논문 알림
+  await app.register(knowledgeGraphRoutes);
 
   return app;
 }
@@ -84,9 +80,6 @@ async function start() {
 ║  Env:    ${env.NODE_ENV.padEnd(36)}║
 ║  Gemini: ✅ Connected                         ║
 ║  Auth:   ${env.CLERK_SECRET_KEY ? '✅ Clerk' : '⚠️  Dev mode (no Clerk)'}${''.padEnd(env.CLERK_SECRET_KEY ? 24 : 14)}║
-║  Brain:  ✅ 3-Layer Memory                    ║
-║  Papers: ✅ RSS Alert                         ║
-║  Lab:    ✅ Profile + Dictionary               ║
 ╚═══════════════════════════════════════════════╝
     `);
   } catch (err) {

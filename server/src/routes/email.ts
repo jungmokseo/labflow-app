@@ -26,6 +26,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── Zod 스키마 ──────────────────────────────────────
 const briefingQuerySchema = z.object({
@@ -871,6 +872,15 @@ export async function emailRoutes(app: FastifyInstance) {
             lastBriefingAt: now,
           },
         });
+      }
+
+      // 🔗 비동기 지식 그래프 관계 추출 (이메일 발신자↔주제↔키워드)
+      const emailGraphText = briefings
+        .slice(0, 10) // 최대 10개만
+        .map((b: any) => `${b.senderName || b.sender}: ${b.subject} — ${b.summary || ''}`)
+        .join('\n');
+      if (emailGraphText.length > 20) {
+        buildGraphFromText(userId, emailGraphText, 'email').catch(() => {});
       }
 
       return reply.send({

@@ -20,6 +20,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -365,6 +366,15 @@ export async function meetingRoutes(app: FastifyInstance) {
           modelUsed: result.modelUsed,
         },
       });
+
+      // 🔗 비동기 지식 그래프 관계 추출 (응답 지연 없음)
+      const graphText = [
+        result.title,
+        ...result.agenda,
+        ...(result.discussions?.map((d: { topic: string; content: string }) => `${d.topic}: ${d.content}`) || []),
+        ...result.actionItems,
+      ].join('\n');
+      buildGraphFromText(userId, graphText, 'meeting').catch(() => {});
 
       return reply.code(201).send({
         success: true,
