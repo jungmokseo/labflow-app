@@ -60,6 +60,17 @@ export default function TabLayout() {
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
+      <Tabs.Screen
+        name="chatbot"
+        options={{
+          title: 'AI 챗봇',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+          ),
+          headerTitle: '🎙️ AI 보이스 챗봇',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
     </Tabs>
   );
 }
