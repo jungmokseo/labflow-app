@@ -11,7 +11,7 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ── 사용자 (Clerk 연동) ────────────────────────────────
+// ── 사용자 (Clerk 연동) ────────────────────────────
 model User {
   id          String    @id @default(cuid())
   clerkId     String    @unique @map("clerk_id")
@@ -27,17 +27,272 @@ model User {
   gmailToken   GmailToken?
   emailProfile EmailProfile?
   meetings     Meeting[]
+  lab          Lab?
+  channels     Channel[]
+  usageLogs    UsageLog[]
 
   @@map("users")
 }
 
 enum Plan {
+  FREE
   BASIC
   PRO
   MAX
 }
 
-// ── 캡처 (핵심 데이터) ─────────────────────────────────
+// ── 연구실 (Lab Profile) ──────────────────────────
+model Lab {
+  id              String    @id @default(cuid())
+  ownerId         String    @unique @map("owner_id")
+  name            String    // 연구실명
+  institution     String?   // 소속 기관
+  department      String?   // 학과
+  piName          String?   @map("pi_name") // PI 이름
+  piEmail         String?   @map("pi_email")
+  researchFields  String[]  @map("research_fields") // 연구 분야 키워드
+  homepageUrl     String?   @map("homepage_url")
+  acknowledgment  String?   // 사사 문구 템플릿
+  responseStyle   String?   @map("response_style") // AI 응답 스타일 (formal/casual/etc)
+  onboardingDone  Boolean   @default(false) @map("onboarding_done")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members         LabMember[]
+  projects        Project[]
+  publications    Publication[]
+  domainDict      DomainDict[]
+  memos           Memo[]
+  paperAlerts     PaperAlert[]
+
+  @@map("labs")
+}
+
+// ── 연구실 구성원 ─────────────────────────────
+model LabMember {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  name          String
+  email         String?
+  role          String    @default("학생") // PI, 교수, 박사과정, 석사과정, 학부연구생, 포닥, etc
+  phone         String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // ── Layer 4: 메타기억 ──
+  lastVerified  DateTime? @map("last_verified")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastAccessed  DateTime? @map("last_accessed")
+  source        String?   // onboarding, manual, chat
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("lab_members")
+}
+
+// ── 연구 과제 ─────────────────────────────
+model Project {
+  id               String    @id @default(cuid())
+  labId            String    @map("lab_id")
+  name             String    // 과제명
+  number           String?   // 과제 번호
+  funder           String?   // 지원 기관 (NRF, KEIT, etc)
+  period           String?   // 수행 기간
+  pi               String?   // 책임연구자
+  pm               String?   // 전담 PM
+  acknowledgment   String?   @map("acknowledgment_text") // 사사 문구
+  status           String    @default("active") // active, completed, pending
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  // ── Layer 4: 메타기억 ──
+  lastVerified     DateTime? @map("last_verified")
+  confidence       Float     @default(1.0)
+  accessCount      Int       @default(0) @map("access_count")
+  lastAccessed     DateTime? @map("last_accessed")
+  source           String?   // onboarding, manual, chat
+
+  lab              Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("projects")
+}
+
+// ── 연구실 논문 (Lab Memory) ─────────────────────
+model Publication {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  title         String
+  journal       String?
+  year          Int?
+  doi           String?
+  authors       String?
+  projectId     String?   @map("project_id") // 사사 과제 연결
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // ── Layer 4: 메타기억 ──
+  lastVerified  DateTime? @map("last_verified")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastAccessed  DateTime? @map("last_accessed")
+  source        String?   // seed_paper, manual, chat
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("publications")
+}
+
+// ── 전문용어 교정 사전 ────────────────────────
+model DomainDict {
+  id          String  @id @default(cuid())
+  labId       String  @map("lab_id")
+  wrongForm   String  @map("wrong_form")  // 잘못된 표현
+  correctForm String  @map("correct_form") // 올바른 표현
+  category    String? // 카테고리 (재료, 장비, 분석법 등)
+  autoAdded   Boolean @default(false) @map("auto_added") // 대화 중 자동 추가 여부
+
+  lab         Lab     @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, wrongForm])
+  @@index([labId])
+  @@map("domain_dict")
+}
+
+// ── 메모 (미니브레인 영구 기억 + 메타기억 4층) ──────
+model Memo {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  userId        String    @map("user_id")
+  content       String    // 원본 내용
+  title         String?   // AI 자동 생성 제목
+  tags          String[]  // AI 자동 태그
+  source        String    @default("manual") // manual, chat, meeting, email, onboarding, seed_paper
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // ── Layer 4: 메타기억 (Metamemory) ──
+  lastVerified  DateTime? @map("last_verified")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastAccessed  DateTime? @map("last_accessed")
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, createdAt(sort: Desc)])
+  @@index([labId, confidence])
+  @@map("memos")
+}
+
+// ── 멀티채널 (미니브레인, 미팅, 논문, 이메일) ──────────
+model Channel {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  type      ChannelType
+  name      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  summaries ChannelSummary[]
+
+  @@index([userId, type])
+  @@map("channels")
+}
+
+enum ChannelType {
+  BRAIN    // 미니브레인
+  MEETING  // 미팅
+  PAPER    // 논문
+  EMAIL    // 이메일
+}
+
+// ── 채팅 메시지 (Layer 1: 작업 기억) ─────────────
+model Message {
+  id        String   @id @default(cuid())
+  channelId String   @map("channel_id")
+  role      String   // user | assistant | system
+  content   String
+  metadata  Json?    // 추가 데이터 (함수 호출 결과 등)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+// ── 세션 요약 (Layer 2: 세션 기억) ─────────────
+model ChannelSummary {
+  id           String   @id @default(cuid())
+  channelId    String   @map("channel_id")
+  summaryText  String   @map("summary_text") // 압축된 대화 요약
+  messageRange String?  @map("message_range") // "msg_001 ~ msg_030"
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  channel      Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt(sort: Desc)])
+  @@map("channel_summaries")
+}
+
+// ── 논문 알림 설정 ────────────────────────
+model PaperAlert {
+  id          String   @id @default(cuid())
+  labId       String   @map("lab_id")
+  keywords    String[] // 키워드 목록
+  journals    String[] // 저널 RSS URL 목록
+  schedule    String   @default("weekly") // daily, weekly
+  lastRunAt   DateTime? @map("last_run_at")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  lab         Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("paper_alerts")
+}
+
+// ── 논문 알림 결과 ────────────────────────
+model PaperAlertResult {
+  id          String   @id @default(cuid())
+  alertId     String   @map("alert_id")
+  title       String
+  authors     String?
+  journal     String?
+  pubDate     DateTime? @map("pub_date")
+  doi         String?
+  url         String?
+  abstract    String?
+  aiSummary   String?  @map("ai_summary")
+  relevance   Float?   // 관련도 점수 0~1
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([alertId, createdAt(sort: Desc)])
+  @@map("paper_alert_results")
+}
+
+// ── AI 사용량 추적 ────────────────────────
+model UsageLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  model     String   // gemini-flash, claude-sonnet, etc
+  feature   String   // brain, meeting, paper, email
+  tokensIn  Int      @map("tokens_in")
+  tokensOut Int      @map("tokens_out")
+  costKrw   Float?   @map("cost_krw")
+  credits   Float?   // 크레딧 소모량
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("usage_log")
+}
+
+// ── 캡처 (핵심 데이터) ─────────────────────────
 model Capture {
   id          String          @id @default(cuid())
   userId      String          @map("user_id")
@@ -74,7 +329,7 @@ enum Priority {
   LOW
 }
 
-// ── 회의 노트 ───────────────────────────────────────────
+// ── 회의 노트 ───────────────────────────────
 model Meeting {
   id             String   @id @default(cuid())
   userId         String   @map("user_id")
@@ -96,7 +351,7 @@ model Meeting {
   @@map("meetings")
 }
 
-// ── Gmail 인증 토큰 ─────────────────────────────────────
+// ── Gmail 인증 토큰 ─────────────────────────
 model GmailToken {
   id           String    @id @default(cuid())
   userId       String    @unique @map("user_id")
@@ -111,18 +366,18 @@ model GmailToken {
   @@map("gmail_tokens")
 }
 
-// ── 이메일 프로필 (다계정 분류 설정 + T_last) ─────────────
+// ── 이메일 프로필 (다계정 분류 설정 + T_last) ─────
 model EmailProfile {
   id               String    @id @default(cuid())
   userId           String    @unique @map("user_id")
-  classifyByGroup  Boolean   @default(false) @map("classify_by_group") // true: 기관별+성격별 이중 분류
-  groups           Json      @default("[]") // [{ name, domains[], emoji }]
-  lastBriefingAt   DateTime? @map("last_briefing_at") // T_last: 마지막 브리핑 시각
-  excludePatterns  Json      @default("[]") // 제외 패턴: [{ field, pattern }]
-  keywords         Json      @default("[]") // 중요도 상향 키워드 목록
-  importanceRules  Json      @default("[]") @map("importance_rules") // [{ condition, action, description }]
-  senderTimezones  Json      @default("[]") @map("sender_timezones") // [{ domains[], timezone, label }]
-  timezone         String    @default("America/New_York") // 기본 시간대
+  classifyByGroup  Boolean   @default(false) @map("classify_by_group")
+  groups           Json      @default("[]")
+  lastBriefingAt   DateTime? @map("last_briefing_at")
+  excludePatterns  Json      @default("[]")
+  keywords         Json      @default("[]")
+  importanceRules  Json      @default("[]") @map("importance_rules")
+  senderTimezones  Json      @default("[]") @map("sender_timezones")
+  timezone         String    @default("America/New_York")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -131,14 +386,14 @@ model EmailProfile {
   @@map("email_profiles")
 }
 
-// ── 지식 그래프: 노드 (엔티티) ──────────────────────────────
+// ── 지식 그래프: 노드 (엔티티) ──────────────────
 model KnowledgeNode {
   id          String   @id @default(cuid())
-  userId      String   @map("user_id")       // 사용자 소속 (multi-tenant)
-  entityType  String   @map("entity_type")   // person, project, paper, term, equipment, journal, institution, topic
-  entityId    String?  @map("entity_id")     // 기존 DB 레코드 연결 (User.id, Meeting.id 등)
-  name        String                          // 엔티티 표시명
-  metadata    Json?                           // 추가 속성 (role, affiliation 등)
+  userId      String   @map("user_id")
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  name        String
+  metadata    Json?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -152,15 +407,15 @@ model KnowledgeNode {
   @@map("knowledge_nodes")
 }
 
-// ── 지식 그래프: 엣지 (관계) ──────────────────────────────
+// ── 지식 그래프: 엣지 (관계) ──────────────────
 model KnowledgeEdge {
   id          String   @id @default(cuid())
   fromNodeId  String   @map("from_node_id")
   toNodeId    String   @map("to_node_id")
-  relation    String   // participates_in, authored, uses_term, published_in, supervises, collaborates_with, cited_by, related_to, discussed_in, mentioned_in
-  weight      Float    @default(1.0)          // 관계 강도 (언급 횟수에 비례)
-  source      String                          // chat, meeting, email, paper_alert, onboarding, manual, seed
-  evidence    String?                         // 근거 텍스트 (원문 발췌)
+  relation    String
+  weight      Float    @default(1.0)
+  source      String
+  evidence    String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
