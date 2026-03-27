@@ -8,7 +8,7 @@ on:
 
 jobs:
   server-build:
-    name: Server â Type Check & Build
+    name: Server - Type Check and Build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,4 +54,3 @@ jobs:
         run: |
           chmod +x scripts/healthcheck.sh
           bash scripts/healthcheck.sh
-
