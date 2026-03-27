@@ -85,7 +85,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
 
       if (lab && lab.domainDict.length > 0) {
         // Whisper prompt: 전문용어 목록을 쉼표로 나열하면 인식률 향상
-        const terms = lab.domainDict.map(d => d.correctForm);
+        const terms = lab.domainDict.map((d: any) => d.correctForm);
         whisperPrompt = `Specialized vocabulary: ${terms.join(', ')}. Lab: ${lab.name}.`;
       }
     } catch {

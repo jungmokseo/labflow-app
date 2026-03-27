@@ -17,6 +17,10 @@ import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
 import { knowledgeGraphRoutes } from './routes/knowledge-graph.js';
 import { resetRoutes } from './routes/reset.js';
+import { brainRoutes } from './routes/brain.js';
+import { labProfileRoutes } from './routes/lab-profile.js';
+import { paperAlertRoutes } from './routes/paper-alerts.js';
+import { paperRoutes } from './routes/papers.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -64,6 +68,10 @@ async function buildApp() {
     await app.register(voiceChatbotRoutes);
     await app.register(knowledgeGraphRoutes);
     await app.register(resetRoutes);
+    await app.register(brainRoutes);
+    await app.register(labProfileRoutes);
+    await app.register(paperAlertRoutes);
+    await app.register(paperRoutes);
 
   return app;
 }

@@ -29,6 +29,8 @@ model User {
   emailProfile    EmailProfile?
   meetings        Meeting[]
   preferences     UserPreference[]
+  lab             Lab?
+  channels        Channel[]
 
   @@map("users")
 }
@@ -195,4 +197,229 @@ model UserPreference {
   @@unique([userId, featureType])
   @@index([userId])
   @@map("user_preferences")
+}
+
+// ── 연구실 프로필 ──────────────────────────────────────────
+model Lab {
+  id              String    @id @default(cuid())
+  ownerId         String    @unique @map("owner_id")
+  name            String
+  institution     String?
+  department      String?
+  piName          String?   @map("pi_name")
+  piEmail         String?   @map("pi_email")
+  researchFields  String[]  @map("research_fields")
+  homepageUrl     String?   @map("homepage_url")
+  acknowledgment  String?
+  responseStyle   String?   @map("response_style")
+  onboardingDone  Boolean   @default(false) @map("onboarding_done")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  owner           User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members         LabMember[]
+  projects        Project[]
+  publications    Publication[]
+  domainDict      DomainDict[]
+  memos           Memo[]
+  paperAlerts     PaperAlert[]
+
+  @@map("labs")
+}
+
+// ── 연구실 멤버 ──────────────────────────────────────────
+model LabMember {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  name          String
+  email         String?
+  role          String    @default("학생")
+  phone         String?
+  active        Boolean   @default(true)
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastVerified  DateTime? @map("last_verified")
+  lastAccessed  DateTime? @map("last_accessed")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, active])
+  @@map("lab_members")
+}
+
+// ── 연구 프로젝트 ────────────────────────────────────────
+model Project {
+  id              String    @id @default(cuid())
+  labId           String    @map("lab_id")
+  name            String
+  number          String?
+  funder          String?
+  period          String?
+  pi              String?
+  pm              String?
+  acknowledgment  String?
+  status          String    @default("active")
+  confidence      Float     @default(1.0)
+  accessCount     Int       @default(0) @map("access_count")
+  lastVerified    DateTime? @map("last_verified")
+  lastAccessed    DateTime? @map("last_accessed")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  lab             Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("projects")
+}
+
+// ── 논문/출판물 ──────────────────────────────────────────
+model Publication {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  title         String
+  authors       String?
+  journal       String?
+  year          Int?
+  doi           String?
+  projectId     String?   @map("project_id")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastVerified  DateTime? @map("last_verified")
+  lastAccessed  DateTime? @map("last_accessed")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, year])
+  @@map("publications")
+}
+
+// ── 도메인 사전 (전문용어) ────────────────────────────────
+model DomainDict {
+  id          String   @id @default(cuid())
+  labId       String   @map("lab_id")
+  wrongForm   String   @map("wrong_form")
+  correctForm String   @map("correct_form")
+  category    String?
+  autoAdded   Boolean  @default(false) @map("auto_added")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  lab         Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, wrongForm])
+  @@map("domain_dicts")
+}
+
+// ── 메모 ─────────────────────────────────────────────────
+model Memo {
+  id            String    @id @default(cuid())
+  labId         String    @map("lab_id")
+  userId        String?   @map("user_id")
+  title         String?
+  content       String
+  tags          String[]
+  source        String    @default("manual")
+  confidence    Float     @default(1.0)
+  accessCount   Int       @default(0) @map("access_count")
+  lastVerified  DateTime? @map("last_verified")
+  lastAccessed  DateTime? @map("last_accessed")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, createdAt(sort: Desc)])
+  @@map("memos")
+}
+
+// ── 논문 알림 설정 ───────────────────────────────────────
+model PaperAlert {
+  id          String    @id @default(cuid())
+  labId       String    @map("lab_id")
+  keywords    String[]
+  journals    String[]
+  schedule    String    @default("weekly")
+  active      Boolean   @default(true)
+  lastRunAt   DateTime? @map("last_run_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  lab         Lab              @relation(fields: [labId], references: [id], onDelete: Cascade)
+  results     PaperAlertResult[]
+
+  @@index([labId, active])
+  @@map("paper_alerts")
+}
+
+// ── 논문 알림 결과 ───────────────────────────────────────
+model PaperAlertResult {
+  id          String    @id @default(cuid())
+  alertId     String    @map("alert_id")
+  title       String
+  authors     String?
+  journal     String?
+  pubDate     DateTime? @map("pub_date")
+  url         String?
+  abstract    String?
+  aiSummary   String?   @map("ai_summary")
+  relevance   Float     @default(0.0)
+  read        Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  alert       PaperAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId, read])
+  @@map("paper_alert_results")
+}
+
+// ── 대화 채널 (Brain 멀티레이어) ─────────────────────────
+model Channel {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  type        String    // BRAIN, MEETING, PAPER, EMAIL
+  name        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  summaries   ChannelSummary[]
+
+  @@index([userId])
+  @@map("channels")
+}
+
+// ── 대화 메시지 ──────────────────────────────────────────
+model Message {
+  id          String   @id @default(cuid())
+  channelId   String   @map("channel_id")
+  role        String   // user, assistant
+  content     String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+// ── 채널 요약 ────────────────────────────────────────────
+model ChannelSummary {
+  id            String   @id @default(cuid())
+  channelId     String   @map("channel_id")
+  summaryText   String   @map("summary_text")
+  messageRange  String?  @map("message_range")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  channel       Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@index([channelId, createdAt(sort: Desc)])
+  @@map("channel_summaries")
 }

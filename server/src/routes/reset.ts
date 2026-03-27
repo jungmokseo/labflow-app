@@ -96,8 +96,8 @@ export async function resetRoutes(app: FastifyInstance) {
       await prisma.userPreference.update({
         where: { id: pref.id },
         data: {
-          snapshotData: pref.rules,                      // 복원용 백업
-          rules: DEFAULT_RULES[body.feature] || {},      // 초기값으로 리셋
+          snapshotData: pref.rules as any,                 // 복원용 백업
+          rules: (DEFAULT_RULES[body.feature] || {}) as any,  // 초기값으로 리셋
           version: pref.version + 1,
         },
       });
@@ -140,8 +140,8 @@ export async function resetRoutes(app: FastifyInstance) {
     await prisma.userPreference.update({
       where: { id: pref.id },
       data: {
-        rules: pref.snapshotData,
-        snapshotData: null,   // 스냅샷 소비 완료
+        rules: pref.snapshotData as any,
+        snapshotData: null as any,   // 스냅샷 소비 완료
         version: pref.version + 1,
       },
     });
