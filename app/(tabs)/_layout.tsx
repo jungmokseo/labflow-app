@@ -30,55 +30,99 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '미니브레인',
+          title: 'ë¯¸ëë¸ë ì¸',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="bulb-outline" size={size} color={color} />
           ),
-          headerTitle: '🧠 미니브레인',
+          headerTitle: 'ð§  ë¯¸ëë¸ë ì¸',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+      <Tabs.Screen
+        name="brain-chat"
+        options={{
+          title: 'AI ì±í',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
+          ),
+          headerTitle: 'ð¬ AI íì¤í¸ ì±í',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
         name="memo"
         options={{
-          title: '캡처',
+          title: 'ìº¡ì²',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="flash-outline" size={size} color={color} />
           ),
-          headerTitle: '📝 빠른 캡처',
+          headerTitle: 'ð ë¹ ë¥¸ ìº¡ì²',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
-        name="email"
+        name="paper-alerts"
         options={{
-          title: '이메일',
+          title: 'ë¼ë¬¸',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mail-outline" size={size} color={color} />
+            <Ionicons name="document-text-outline" size={size} color={color} />
           ),
-          headerTitle: '✉️ 이메일 브리핑',
+          headerTitle: 'ð ë¼ë¬¸ ìë¦¼',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
-        name="meeting"
+        name="knowledge-graph"
         options={{
-          title: '회의',
+          title: 'ê·¸ëí',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mic-outline" size={size} color={color} />
+            <Ionicons name="git-network-outline" size={size} color={color} />
           ),
-          headerTitle: '🎙️ 회의 노트',
+          headerTitle: 'ð¸ï¸ ì§ì ê·¸ëí',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
         name="chatbot"
         options={{
-          title: 'AI 챗봇',
+          title: 'ë³´ì´ì¤',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+            <Ionicons name="mic-outline" size={size} color={color} />
           ),
-          headerTitle: '🎙️ AI 보이스 챗봇',
+          headerTitle: 'ðï¸ AI ë³´ì´ì¤ ì±ë´',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+      <Tabs.Screen
+        name="email"
+        options={{
+          title: 'ì´ë©ì¼',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="mail-outline" size={size} color={color} />
+          ),
+          headerTitle: 'âï¸ ì´ë©ì¼ ë¸ë¦¬í',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+      <Tabs.Screen
+        name="meeting"
+        options={{
+          title: 'íì',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
+          headerTitle: 'ðï¸ íì ë¸í¸',
+          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+      <Tabs.Screen
+        name="onboarding"
+        options={{
+          title: 'ì¤ì ',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
+          headerTitle: 'âï¸ ì°êµ¬ì¤ ì¤ì ',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
