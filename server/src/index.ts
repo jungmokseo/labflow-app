@@ -16,6 +16,9 @@ import { emailCallbackRoute, emailRoutes } from './routes/email.js';
 import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
 import { knowledgeGraphRoutes } from './routes/knowledge-graph.js';
+import { brainRoutes } from './routes/brain.js';
+import { labProfileRoutes } from './routes/lab-profile.js';
+import { paperAlertRoutes } from './routes/paper-alerts.js';
 
 async function buildApp() {
   const app = Fastify({
@@ -27,7 +30,7 @@ async function buildApp() {
     },
   });
 
-  // ── 플러그인 ──────────────────────────────────────
+  // ── 플러그인 ──────────────────────────────
   await app.register(cors, {
     origin: env.CORS_ORIGINS.split(',').map(s => s.trim()),
     credentials: true,
@@ -37,7 +40,7 @@ async function buildApp() {
   });
   await app.register(sensible);
 
-  // ── 글로벌 에러 핸들링 ────────────────────────────
+  // ── 글로벌 에러 핸들링 ────────────────────────
   app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {
     // Zod 유효성 검증 에러
     if (error.name === 'ZodError') {
@@ -54,19 +57,22 @@ async function buildApp() {
     });
   });
 
-  // ── 라우트 등록 ────────────────────────────────────
+  // ── 라우트 등록 ────────────────────────────
   await app.register(healthRoutes);
   await app.register(captureRoutes);
   await app.register(emailCallbackRoute);  // auth 없는 OAuth 콜백 (반드시 emailRoutes보다 먼저)
   await app.register(emailRoutes);
   await app.register(meetingRoutes);
   await app.register(voiceChatbotRoutes);
+  await app.register(brainRoutes);
+  await app.register(labProfileRoutes);
+  await app.register(paperAlertRoutes);
   await app.register(knowledgeGraphRoutes);
 
   return app;
 }
 
-// ── 서버 시작 ──────────────────────────────────────
+// ── 서버 시작 ──────────────────────────────
 async function start() {
   try {
     const app = await buildApp();
