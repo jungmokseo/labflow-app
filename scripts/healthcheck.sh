@@ -25,7 +25,7 @@ echo ""
 
 # Core endpoints
 check "GET /health" "$API_URL/health"
-check "GET /api/lab/profile" "$API_URL/api/lab/profile" "401"
+check "GET /api/lab" "$API_URL/api/lab" "401"
 check "GET /api/voice/personas" "$API_URL/api/voice/personas"
 check "GET /api/papers/alerts" "$API_URL/api/papers/alerts" "401"
 
