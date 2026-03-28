@@ -124,7 +124,8 @@ type Intent =
   | 'query_project' | 'query_publication' | 'query_member' | 'query_meeting'
   | 'multi_hop'     // 복합 질의 (여러 DB 조합)
   | 'query_stale'   // 오래된/신뢰도 낮은 정보 조회 (메타기억)
-  | 'save_memo' | 'search_memory' | 'general_chat' | 'add_dict';
+  | 'save_memo' | 'search_memory' | 'general_chat' | 'add_dict'
+  | 'capture_create' | 'capture_list' | 'capture_complete';
 
 interface ClassifiedIntent {
   intent: Intent;
@@ -160,6 +161,9 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 - search_memory: 과거 정보 검색
 - add_dict: 용어 교정 등록
 - query_stale: 오래된 정보, 업데이트 필요한 정보, 신뢰도 낮은 정보 질문 (예: "오래된 정보 보여줘", "업데이트 필요한 거 있어?", "확인이 필요한 정보", "신뢰도 낮은 정보")
+- capture_create: 빠른 캡처 생성 (메모/태스크/아이디어 기록 요청). 예: "이거 메모해줘", "할 일 추가", "아이디어 저장"
+- capture_list: 캡처 목록 조회 요청. 예: "캡처 보여줘", "할 일 목록", "아이디어 뭐 있어?"
+- capture_complete: 캡처 완료 처리. 예: "이거 완료", "다 했어", "태스크 끝"
 - general_chat: 일반 대화
 
 multi_hop인 경우 "hops" 배열을 추가하세요:
@@ -743,6 +747,72 @@ export async function brainRoutes(app: FastifyInstance) {
         update: { correctForm: entities.correctForm },
       });
       dbResult = `용어 교정 등록 완료: "${entities.wrongForm}" → "${entities.correctForm}"`;
+    }
+
+    // 4-1. 캡처 인텐트 처리
+    if (intent === 'capture_create' && lab && entities.content) {
+      const { classifyCapture, typeToCategory, urgencyToPriority } = await import('../services/capture-classifier.js');
+      const classification = await classifyCapture(entities.content);
+      const capture = await prisma.capture.create({
+        data: {
+          userId,
+          labId: lab.id,
+          content: entities.content,
+          summary: classification.summary,
+          category: typeToCategory(classification.type),
+          tags: classification.tags,
+          priority: urgencyToPriority(classification.urgency),
+          confidence: classification.confidence,
+          actionDate: classification.dueDate ? new Date(classification.dueDate) : null,
+          modelUsed: 'gemini-flash',
+          sourceType: 'text',
+          status: 'active',
+        },
+      });
+      const emoji = classification.type === 'task' ? '✅' : classification.type === 'idea' ? '💡' : '📝';
+      dbResult = `${emoji} 캡처 저장 완료: [${classification.type}] ${classification.summary}` +
+        (classification.tags.length > 0 ? `\n태그: ${classification.tags.join(', ')}` : '') +
+        (classification.dueDate ? `\n마감: ${classification.dueDate.split('T')[0]}` : '');
+    }
+
+    if (intent === 'capture_list' && lab) {
+      const typeFilter = entities.type ? { category: entities.type.toUpperCase() as any } : {};
+      const captures = await prisma.capture.findMany({
+        where: { labId: lab.id, status: 'active', ...typeFilter },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      if (captures.length === 0) {
+        dbResult = '현재 활성 캡처가 없습니다.';
+      } else {
+        const lines = captures.map((c: any, i: number) => {
+          const emoji = c.category === 'TASK' ? '✅' : c.category === 'IDEA' ? '💡' : '📝';
+          return `${i + 1}. ${emoji} ${c.summary || c.content.substring(0, 40)}`;
+        });
+        dbResult = `캡처 목록 (${captures.length}건):\n${lines.join('\n')}`;
+      }
+    }
+
+    if (intent === 'capture_complete' && lab && entities.content) {
+      const capture = await prisma.capture.findFirst({
+        where: {
+          labId: lab.id,
+          status: 'active',
+          OR: [
+            { content: { contains: entities.content, mode: 'insensitive' } },
+            { summary: { contains: entities.content, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (capture) {
+        await prisma.capture.update({
+          where: { id: capture.id },
+          data: { status: 'completed', completed: true, completedAt: new Date() },
+        });
+        dbResult = `✅ 캡처 완료 처리: ${capture.summary || capture.content.substring(0, 40)}`;
+      } else {
+        dbResult = '일치하는 캡처를 찾을 수 없습니다.';
+      }
     }
 
     // 5. 3층 컨텍스트 빌드

@@ -226,7 +226,7 @@ export async function captureRoutes(app: FastifyInstance) {
     }
 
     // 업데이트 데이터 구성
-    const updateData: Prisma.CaptureUpdateInput = {};
+    const updateData: any = {};
     if (body.content !== undefined) updateData.content = body.content;
     if (body.category !== undefined) updateData.category = body.category as CaptureCategory;
     if (body.tags !== undefined) updateData.tags = body.tags;

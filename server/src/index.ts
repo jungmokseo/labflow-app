@@ -21,6 +21,7 @@ import { brainRoutes } from './routes/brain.js';
 import { labProfileRoutes } from './routes/lab-profile.js';
 import { paperAlertRoutes } from './routes/paper-alerts.js';
 import { paperRoutes } from './routes/papers.js';
+import { labCaptureRoutes } from './routes/lab-captures.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -72,6 +73,7 @@ async function buildApp() {
     await app.register(labProfileRoutes);
     await app.register(paperAlertRoutes);
     await app.register(paperRoutes);
+    await app.register(labCaptureRoutes);
 
   return app;
 }

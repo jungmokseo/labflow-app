@@ -45,6 +45,7 @@ enum Plan {
 model Capture {
   id          String          @id @default(cuid())
   userId      String          @map("user_id")
+  labId       String?         @map("lab_id")       // Lab 소속 (선택적)
   content     String          // 원본 텍스트
   summary     String          // AI 요약
   category    CaptureCategory @default(MEMO)
@@ -55,15 +56,21 @@ model Capture {
   modelUsed   String?         @map("model_used") // local | gemini-flash
   completed   Boolean         @default(false)
   completedAt DateTime?       @map("completed_at")
+  sourceType  String          @default("text") @map("source_type") // text | voice
+  rawInput    String?         @map("raw_input")  // 원본 음성 텍스트 (STT 결과)
+  status      String          @default("active") // active | completed | archived
   metadata    Json?           @default("{}")  // 확장용 JSONB
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lab         Lab?            @relation(fields: [labId], references: [id], onDelete: SetNull)
 
   @@index([userId, category])
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, completed])
+  @@index([labId, category])
+  @@index([labId, status])
   @@map("captures")
 }
 
@@ -223,6 +230,7 @@ model Lab {
   domainDict      DomainDict[]
   memos           Memo[]
   paperAlerts     PaperAlert[]
+  captures        Capture[]
 
   @@map("labs")
 }
