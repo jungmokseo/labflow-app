@@ -9,6 +9,8 @@ import {
   RefreshControl,
   Linking,
   Alert,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, borderRadius } from '../constants/theme';
@@ -18,6 +20,10 @@ import {
   getEmailBriefing,
   EmailBriefingItem,
   EmailBriefingMeta,
+  translateEmail,
+  createEmailDraft,
+  extractEmailActions,
+  createCalendarEvent,
 } from '../services/api-client';
 
 // ── 카테고리 메타데이터 ──────────────────────────────
@@ -43,6 +49,16 @@ export default function EmailBriefingScreen() {
   const [emails, setEmails] = useState<EmailBriefingItem[]>([]);
   const [meta, setMeta] = useState<EmailBriefingMeta | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
+  // 이메일 상세 모달
+  const [selectedEmail, setSelectedEmail] = useState<EmailBriefingItem | null>(null);
+  const [translatedText, setTranslatedText] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractedActions, setExtractedActions] = useState<any | null>(null);
+  const [draftBody, setDraftBody] = useState('');
+  const [isDrafting, setIsDrafting] = useState(false);
+  const [showDraftInput, setShowDraftInput] = useState(false);
 
   // ── 초기 상태 체크 ──────────────────────────────────
   useEffect(() => {
@@ -145,6 +161,97 @@ export default function EmailBriefingScreen() {
     );
   };
 
+  // ── 이메일 상세 모달 열기 ─────────────────────────────
+  const openEmailDetail = (email: EmailBriefingItem) => {
+    setSelectedEmail(email);
+    setTranslatedText(null);
+    setExtractedActions(null);
+    setShowDraftInput(false);
+    setDraftBody('');
+  };
+
+  const closeEmailDetail = () => {
+    setSelectedEmail(null);
+    setTranslatedText(null);
+    setExtractedActions(null);
+    setShowDraftInput(false);
+    setDraftBody('');
+  };
+
+  // ── 번역 ─────────────────────────────────────────────
+  const handleTranslate = async () => {
+    if (!selectedEmail) return;
+    setIsTranslating(true);
+    try {
+      const result = await translateEmail(
+        `${selectedEmail.subject}\n\n${selectedEmail.summary}`,
+        'ko',
+      );
+      setTranslatedText(result.translated);
+    } catch (err: any) {
+      Alert.alert('번역 실패', err.message);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // ── 할일/일정 추출 ───────────────────────────────────
+  const handleExtractActions = async () => {
+    if (!selectedEmail) return;
+    setIsExtracting(true);
+    try {
+      const result = await extractEmailActions({
+        subject: selectedEmail.subject,
+        body: selectedEmail.summary,
+        sender: selectedEmail.sender,
+      });
+      setExtractedActions(result);
+      if (result.captures?.length > 0) {
+        Alert.alert('Capture 저장 완료', `${result.captures.length}건이 Capture에 추가되었습니다`);
+      }
+    } catch (err: any) {
+      Alert.alert('추출 실패', err.message);
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // ── 일정 등록 ────────────────────────────────────────
+  const handleCreateEvent = async (event: any) => {
+    try {
+      const result = await createCalendarEvent({
+        title: event.title,
+        date: event.date,
+        time: event.time,
+        description: event.description,
+      });
+      Alert.alert('일정 등록 완료', result.message);
+    } catch (err: any) {
+      Alert.alert('일정 등록 실패', err.message);
+    }
+  };
+
+  // ── 답장 초안 ────────────────────────────────────────
+  const handleDraft = async () => {
+    if (!selectedEmail || !draftBody.trim()) return;
+    setIsDrafting(true);
+    try {
+      const result = await createEmailDraft({
+        to: selectedEmail.sender,
+        subject: `Re: ${selectedEmail.subject}`,
+        body: draftBody,
+        threadId: selectedEmail.threadId,
+      });
+      Alert.alert('임시보관함 저장', result.message);
+      setShowDraftInput(false);
+      setDraftBody('');
+    } catch (err: any) {
+      Alert.alert('초안 생성 실패', err.message);
+    } finally {
+      setIsDrafting(false);
+    }
+  };
+
   // ── 카테고리별 이메일 그룹핑 ──────────────────────────
   const groupedEmails = CATEGORY_ORDER.map((catKey) => ({
     key: catKey,
@@ -182,6 +289,7 @@ export default function EmailBriefingScreen() {
   }
 
   return (
+    <>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -308,7 +416,12 @@ export default function EmailBriefingScreen() {
                     <Text style={styles.emptyCategory}>새 메일 없음</Text>
                   ) : (
                     group.items.map((email) => (
-                      <View key={email.messageId} style={styles.emailItem}>
+                      <TouchableOpacity
+                        key={email.messageId}
+                        style={styles.emailItem}
+                        onPress={() => openEmailDetail(email)}
+                        activeOpacity={0.7}
+                      >
                         <View style={styles.emailTop}>
                           <Text style={styles.emailSender} numberOfLines={1}>
                             {email.senderName || email.sender}
@@ -323,7 +436,7 @@ export default function EmailBriefingScreen() {
                         <Text style={styles.emailSummary} numberOfLines={2}>
                           {email.summary}
                         </Text>
-                      </View>
+                      </TouchableOpacity>
                     ))
                   )}
                 </View>
@@ -346,6 +459,155 @@ export default function EmailBriefingScreen() {
         </View>
       )}
     </ScrollView>
+
+    {/* ── 이메일 상세 모달 ────────────────────────────── */}
+    <Modal
+      visible={!!selectedEmail}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={closeEmailDetail}
+    >
+      <View style={styles.modalContainer}>
+        {/* 모달 헤더 */}
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={closeEmailDetail} style={styles.modalCloseBtn}>
+            <Ionicons name="close" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle} numberOfLines={1}>이메일 상세</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 40 }}>
+          {selectedEmail && (
+            <>
+              {/* 이메일 정보 */}
+              <Text style={styles.detailSubject}>{selectedEmail.subject}</Text>
+              <View style={styles.detailMeta}>
+                <Text style={styles.detailSender}>
+                  {selectedEmail.senderName || selectedEmail.sender}
+                </Text>
+                <Text style={styles.detailDate}>{formatDate(selectedEmail.date)}</Text>
+              </View>
+              <Text style={styles.detailSummary}>{selectedEmail.summary}</Text>
+
+              {/* 액션 버튼들 */}
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#3B82F620' }]}
+                  onPress={handleTranslate}
+                  disabled={isTranslating}
+                >
+                  {isTranslating ? (
+                    <ActivityIndicator size="small" color="#3B82F6" />
+                  ) : (
+                    <Ionicons name="language" size={18} color="#3B82F6" />
+                  )}
+                  <Text style={[styles.actionBtnText, { color: '#3B82F6' }]}>번역</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F59E0B20' }]}
+                  onPress={handleExtractActions}
+                  disabled={isExtracting}
+                >
+                  {isExtracting ? (
+                    <ActivityIndicator size="small" color="#F59E0B" />
+                  ) : (
+                    <Ionicons name="flash" size={18} color="#F59E0B" />
+                  )}
+                  <Text style={[styles.actionBtnText, { color: '#F59E0B' }]}>할일 추출</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#10B98120' }]}
+                  onPress={() => setShowDraftInput(!showDraftInput)}
+                >
+                  <Ionicons name="create" size={18} color="#10B981" />
+                  <Text style={[styles.actionBtnText, { color: '#10B981' }]}>답장</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 번역 결과 */}
+              {translatedText && (
+                <View style={styles.resultCard}>
+                  <Text style={styles.resultLabel}>번역 결과</Text>
+                  <Text style={styles.resultText}>{translatedText}</Text>
+                </View>
+              )}
+
+              {/* 추출된 할일/일정 */}
+              {extractedActions && (
+                <View style={styles.resultCard}>
+                  <Text style={styles.resultLabel}>추출된 항목</Text>
+                  {extractedActions.tasks?.length > 0 && (
+                    <View style={{ marginBottom: spacing.md }}>
+                      <Text style={styles.resultSubLabel}>할일</Text>
+                      {extractedActions.tasks.map((t: any, i: number) => (
+                        <Text key={i} style={styles.resultText}>
+                          {t.priority === 'high' ? '🔴' : t.priority === 'medium' ? '🟡' : '🟢'}{' '}
+                          {t.title}
+                          {t.dueDate ? ` (${t.dueDate})` : ''}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                  {extractedActions.events?.length > 0 && (
+                    <View>
+                      <Text style={styles.resultSubLabel}>일정</Text>
+                      {extractedActions.events.map((e: any, i: number) => (
+                        <View key={i} style={styles.eventRow}>
+                          <Text style={styles.resultText}>
+                            📅 {e.title} — {e.date} {e.time || ''}
+                          </Text>
+                          <TouchableOpacity
+                            style={styles.eventAddBtn}
+                            onPress={() => handleCreateEvent(e)}
+                          >
+                            <Text style={styles.eventAddBtnText}>캘린더 추가</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {(!extractedActions.tasks?.length && !extractedActions.events?.length) && (
+                    <Text style={styles.resultText}>추출된 항목이 없습니다</Text>
+                  )}
+                </View>
+              )}
+
+              {/* 답장 초안 입력 */}
+              {showDraftInput && (
+                <View style={styles.resultCard}>
+                  <Text style={styles.resultLabel}>답장 초안</Text>
+                  <Text style={styles.draftTo}>To: {selectedEmail.sender}</Text>
+                  <TextInput
+                    style={styles.draftInput}
+                    multiline
+                    placeholder="답장 내용을 입력하세요..."
+                    placeholderTextColor={colors.textMuted}
+                    value={draftBody}
+                    onChangeText={setDraftBody}
+                    textAlignVertical="top"
+                  />
+                  <TouchableOpacity
+                    style={[styles.draftSendBtn, !draftBody.trim() && { opacity: 0.5 }]}
+                    onPress={handleDraft}
+                    disabled={isDrafting || !draftBody.trim()}
+                  >
+                    {isDrafting ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.draftSendBtnText}>임시보관함에 저장</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -593,5 +855,155 @@ const styles = StyleSheet.create({
   loadingOverlay: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
+  },
+
+  // ── 모달 ────────────────────────────────────────
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.bgInput,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalBody: {
+    flex: 1,
+    padding: spacing.lg,
+  },
+  detailSubject: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  detailMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  detailSender: {
+    fontSize: fontSize.sm,
+    color: colors.primaryLight,
+    fontWeight: '600',
+  },
+  detailDate: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+  },
+  detailSummary: {
+    fontSize: fontSize.md,
+    color: colors.textSecondary,
+    lineHeight: 24,
+    marginBottom: spacing.xl,
+  },
+
+  // ── 액션 버튼 ──────────────────────────────────
+  actionButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  actionBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
+
+  // ── 결과 카드 ──────────────────────────────────
+  resultCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.bgInput,
+  },
+  resultLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.primaryLight,
+    marginBottom: spacing.sm,
+  },
+  resultSubLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  resultText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  eventRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  eventAddBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+    marginLeft: spacing.sm,
+  },
+  eventAddBtnText: {
+    fontSize: fontSize.xs,
+    color: 'white',
+    fontWeight: '600',
+  },
+
+  // ── 답장 초안 ──────────────────────────────────
+  draftTo: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+  },
+  draftInput: {
+    backgroundColor: colors.bgInput,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    fontSize: fontSize.sm,
+    color: colors.text,
+    minHeight: 120,
+    marginBottom: spacing.md,
+  },
+  draftSendBtn: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+  },
+  draftSendBtnText: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: 'white',
   },
 });

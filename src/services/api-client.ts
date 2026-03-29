@@ -371,11 +371,14 @@ export interface EmailBriefingItem {
   senderName: string;
   subject: string;
   snippet: string;
+  summary: string;            // AI 요약
   body?: string;              // 긴급/대응필요만 포함
   date: string;
   dateSender?: string;        // 발신자 시간대 (매핑 시)
   dateSenderLabel?: string;   // 발신자 시간대 라벨
   dateLocal: string;          // 사용자 기본 시간대 표기
+  messageId: string;          // Gmail 메시지 ID
+  threadId?: string;          // Gmail 스레드 ID
   category: 'urgent' | 'action-needed' | 'schedule' | 'info' | 'ads';
   categoryEmoji: string;
   group?: string;             // 기관 그룹명 (다계정 시)
