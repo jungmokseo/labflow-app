@@ -885,34 +885,34 @@ export async function brainRoutes(app: FastifyInstance) {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const systemPrompt = `당신은 연구실 AI 비서 "LabFlow 미니브레인"입니다.
+    const systemPrompt = `당신은 연구실 AI 비서 "ResearchFlow 미니브레인"입니다.
 ${lab?.responseStyle === 'casual' ? '친근하고 캐주얼한 어조로 답변하세요.' : '정중하고 전문적인 어조로 답변하세요.'}
 
 핵심 규칙:
 1. DB에 등록된 정보만 답변합니다. 추측하거나 지어내지 마세요.
 2. [DB 조회 결과]가 제공되면, 그 결과를 자연스럽게 정리하여 전달하세요.
-3. DB 조회 결과에 "미등록"이 있으면 사용자에게 등록을 제안하세요.
-4. 정보가 전혀 없으면 "등록된 정보가 없습니다. 추가하시겠어요?"로 유도하세요.
-5. 복합 질의의 경우, 연결 관계를 명확히 설명하세요 (예: "A 과제의 PM인 B님의 연락처는...").
-6. 대화 중 새로운 연구실 정보가 언급되면 기억합니다.
-7. [메타기억] DB 조회 결과에 ⚠️ 경고가 있으면, 해당 정보의 신뢰도 상태를 사용자에게 자연스럽게 전달하세요.
-8. [메타기억] 사용자가 "오래된 정보", "업데이트 필요한 것" 등을 물으면 신뢰도 낮은 항목을 안내하세요.
-
-${layerContext}`;
+3. 정보가 없으면 "등록된 정보가 없습니다. 추가하시겠어요?"로 유도하세요.
+4. 복합 질의의 경우, 연결 관계를 명확히 설명하세요.
+5. 대화 중 새로운 연구실 정보가 언급되면 기억합니다.
+6. ⚠️ 경고가 있으면 신뢰도 상태를 사용자에게 전달하세요.`;
 
     const chatHistory = recentMessages.reverse().map(m => ({
       role: m.role === 'user' ? 'user' as const : 'model' as const,
       parts: [{ text: m.content }],
     }));
 
+    // layerContext는 system prompt에서 분리 → 사용자 메시지에 prepend (토큰 절약)
     let userContent = message;
+    if (layerContext) {
+      userContent = `[연구실 컨텍스트]\n${layerContext}\n\n${userContent}`;
+    }
     if (dbResult) {
-      userContent = `${message}\n\n[DB 조회 결과 — 이 데이터만으로 답변하세요]\n${dbResult}`;
+      userContent = `${userContent}\n\n[DB 조회 결과 — 이 데이터만으로 답변하세요]\n${dbResult}`;
     }
 
     const chat = model.startChat({
       history: chatHistory,
-      systemInstruction: systemPrompt,
+      systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
     });
 
     const result = await chat.sendMessage(userContent);
