@@ -22,6 +22,7 @@ import { labProfileRoutes } from './routes/lab-profile.js';
 import { paperAlertRoutes } from './routes/paper-alerts.js';
 import { paperRoutes } from './routes/papers.js';
 import { labCaptureRoutes } from './routes/lab-captures.js';
+import { setupRequestContextHook } from './middleware/auth.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -59,6 +60,9 @@ async function buildApp() {
                 error: error.message || '서버 오류가 발생했습니다',
         });
   });
+
+  // ── Data isolation context hook ────────────────────
+  setupRequestContextHook(app);
 
   // ── 라우트 등록 ────────────────────────────────────
   await app.register(healthRoutes);

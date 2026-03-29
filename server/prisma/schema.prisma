@@ -31,6 +31,7 @@ model User {
   preferences     UserPreference[]
   lab             Lab?
   channels        Channel[]
+  memos           Memo[]
 
   @@map("users")
 }
@@ -245,6 +246,7 @@ model LabMember {
   phone         String?
   active        Boolean   @default(true)
   confidence    Float     @default(1.0)
+  metadata      Json?     @default("{}")
   accessCount   Int       @default(0) @map("access_count")
   lastVerified  DateTime? @map("last_verified")
   lastAccessed  DateTime? @map("last_accessed")
@@ -270,6 +272,7 @@ model Project {
   acknowledgment  String?
   status          String    @default("active")
   confidence      Float     @default(1.0)
+  metadata        Json?     @default("{}")
   accessCount     Int       @default(0) @map("access_count")
   lastVerified    DateTime? @map("last_verified")
   lastAccessed    DateTime? @map("last_accessed")
@@ -325,12 +328,13 @@ model DomainDict {
 // ── 메모 ─────────────────────────────────────────────────
 model Memo {
   id            String    @id @default(cuid())
-  labId         String    @map("lab_id")
-  userId        String?   @map("user_id")
+  labId         String?   @map("lab_id")
+  userId        String    @map("user_id")
   title         String?
   content       String
   tags          String[]
   source        String    @default("manual")
+  shared        Boolean   @default(false)
   confidence    Float     @default(1.0)
   accessCount   Int       @default(0) @map("access_count")
   lastVerified  DateTime? @map("last_verified")
@@ -338,8 +342,10 @@ model Memo {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+  lab           Lab?      @relation(fields: [labId], references: [id], onDelete: SetNull)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt(sort: Desc)])
   @@index([labId, createdAt(sort: Desc)])
   @@map("memos")
 }

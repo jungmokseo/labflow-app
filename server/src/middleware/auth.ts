@@ -9,11 +9,13 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { env } from '../config/env.js';
+import { requestContext } from './prisma-filter.js';
 
-// 인증된 요청에 userId를 추가
+// 인증된 요청에 userId와 labId를 추가
 declare module 'fastify' {
   interface FastifyRequest {
     userId?: string;
+    labId?: string;
   }
 }
 
@@ -84,4 +86,21 @@ export async function optionalAuth(
   if (devUserId) {
     request.userId = devUserId;
   }
+}
+
+/**
+ * requestContext를 설정하는 Fastify onRequest 훅
+ * auth 미들웨어 실행 후 userId가 설정된 상태에서 호출됨
+ */
+export function setupRequestContextHook(app: import('fastify').FastifyInstance) {
+  app.addHook('onRequest', async (request) => {
+    if (request.userId) {
+      // Lab을 조회하여 labId를 자동 설정 (prisma-filter에서 사용)
+      // NOTE: requestContext.enterWith()로 동기적 설정 — Fastify는 async_hooks와 호환
+      requestContext.enterWith({
+        userId: request.userId,
+        labId: request.labId,
+      });
+    }
+  });
 }
