@@ -35,9 +35,10 @@ async function buildApp() {
     });
 
   // ── 플러그인 ──────────────────────────────────────
+  const corsOrigins = env.CORS_ORIGINS.trim();
   await app.register(cors, {
-        origin: env.CORS_ORIGINS.split(',').map(s => s.trim()),
-        credentials: true,
+        origin: corsOrigins === '*' ? true : corsOrigins.split(',').map(s => s.trim()),
+        credentials: corsOrigins !== '*',
   });
     await app.register(multipart, {
           limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 오디오 제한
