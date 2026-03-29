@@ -11,11 +11,11 @@ import { CaptureItem, CaptureCategory } from '../types';
 // ── 설정 ──────────────────────────────────────────
 const API_BASE = __DEV__
   ? 'http://localhost:3001'        // 로컬 개발
-  : 'https://labflow-api.onrender.com';  // Render 배포
+  : 'https://labflow-app-production.up.railway.app';  // Railway 배포
 
 const DEFAULT_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
-  'X-Dev-User-Id': 'dev-user-001',  // 개발 중 인증 우회
+  'X-Dev-User-Id': 'dev-user-seo',  // 개발 중 인증 우회
 };
 
 // ── 인증 토큰 주입 (Clerk 연동 후 사용) ──────────────
@@ -35,7 +35,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       }
     } catch { /* fallback to dev headers */ }
   }
-  return { 'X-Dev-User-Id': 'dev-user-001' };
+  return { 'X-Dev-User-Id': 'dev-user-seo' };
 }
 
 // ── API 응답 타입 ─────────────────────────────────
@@ -224,7 +224,7 @@ export async function createVoiceCapture(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'X-Dev-User-Id': 'dev-user-001',
+      'X-Dev-User-Id': 'dev-user-seo',
     },
     body: formData,
   });
@@ -267,7 +267,7 @@ export async function transcribeVoice(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'X-Dev-User-Id': 'dev-user-001',
+      'X-Dev-User-Id': 'dev-user-seo',
     },
     body: formData,
   });
@@ -420,6 +420,204 @@ export async function getEmailBriefing(params?: {
   };
 }
 
+/** 이메일 번역 (Gemini Flash) */
+export async function translateEmail(
+  text: string,
+  targetLang: string = 'ko',
+): Promise<{ translated: string; targetLang: string }> {
+  const result = await apiFetch<any>('/api/email/translate', {
+    method: 'POST',
+    body: JSON.stringify({ text, targetLang }),
+  });
+  return { translated: result.data?.translated ?? (result as any).translated, targetLang };
+}
+
+/** 답장 초안 생성 → Gmail 임시보관함 저장 */
+export async function createEmailDraft(params: {
+  to: string;
+  subject: string;
+  body: string;
+  threadId?: string;
+  inReplyTo?: string;
+}): Promise<{ draftId: string; message: string }> {
+  const result = await apiFetch<any>('/api/email/draft', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return {
+    draftId: result.data?.draftId ?? (result as any).draftId,
+    message: result.data?.message ?? (result as any).message,
+  };
+}
+
+/** 이메일에서 할일/일정 추출 → Capture 생성 */
+export async function extractEmailActions(params: {
+  subject: string;
+  body: string;
+  sender?: string;
+}): Promise<{
+  tasks: Array<{ title: string; priority: string; dueDate: string | null }>;
+  events: Array<{ title: string; date: string; time: string | null; location: string | null; description: string }>;
+  captures: any[];
+  message: string;
+}> {
+  const result = await apiFetch<any>('/api/email/extract-actions', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result.data ?? result;
+}
+
+/** Google Calendar 이벤트 생성 */
+export async function createCalendarEvent(params: {
+  title: string;
+  date: string;
+  time?: string;
+  duration?: number;
+  location?: string;
+  description?: string;
+}): Promise<{ eventId: string; htmlLink: string; message: string }> {
+  const result = await apiFetch<any>('/api/email/calendar-event', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result.data ?? result;
+}
+
+// ── 미니브레인 (Lab Memory) API ─────────────────────────
+
+/** 미니브레인 대화 */
+export async function brainChat(params: {
+  message: string;
+  channelId?: string;
+  labId?: string;
+}): Promise<{
+  reply: string;
+  intent?: string;
+  sources?: any[];
+  channelId?: string;
+}> {
+  const result = await apiFetch<any>('/api/brain/chat', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result.data ?? result;
+}
+
+/** 채널 목록 조회 */
+export async function listBrainChannels(): Promise<any[]> {
+  const result = await apiFetch<any[]>('/api/brain/channels');
+  return result.data;
+}
+
+/** 새 채널 생성 */
+export async function createBrainChannel(name?: string): Promise<any> {
+  const result = await apiFetch<any>('/api/brain/channels', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+  return result.data;
+}
+
+/** 채널 메시지 조회 */
+export async function getBrainChannelMessages(channelId: string): Promise<any[]> {
+  const result = await apiFetch<any[]>(`/api/brain/channels/${channelId}`);
+  return result.data;
+}
+
+/** 채널 삭제 */
+export async function deleteBrainChannel(channelId: string): Promise<void> {
+  await apiFetch(`/api/brain/channels/${channelId}`, { method: 'DELETE' });
+}
+
+/** Lab Memory 검색 */
+export async function searchBrain(query: string, labId?: string): Promise<any[]> {
+  const params = new URLSearchParams({ q: query });
+  if (labId) params.set('labId', labId);
+  const result = await apiFetch<any[]>(`/api/brain/search?${params.toString()}`);
+  return result.data;
+}
+
+// ── 지식 그래프 API ─────────────────────────────────────
+
+/** 전체 지식 그래프 */
+export async function getKnowledgeGraph(params?: {
+  entityType?: string;
+  limit?: number;
+}): Promise<{ nodes: any[]; edges: any[] }> {
+  const query = new URLSearchParams();
+  if (params?.entityType) query.set('entityType', params.entityType);
+  if (params?.limit) query.set('limit', String(params.limit));
+  const qs = query.toString();
+  const result = await apiFetch<any>(`/api/graph${qs ? `?${qs}` : ''}`);
+  return result.data;
+}
+
+/** 특정 노드의 연결 관계 */
+export async function getGraphNodeConnections(nodeId: string): Promise<any> {
+  const result = await apiFetch<any>(`/api/graph/node/${nodeId}`);
+  return result.data;
+}
+
+// ── 논문 알림 API ───────────────────────────────────────
+
+/** 논문 알림 설정 조회 */
+export async function getPaperAlerts(): Promise<any> {
+  const result = await apiFetch<any>('/api/papers/alerts');
+  return result.data;
+}
+
+/** 논문 알림 결과 목록 */
+export async function getPaperAlertResults(): Promise<any[]> {
+  const result = await apiFetch<any[]>('/api/papers/alerts/results');
+  return result.data;
+}
+
+/** 논문 알림 수동 실행 */
+export async function runPaperAlerts(): Promise<any> {
+  const result = await apiFetch<any>('/api/papers/alerts/run', { method: 'POST' });
+  return result.data;
+}
+
+/** 논문 알림 읽음 표시 */
+export async function markPaperAlertRead(id: string): Promise<void> {
+  await apiFetch(`/api/papers/alerts/results/${id}`, { method: 'PATCH' });
+}
+
+// ── Lab 프로필 API ──────────────────────────────────────
+
+/** Lab 프로필 조회 */
+export async function getLabProfile(): Promise<any> {
+  const result = await apiFetch<any>('/api/lab');
+  return result.data;
+}
+
+/** Lab 온보딩 완료도 */
+export async function getLabCompleteness(): Promise<any> {
+  const result = await apiFetch<any>('/api/lab/completeness');
+  return result.data;
+}
+
+// ── Voice Chatbot API ───────────────────────────────────
+
+/** 보이스 챗봇 페르소나 목록 */
+export async function getVoicePersonas(): Promise<any[]> {
+  const result = await apiFetch<any>('/api/voice/personas');
+  return result.data?.personas ?? (result as any).personas ?? [];
+}
+
+/** 보이스 세션 시작 */
+export async function createVoiceSession(params: {
+  personaId: 'research-bot' | 'english-tutor';
+  voiceId?: string;
+}): Promise<any> {
+  const result = await apiFetch<any>('/api/voice/session', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  return result.data ?? result;
+}
+
 // ── 회의 노트 API ──────────────────────────────────────
 
 export interface MeetingItem {
@@ -456,7 +654,7 @@ export async function createMeeting(
   const url = `${API_BASE}/api/meetings`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'X-Dev-User-Id': 'dev-user-001' },
+    headers: { 'X-Dev-User-Id': 'dev-user-seo' },
     body: formData,
   });
 

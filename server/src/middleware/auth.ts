@@ -58,7 +58,7 @@ export async function authMiddleware(
 
   // ── 3. Development: 기본 사용자 ────────────────────
   if (env.NODE_ENV === 'development') {
-    request.userId = 'dev-user-001';
+    request.userId = 'dev-user-seo';
     return;
   }
 

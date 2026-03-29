@@ -16,11 +16,11 @@ async function seed() {
   // Try finding existing user first
   let existingUser = await prisma.user.findFirst({ where: { email: 'jungmok.seo@gmail.com' } });
   if (!existingUser) {
-    existingUser = await prisma.user.findFirst({ where: { clerkId: 'dev-user-001' } });
+    existingUser = await prisma.user.findFirst({ where: { clerkId: 'dev-user-seo' } });
   }
   const user = existingUser || await prisma.user.create({
     data: {
-      clerkId: 'dev-user-001',
+      clerkId: 'dev-user-seo',
       email: 'jungmok.seo@gmail.com',
       name: '서정목',
       labName: 'BLISS Lab',

@@ -434,7 +434,7 @@ export async function emailCallbackRoute(app: FastifyInstance) {
   app.get('/api/email/auth/callback', async (request, reply) => {
     const query = callbackQuerySchema.parse(request.query);
     // Google 리다이렉트는 custom header 불가 → state 파라미터에서 userId 추출
-    const userId = query.state || 'dev-user-001';
+    const userId = query.state || 'dev-user-seo';
     try {
       const oauth2Client = createOAuth2Client();
       const { tokens } = await oauth2Client.getToken(query.code);

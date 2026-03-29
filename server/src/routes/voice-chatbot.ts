@@ -77,7 +77,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
     // 도메인 사전에서 Whisper 커스텀 어휘 로드
     let whisperPrompt = '';
     try {
-      const userId = body.userId || 'dev-user-001';
+      const userId = body.userId || 'dev-user-seo';
       const lab = await prisma.lab.findFirst({
         where: { owner: { id: userId } },
         include: { domainDict: { take: 100 } },
