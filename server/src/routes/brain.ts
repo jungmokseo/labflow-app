@@ -143,7 +143,7 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `사용자 메시지의 의도를 분류하세요. JSON으로만 응답하세요.
 
@@ -676,7 +676,7 @@ async function maybeGenerateSummary(channelId: string): Promise<void> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const conversationText = newMessages.map(m => `${m.role}: ${m.content}`).join('\n');
     const result = await model.generateContent(
@@ -699,7 +699,7 @@ async function autoExtractInfo(message: string, response: string, labId: string)
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `다음 대화에서 연구실 관련 새 정보가 있는지 확인하세요.
 추출: 과제-논문 연결, 새 용어, 새 인원, 새 과제 정보
@@ -883,7 +883,7 @@ export async function brainRoutes(app: FastifyInstance) {
     // 7. AI 응답 생성
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const systemPrompt = `당신은 연구실 AI 비서 "ResearchFlow 미니브레인"입니다.
 ${lab?.responseStyle === 'casual' ? '친근하고 캐주얼한 어조로 답변하세요.' : '정중하고 전문적인 어조로 답변하세요.'}
@@ -983,7 +983,7 @@ ${lab?.responseStyle === 'casual' ? '친근하고 캐주얼한 어조로 답변�
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const m = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const m = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const r = await m.generateContent(
           `다음 메모에 적절한 태그를 3~5개 생성하세요. JSON 배열로만 응답: "${body.content}"`
         );
