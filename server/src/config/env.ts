@@ -11,7 +11,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(), // OpenAI Realtime API (Voice Chatbot)
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
-  GOOGLE_REDIRECT_URI: z.string().default('https://labflow-api.onrender.com/api/email/auth/callback'),
+  GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
