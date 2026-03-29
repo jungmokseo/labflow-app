@@ -10,6 +10,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { env } from '../config/env.js';
 import { requestContext } from './prisma-filter.js';
+import { basePrismaClient } from '../config/prisma.js';
 
 // 인증된 요청에 userId와 labId를 추가
 declare module 'fastify' {
@@ -52,13 +53,30 @@ export async function authMiddleware(
   // ── 2. X-Dev-User-Id (MVP 개발 모드) ──────────────
   const devUserId = request.headers['x-dev-user-id'] as string;
   if (devUserId) {
-    request.userId = devUserId;
+    // clerkId로 실제 User를 조회하여 DB의 UUID를 사용
+    try {
+      const user = await basePrismaClient.user.findFirst({
+        where: { clerkId: devUserId },
+        select: { id: true },
+      });
+      request.userId = user?.id || devUserId;
+    } catch {
+      request.userId = devUserId;
+    }
     return;
   }
 
   // ── 3. Development: 기본 사용자 ────────────────────
   if (env.NODE_ENV === 'development') {
-    request.userId = 'dev-user-seo';
+    try {
+      const user = await basePrismaClient.user.findFirst({
+        where: { clerkId: 'dev-user-seo' },
+        select: { id: true },
+      });
+      request.userId = user?.id || 'dev-user-seo';
+    } catch {
+      request.userId = 'dev-user-seo';
+    }
     return;
   }
 
@@ -84,7 +102,15 @@ export async function optionalAuth(
   }
   const devUserId = request.headers['x-dev-user-id'] as string;
   if (devUserId) {
-    request.userId = devUserId;
+    try {
+      const user = await basePrismaClient.user.findFirst({
+        where: { clerkId: devUserId },
+        select: { id: true },
+      });
+      request.userId = user?.id || devUserId;
+    } catch {
+      request.userId = devUserId;
+    }
   }
 }
 
