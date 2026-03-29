@@ -358,6 +358,32 @@ async function executeMultiHopQuery(
     }
   }
 
+  // 패턴 F: KnowledgeGraph 기반 관계 조회 ("XX 과제에 누가 참여해?")
+  if (chainResults.length === 0) {
+    const queryLower2 = message.toLowerCase();
+    if (queryLower2.includes('참여') || queryLower2.includes('관계') || queryLower2.includes('연결')) {
+      const userId = (await prisma.lab.findUnique({ where: { id: labId } }))?.ownerId;
+      if (userId) {
+        const edges = await prisma.knowledgeEdge.findMany({
+          where: { relation: 'participates_in' },
+          include: { fromNode: true, toNode: true },
+        });
+        // 질문에 언급된 프로젝트의 참여자 찾기
+        for (const proj of mentionedProjects) {
+          const projEdges = edges.filter(e => e.toNode.name === proj.name || e.toNode.entityId === proj.id);
+          if (projEdges.length > 0) {
+            chainResults.push({
+              step: 1, source: 'knowledge_graph', found: true,
+              data: projEdges,
+              summary: `📋 **${proj.name}** 참여자 (Knowledge Graph):\n` +
+                projEdges.map(e => `👤 ${e.fromNode.name}`).join('\n'),
+            });
+          }
+        }
+      }
+    }
+  }
+
   // ── 결과 종합 ──
   if (chainResults.length > 0) {
     return chainResults.map(r => r.summary).join('\n\n---\n\n');
@@ -392,7 +418,15 @@ async function fallbackCrossSearch(
     if (matchedM.length) results.push(`👤 구성원: ${matchedM.map(m => `${m.name}(${m.role})`).join(', ')}`);
     if (matchedP.length) results.push(`📋 과제: ${matchedP.map(p => p.name.slice(0, 40)).join(', ')}`);
     if (matchedPub.length) results.push(`📄 논문: ${matchedPub.map(p => p.title.slice(0, 40)).join(', ')}`);
-    if (matchedMemo.length) results.push(`💡 메모: ${matchedMemo.length}개 관련 메모`);
+    if (matchedMemo.length) {
+      // Source별 분류하여 표시
+      const faqMatches = matchedMemo.filter(m => m.source === 'faq');
+      const regMatches = matchedMemo.filter(m => m.source === 'regulation');
+      const otherMatches = matchedMemo.filter(m => !['faq', 'regulation'].includes(m.source));
+      if (faqMatches.length) results.push(`❓ FAQ: ${faqMatches.map(m => m.title || m.content.slice(0, 30)).join(', ')}`);
+      if (regMatches.length) results.push(`📖 규정: ${regMatches.map(m => m.title || m.content.slice(0, 30)).join(', ')}`);
+      if (otherMatches.length) results.push(`💡 메모: ${otherMatches.length}개 관련 메모`);
+    }
   }
 
   if (results.length > 0) {
@@ -591,6 +625,23 @@ async function build3LayerContext(channelId: string, labId: string | null): Prom
       }
       if (lab.domainDict.length > 0) {
         context += `전문용어 사전: ${lab.domainDict.slice(0, 20).map(d => `${d.wrongForm}→${d.correctForm}`).join(', ')}\n`;
+      }
+
+      // L3+ Memo source별 컨텍스트 (FAQ/규정은 항상 참조 가능)
+      const sharedMemos = await prisma.memo.findMany({
+        where: { labId, shared: true, source: { in: ['faq', 'regulation'] } },
+        take: 30,
+        orderBy: { accessCount: 'desc' },
+      });
+      if (sharedMemos.length > 0) {
+        const faqMemos = sharedMemos.filter(m => m.source === 'faq');
+        const regMemos = sharedMemos.filter(m => m.source === 'regulation');
+        if (faqMemos.length > 0) {
+          context += `FAQ (${faqMemos.length}건): ${faqMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
+        }
+        if (regMemos.length > 0) {
+          context += `규정/매뉴얼 (${regMemos.length}건): ${regMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
+        }
       }
       context += '\n';
     }
@@ -966,14 +1017,20 @@ ${layerContext}`;
     const results: any = {};
 
     if (type === 'all' || type === 'memo') {
+      // Lab의 shared 메모 + 본인 메모 모두 검색
       results.memos = await prisma.memo.findMany({
         where: {
-          labId: lab.id,
           OR: [
-            { content: { contains: query, mode: 'insensitive' } },
-            { title: { contains: query, mode: 'insensitive' } },
-            { tags: { has: query } },
+            { labId: lab.id, shared: true },
+            { userId: request.userId! },
           ],
+          AND: {
+            OR: [
+              { content: { contains: query, mode: 'insensitive' } },
+              { title: { contains: query, mode: 'insensitive' } },
+              { tags: { has: query } },
+            ],
+          },
         },
         orderBy: { createdAt: 'desc' },
         take: 20,
