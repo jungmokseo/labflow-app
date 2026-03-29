@@ -65,7 +65,7 @@ export default function SettingsPage() {
           <StatusItem
             label="API 서버"
             status={health === true ? 'healthy' : health === false ? 'error' : 'checking'}
-            detail="labflow-api.onrender.com"
+            detail="labflow-app-production.up.railway.app"
           />
           <StatusItem
             label="Gmail 연동"
@@ -128,10 +128,10 @@ export default function SettingsPage() {
       <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
         <h3 className="font-semibold text-white text-sm">API 정보</h3>
         <div className="bg-bg/50 rounded-lg p-4 space-y-2 font-mono text-xs">
-          <div className="text-text-muted">Base URL: <span className="text-primary">https://labflow-api.onrender.com</span></div>
-          <div className="text-text-muted">Auth Header: <span className="text-white">X-Dev-User-Id: dev-user-001</span></div>
+          <div className="text-text-muted">Base URL: <span className="text-primary">https://labflow-app-production.up.railway.app</span></div>
+          <div className="text-text-muted">Auth Header: <span className="text-white">X-Dev-User-Id: dev-user-seo</span></div>
           <div className="text-text-muted">Database: <span className="text-white">Supabase PostgreSQL (Seoul)</span></div>
-          <div className="text-text-muted">Hosting: <span className="text-white">Render (Singapore, Starter)</span></div>
+          <div className="text-text-muted">Hosting: <span className="text-white">Railway</span></div>
         </div>
       </section>
 

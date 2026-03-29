@@ -15,11 +15,11 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 
 const API_BASE = __DEV__
   ? 'http://localhost:3001'
-  : 'https://labflow-api.onrender.com';
+  : 'https://labflow-app-production.up.railway.app';
 
 const HEADERS = {
   'Content-Type': 'application/json',
-  'X-Dev-User-Id': 'dev-user-001',
+  'X-Dev-User-Id': 'dev-user-seo',
 };
 
 interface PaperAlert {

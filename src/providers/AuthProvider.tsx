@@ -24,7 +24,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
-  userId: 'dev-user-001',
+  userId: 'dev-user-seo',
   isSignedIn: true,
   isLoaded: true,
   getToken: async () => null,
@@ -63,7 +63,7 @@ const tokenCache = {
 // ── Dev Mode Provider (Clerk 미설정 시) ──────────────
 function DevAuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextType>(() => ({
-    userId: 'dev-user-001',
+    userId: 'dev-user-seo',
     isSignedIn: true,
     isLoaded: true,
     getToken: async () => null,

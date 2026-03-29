@@ -6,7 +6,7 @@
  * 클라이언트 컴포넌트에서는 useAuth().getToken()을 사용합니다.
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-api.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
 
 // ── 토큰 getter (클라이언트 사이드용) ───────────────
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -29,7 +29,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   // Fallback: dev mode
-  headers['X-Dev-User-Id'] = 'dev-user-001';
+  headers['X-Dev-User-Id'] = 'dev-user-seo';
   return headers;
 }
 

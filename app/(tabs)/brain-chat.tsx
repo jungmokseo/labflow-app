@@ -15,7 +15,7 @@ import { colors, spacing, fontSize, borderRadius } from '../../src/constants/the
 
 const API_BASE = __DEV__
   ? 'http://localhost:3001'
-  : 'https://labflow-api.onrender.com';
+  : 'https://labflow-app-production.up.railway.app';
 
 interface Message {
   id: string;
@@ -57,7 +57,7 @@ export default function BrainChatScreen() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Dev-User-Id': 'dev-user-001',
+          'X-Dev-User-Id': 'dev-user-seo',
         },
         body: JSON.stringify({
           message: text,

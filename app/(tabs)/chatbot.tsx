@@ -71,7 +71,7 @@ type ChatbotState = 'select' | 'connecting' | 'active' | 'error';
 
 const API_BASE = __DEV__
   ? 'http://localhost:3001'
-  : 'https://labflow-api.onrender.com';
+  : 'https://labflow-app-production.up.railway.app';
 
 // ── 메인 컴포넌트 ──────────────────────────────────
 

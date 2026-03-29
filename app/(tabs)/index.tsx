@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { colors } from '../../src/constants/theme';
-import { apiClient } from '../../src/services/api-client';
+import { brainChat } from '../../src/services/api-client';
 
 interface Message {
   id: string;
@@ -47,10 +47,9 @@ export default function BrainTab() {
     setLoading(true);
 
     try {
-      const res = await apiClient.post('/api/brain/chat', { message: msg, channelId });
-      const data = res.data as any;
+      const data = await brainChat({ message: msg, channelId: channelId ?? undefined });
       if (data.channelId && !channelId) setChannelId(data.channelId);
-      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: data.response }]);
+      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', content: data.reply }]);
     } catch (err: any) {
       setMessages(prev => [...prev, { id: `e-${Date.now()}`, role: 'assistant', content: `오류: ${err.message}` }]);
     } finally {
