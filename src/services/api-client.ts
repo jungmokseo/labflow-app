@@ -383,9 +383,6 @@ export interface EmailBriefingItem {
   categoryEmoji: string;
   group?: string;             // 기관 그룹명 (다계정 시)
   groupEmoji?: string;        // 기관 이모지
-  summary: string;
-  messageId: string;
-  threadId?: string;
   matchedTimezone?: string;   // 매칭된 발신자 시간대 ID
 }
 
@@ -705,7 +702,7 @@ export async function deleteMeeting(id: string): Promise<void> {
 export async function checkHealth(): Promise<boolean> {
   try {
     const result = await apiFetch<any>('/health');
-    return result.status === 'healthy';
+    return (result as any).status === 'healthy' || result.success === true;
   } catch {
     return false;
   }

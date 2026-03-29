@@ -15,13 +15,13 @@ import { RecordingState, formatDuration } from '../hooks/useVoiceRecorder';
 
 interface Props {
   onSend: (text: string) => void;
-  onStartRecording: () => void;
-  onStopRecording: () => void;
-  onCancelRecording: () => void;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
+  onCancelRecording?: () => void;
   placeholder?: string;
   isLoading?: boolean;
-  recordingState: RecordingState;
-  recordingDuration: number;
+  recordingState?: RecordingState;
+  recordingDuration?: number;
   recordingError?: string | null;
 }
 
@@ -72,9 +72,9 @@ export default function ChatInput({
 
   const handleMicPress = () => {
     if (recordingState === 'idle') {
-      onStartRecording();
+      onStartRecording?.();
     } else if (recordingState === 'recording') {
-      onStopRecording();
+      onStopRecording?.();
     }
   };
 
@@ -99,7 +99,7 @@ export default function ChatInput({
                 ]}
               />
               <Text style={styles.recordingTime}>
-                {formatDuration(recordingDuration)}
+                {formatDuration(recordingDuration ?? 0)}
               </Text>
               <Text style={styles.recordingLabel}>녹음 중...</Text>
             </View>

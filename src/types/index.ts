@@ -1,4 +1,4 @@
-export type ChannelType = 'capture' | 'email' | 'meeting';
+export type ChannelType = 'capture' | 'email' | 'meeting' | 'idea' | 'memo';
 
 // AI 자동분류 카테고리 (Make.com 방식)
 export type CaptureCategory = 'idea' | 'task' | 'memo';
@@ -29,6 +29,7 @@ export interface Message {
   // 캡처 전용 필드
   captureItem?: CaptureItem;
   // AI 메타데이터
+  tags?: string[];
   modelUsed?: string;
   creditsConsumed?: number;
 }
