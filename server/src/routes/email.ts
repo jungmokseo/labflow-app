@@ -487,7 +487,12 @@ export async function emailRoutes(app: FastifyInstance) {
       const oauth2Client = createOAuth2Client();
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
-        scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+        scope: [
+          'https://www.googleapis.com/auth/gmail.readonly',
+          'https://www.googleapis.com/auth/gmail.compose',
+          'https://www.googleapis.com/auth/calendar.events',
+          // NOTE: Google Cloud Console에서 Calendar API 활성화 필요
+        ],
         state: request.userId,
       });
       return reply.send({ success: true, authUrl });
@@ -905,6 +910,236 @@ export async function emailRoutes(app: FastifyInstance) {
       }
 
       return reply.code(500).send({ error: '이메일 브리핑 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/draft — 답장 초안 → Gmail 임시보관함 ──
+  app.post('/api/email/draft', async (request, reply) => {
+    const schema = z.object({
+      threadId: z.string().optional(),
+      to: z.string().min(1),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+      inReplyTo: z.string().optional(), // Message-ID header for threading
+    });
+    const { threadId, to, subject, body, inReplyTo } = schema.parse(request.body);
+    const userId = request.userId!;
+
+    try {
+      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail 연동이 필요합니다' });
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: gmailToken.accessToken,
+        refresh_token: gmailToken.refreshToken,
+      });
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      // RFC 2822 형식 이메일 조립
+      const headers = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'Content-Type: text/plain; charset=utf-8',
+      ];
+      if (inReplyTo) {
+        headers.push(`In-Reply-To: ${inReplyTo}`);
+        headers.push(`References: ${inReplyTo}`);
+      }
+      const rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
+      const encodedMessage = Buffer.from(rawMessage).toString('base64url');
+
+      const draft = await gmail.users.drafts.create({
+        userId: 'me',
+        requestBody: {
+          message: {
+            raw: encodedMessage,
+            threadId: threadId || undefined,
+          },
+        },
+      });
+
+      return reply.code(201).send({
+        success: true,
+        draftId: draft.data.id,
+        message: '답장 초안이 Gmail 임시보관함에 저장되었습니다.',
+      });
+    } catch (error: any) {
+      app.log.error('답장 초안 생성 실패:', error);
+      return reply.code(500).send({ error: '답장 초안 생성 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/translate — 이메일 본문 번역 (Gemini Flash) ──
+  app.post('/api/email/translate', async (request, reply) => {
+    const schema = z.object({
+      text: z.string().min(1),
+      targetLang: z.string().default('ko'),
+    });
+    const { text, targetLang } = schema.parse(request.body);
+
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+      const result = await model.generateContent(
+        `다음 이메일 본문을 ${targetLang === 'ko' ? '한국어' : targetLang}로 자연스럽게 번역하세요. 번역문만 출력하세요.\n\n${text}`
+      );
+
+      return reply.send({
+        success: true,
+        translated: result.response.text(),
+        targetLang,
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ error: '번역 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/extract-actions — 이메일에서 할일/일정 추출 → Capture + Calendar ──
+  app.post('/api/email/extract-actions', async (request, reply) => {
+    const schema = z.object({
+      subject: z.string(),
+      body: z.string().min(1),
+      sender: z.string().optional(),
+    });
+    const { subject, body: emailBody, sender } = schema.parse(request.body);
+    const userId = request.userId!;
+
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+      const result = await model.generateContent(`다음 이메일에서 할일(tasks)과 일정(events)을 추출하세요. JSON으로만 응답:
+
+이메일 제목: ${subject}
+발신자: ${sender || '알 수 없음'}
+본문: ${emailBody.substring(0, 2000)}
+
+응답 형식:
+{
+  "tasks": [{"title": "...", "priority": "HIGH|MEDIUM|LOW", "dueDate": "YYYY-MM-DD or null"}],
+  "events": [{"title": "...", "date": "YYYY-MM-DD", "time": "HH:mm or null", "location": "... or null", "description": "..."}]
+}
+
+없으면 빈 배열로.`);
+
+      const text = result.response.text().trim();
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) {
+        return reply.send({ success: true, tasks: [], events: [], captures: [] });
+      }
+
+      const extracted = JSON.parse(match[0]);
+      const captures: any[] = [];
+
+      // 할일 → Capture 생성
+      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const lab = user ? await prisma.lab.findUnique({ where: { ownerId: user.id } }) : null;
+
+      for (const task of (extracted.tasks || [])) {
+        if (!task.title) continue;
+        const capture = await prisma.capture.create({
+          data: {
+            userId: user?.id || userId,
+            labId: lab?.id || null,
+            content: `[이메일] ${task.title} (from: ${sender || subject})`,
+            summary: task.title,
+            category: 'TASK',
+            tags: ['email', 'action-item'],
+            priority: task.priority === 'HIGH' ? 'HIGH' : task.priority === 'LOW' ? 'LOW' : 'MEDIUM',
+            actionDate: task.dueDate ? new Date(task.dueDate) : null,
+            modelUsed: 'gemini-flash',
+            sourceType: 'text',
+            status: 'active',
+          },
+        });
+        captures.push(capture);
+      }
+
+      return reply.send({
+        success: true,
+        tasks: extracted.tasks || [],
+        events: extracted.events || [],
+        captures,
+        message: `할일 ${captures.length}개 → Capture 저장. 일정 ${(extracted.events || []).length}개 추출.`,
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ error: '액션 추출 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/calendar-event — Google Calendar 이벤트 생성 ──
+  // NOTE: Google Cloud Console에서 Calendar API 활성화 + OAuth 스코프 추가 필요
+  app.post('/api/email/calendar-event', async (request, reply) => {
+    const schema = z.object({
+      title: z.string().min(1),
+      date: z.string().min(1), // YYYY-MM-DD
+      time: z.string().optional(), // HH:mm
+      duration: z.number().default(60), // minutes
+      location: z.string().optional(),
+      description: z.string().optional(),
+    });
+    const { title, date, time, duration, location, description } = schema.parse(request.body);
+    const userId = request.userId!;
+
+    try {
+      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail/Calendar 연동이 필요합니다' });
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: gmailToken.accessToken,
+        refresh_token: gmailToken.refreshToken,
+      });
+
+      const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+      const startDateTime = time
+        ? `${date}T${time}:00`
+        : `${date}T09:00:00`;
+      const endDate = new Date(startDateTime);
+      endDate.setMinutes(endDate.getMinutes() + duration);
+
+      const event = await calendar.events.insert({
+        calendarId: 'primary',
+        requestBody: {
+          summary: title,
+          location: location || undefined,
+          description: description || undefined,
+          start: time
+            ? { dateTime: startDateTime, timeZone: 'Asia/Seoul' }
+            : { date },
+          end: time
+            ? { dateTime: endDate.toISOString(), timeZone: 'Asia/Seoul' }
+            : { date },
+        },
+      });
+
+      return reply.code(201).send({
+        success: true,
+        eventId: event.data.id,
+        htmlLink: event.data.htmlLink,
+        message: `캘린더 이벤트 생성: ${title} (${date}${time ? ' ' + time : ''})`,
+      });
+    } catch (error: any) {
+      // Calendar API 미활성화 시 명확한 에러 메시지
+      if (error.message?.includes('Calendar API') || error.code === 403) {
+        return reply.code(403).send({
+          error: 'Google Calendar API가 활성화되지 않았습니다',
+          hint: 'Google Cloud Console에서 Calendar API 활성화 + OAuth 스코프(calendar.events)를 추가해주세요.',
+        });
+      }
+      return reply.code(500).send({ error: '캘린더 이벤트 생성 실패', details: error.message });
     }
   });
 }
