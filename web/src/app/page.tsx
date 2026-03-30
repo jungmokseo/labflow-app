@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useUser } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
 import { getCaptures, getEmailStatus, getMeetings, checkHealth, Capture, Meeting } from '@/lib/api';
 
 // ── 카테고리 배지 색상 ──────────────────────────────
@@ -19,13 +21,23 @@ const PRIORITY_ICON: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const { isLoaded, isSignedIn } = useUser();
+  const router = useRouter();
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [emailConnected, setEmailConnected] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // 로그인 안 된 상태면 sign-in으로 리다이렉트
   useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.push('/sign-in');
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
     async function load() {
       try {
         const [health, captureRes, emailRes, meetingRes] = await Promise.allSettled([
@@ -46,7 +58,7 @@ export default function DashboardPage() {
       }
     }
     load();
-  }, []);
+  }, [isSignedIn]);
 
   if (loading) {
     return (

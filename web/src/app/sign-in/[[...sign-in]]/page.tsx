@@ -25,7 +25,7 @@ export default function SignInPage() {
             formButtonPrimary: 'bg-primary hover:bg-primary-hover',
           },
         }}
-        afterSignInUrl="/"
+        afterSignInUrl="/brain"
         signUpUrl="/sign-up"
       />
     </div>
