@@ -867,16 +867,46 @@ async function handleToolMessage(
 
       if (!context) return { response: '등록된 논문이 없습니다. PDF를 업로드하거나 논문 알림을 설정해주세요.', intent: 'papers_tool' };
 
+      // Opus 4.6 for paper discussion (deep understanding required)
+      const systemPrompt = `당신은 연구 논문 전문 비서입니다. 연구실의 핵심 논문과 최신 동향을 참고하여 답변하세요.
+
+핵심 규칙:
+1. 핵심 논문의 별칭(예: "LM 논문", "핵심 논문 1번")이 있으면 해당 논문을 참조하세요.
+2. 벡터 검색 결과가 있으면 실제 논문 내용을 기반으로 구체적으로 답변하세요.
+3. 논문 비교 시: novelty, 방법론, 결과, 한계점을 체계적으로 분석하세요.
+4. 추측하지 마세요. 제공된 데이터에 없는 내용은 "해당 정보가 없습니다"라고 답하세요.
+
+${context}`;
+
+      if (env.ANTHROPIC_API_KEY) {
+        try {
+          const Anthropic = (await import('@anthropic-ai/sdk')).default;
+          const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+          const response = await anthropic.messages.create({
+            model: 'claude-opus-4-20250514',
+            max_tokens: 4096,
+            temperature: 0.3,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: message }],
+          });
+          const text = response.content.find(b => b.type === 'text');
+          if (text && text.type === 'text') {
+            return { response: text.text, intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length, model: 'opus' } };
+          }
+        } catch (err) {
+          console.warn('Opus papers tool failed, fallback to Gemini:', err);
+        }
+      }
+
+      // Gemini fallback
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `당신은 연구 논문 비서입니다. 연구실의 핵심 논문과 최신 동향을 참고하여 답변하세요.
-핵심 논문의 별칭(예: "LM 논문", "핵심 논문 1번")이 있으면 해당 논문을 참조하세요.
-벡터 검색 결과가 있으면 실제 논문 내용을 기반으로 구체적으로 답변하세요.\n\n${context}` }] },
+        systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
       });
-      return { response: result.response.text(), intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length } };
+      return { response: result.response.text(), intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length, model: 'gemini-fallback' } };
     }
 
     case 'meeting': {

@@ -289,16 +289,56 @@ async function enrichWithCrossRef(doi: string) {
   } catch { return null; }
 }
 
-// ── AI Summary ──────────────────────────────────────
+// ── AI Summary (Opus 4.6 — 논문 요약은 깊은 이해 필요) ──
 async function generatePaperSummary(title: string, abstract: string, matchedThemes: string[]) {
+  const ctx = matchedThemes.length > 0 ? `관련 연구 테마: ${matchedThemes.join(', ')}\n` : '';
+  const prompt = `다음 논문의 핵심 기여(novelty)와 방법론을 한국어 2~3문장으로 요약하세요.
+- 이 논문이 기존 연구 대비 무엇이 새로운지 명확히 짚어주세요.
+- 구체적 수치, 소재, 방법이 있으면 반드시 포함하세요.
+- 해당 분야 연구자가 읽었을 때 "이 논문을 읽어야 하는 이유"가 드러나야 합니다.
+
+${ctx}제목: ${title}
+초록: ${abstract.slice(0, 2000)}
+
+요약:`;
+
+  // Opus 4.6 우선, fallback → Sonnet → Gemini
+  if (env.ANTHROPIC_API_KEY) {
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      const response = await anthropic.messages.create({
+        model: 'claude-opus-4-20250514',
+        max_tokens: 1024,
+        temperature: 0.2,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const text = response.content.find(b => b.type === 'text');
+      if (text && text.type === 'text') return text.text.trim();
+    } catch (err) {
+      console.warn('Opus paper summary failed, trying Sonnet:', err);
+      // Sonnet fallback
+      try {
+        const Anthropic = (await import('@anthropic-ai/sdk')).default;
+        const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+        const response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          temperature: 0.2,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const text = response.content.find(b => b.type === 'text');
+        if (text && text.type === 'text') return text.text.trim();
+      } catch { /* fall through to Gemini */ }
+    }
+  }
+
+  // Gemini fallback (Anthropic 키 없을 때)
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const ctx = matchedThemes.length > 0 ? `관련 연구 테마: ${matchedThemes.join(', ')}\n` : '';
-    const result = await model.generateContent(
-      `다음 논문의 핵심 기여와 방법론을 한국어 2~3문장으로 요약하세요. 구체적 수치나 방법이 있으면 포함하세요.\n\n${ctx}제목: ${title}\n초록: ${abstract.slice(0, 1500)}\n\n요약:`
-    );
+    const result = await model.generateContent(prompt);
     return result.response.text().trim();
   } catch { return ''; }
 }
