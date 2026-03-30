@@ -148,7 +148,7 @@ export default function EmailPage() {
   const handleConnect = async () => {
     try {
       const res = await getEmailAuthUrl();
-      window.open(res.url, '_blank');
+      window.location.href = res.url;
     } catch (err: any) {
       setError(err.message);
     }
