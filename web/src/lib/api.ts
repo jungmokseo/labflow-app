@@ -526,7 +526,7 @@ export async function searchJournals(query: string) {
 }
 
 export async function addCustomJournal(data: { name: string; rssUrl: string; publisher?: string }) {
-  return apiFetch<{ success: boolean; sampleCount: number }>('/api/papers/journals/custom', {
+  return apiFetch<{ success: boolean; sampleCount: number }>('/api/papers/journals/add', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -547,19 +547,19 @@ export async function savePaperAlert(data: { keywords: string[]; journals: strin
 }
 
 export async function runPaperCrawl(alertId?: string) {
-  const path = alertId ? `/api/papers/alerts/${alertId}/run` : '/api/papers/crawl';
+  const path = alertId ? `/api/papers/alerts/${alertId}/run` : '/api/papers/alerts/run';
   return apiFetch<{ success: boolean; data: PaperAlertResult[]; count: number }>(path, {
     method: 'POST',
   });
 }
 
 export async function getPaperAlertResults(alertId?: string) {
-  const path = alertId ? `/api/papers/alerts/${alertId}/results` : '/api/papers/results';
+  const path = alertId ? `/api/papers/alerts/${alertId}/results` : '/api/papers/alerts/results';
   return apiFetch<{ success: boolean; data: PaperAlertResult[]; results?: PaperAlertResult[]; unreadCount?: number }>(path);
 }
 
 export async function markPaperRead(resultId: string) {
-  return apiFetch<{ success: boolean }>(`/api/papers/results/${resultId}/read`, { method: 'PATCH' });
+  return apiFetch<{ success: boolean }>(`/api/papers/alerts/results/${resultId}`, { method: 'PATCH' });
 }
 
 export async function uploadPaperPdf(file: File): Promise<{ success: boolean; message: string; paperId?: string; title?: string; status?: string }> {

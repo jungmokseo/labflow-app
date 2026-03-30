@@ -477,21 +477,12 @@ export async function emailCallbackRoute(app: FastifyInstance) {
         });
       }
 
-      // 성공: 앱으로 리다이렉트 또는 성공 페이지 표시
+      // 성공: 웹 앱으로 리다이렉트
       if (env.NODE_ENV === 'development') {
-        return reply.redirect('http://localhost:8081');
+        return reply.redirect('http://localhost:3000/email');
       }
-      // Production: 성공 HTML 페이지 (deep link 시도 + fallback)
-      return reply.type('text/html').send(`
-        <!DOCTYPE html>
-        <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-        <title>LabFlow - Gmail 연동 완료</title>
-        <style>body{font-family:-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#0a0a0f;color:#e0e0e0}
-        .card{text-align:center;padding:2rem;border-radius:16px;background:#1a1a2e;max-width:400px}
-        .icon{font-size:64px;margin-bottom:1rem}h1{color:#4ade80;font-size:1.5rem}p{color:#999;line-height:1.6}</style></head>
-        <body><div class="card"><div class="icon">✅</div><h1>Gmail 연동 완료!</h1>
-        <p>LabFlow 앱으로 돌아가서<br>이메일 브리핑을 확인하세요.</p></div></body></html>
-      `);
+      // Production: 웹 앱 이메일 페이지로 리다이렉트
+      return reply.redirect('https://labflow-web.vercel.app/email');
     } catch (error: any) {
       app.log.error({ err: error }, 'Gmail OAuth callback failed');
       return reply.code(400).send({ error: 'Gmail 연동 실패', details: error.message });
