@@ -417,7 +417,12 @@ model Channel {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")
   type        String    // BRAIN, MEETING, PAPER, EMAIL
+  tool        String?   // 사용된 도구 (general, email, papers, etc.)
   name        String?
+  pinned      Boolean   @default(false)
+  archived    Boolean   @default(false)
+  messageCount Int      @default(0) @map("message_count")
+  lastMessageAt DateTime? @map("last_message_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
@@ -425,7 +430,7 @@ model Channel {
   messages    Message[]
   summaries   ChannelSummary[]
 
-  @@index([userId])
+  @@index([userId, archived, lastMessageAt(sort: Desc)])
   @@map("channels")
 }
 
