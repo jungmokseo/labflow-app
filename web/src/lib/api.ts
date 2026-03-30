@@ -201,6 +201,37 @@ export async function deleteMeeting(id: string) {
   return apiFetch<{ success: boolean }>(`/api/meetings/${id}`, { method: 'DELETE' });
 }
 
+export async function uploadMeetingAudio(
+  audio: File,
+  opts?: { title?: string; duration?: number }
+): Promise<{ success: boolean; data: Meeting }> {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const formData = new FormData();
+  formData.append('audio', audio);
+  if (opts?.title) formData.append('title', opts.title);
+  if (opts?.duration != null) formData.append('duration', String(opts.duration));
+
+  const headers: Record<string, string> = {};
+  if (tokenGetter) {
+    const token = await tokenGetter();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+
+  const res = await fetch(`${API_BASE}/api/meetings`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || `Upload Error: ${res.status}`);
+  }
+
+  return res.json();
+}
+
 // ── 지식 그래프 ──────────────────────────────────────
 export interface GraphNode {
   id: string;
@@ -525,6 +556,32 @@ export async function getPaperAlertResults(alertId?: string) {
 
 export async function markPaperRead(resultId: string) {
   return apiFetch<{ success: boolean }>(`/api/papers/results/${resultId}/read`, { method: 'PATCH' });
+}
+
+export async function uploadPaperPdf(file: File): Promise<{ success: boolean; message: string; paperId?: string; title?: string; status?: string }> {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+  if (tokenGetter) {
+    const token = await tokenGetter();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+
+  const res = await fetch(`${API_BASE}/api/papers/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || `Upload Error: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 // ── Lab Profile 추가 기능 ──────────────────────────

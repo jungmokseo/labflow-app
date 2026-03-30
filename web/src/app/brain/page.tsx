@@ -44,8 +44,10 @@ export default function BrainPage() {
   const [tab, setTab] = useState<'chat' | 'search'>('chat');
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => { loadChannels(); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
@@ -165,6 +167,60 @@ export default function BrainPage() {
     }
   }
 
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const result = await brainUpload(file);
+      setUploadedFile(result);
+      setMessages(prev => [...prev, {
+        id: `file-${Date.now()}`,
+        role: 'assistant',
+        content: result.message,
+        createdAt: new Date().toISOString(),
+      }]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        id: `err-${Date.now()}`,
+        role: 'assistant',
+        content: `파일 처리 실패: ${err.message}`,
+        createdAt: new Date().toISOString(),
+      }]);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   // 자유 대화 세션을 날짜별 그룹
   const todaySessions = freeSessions.filter((c: any) => isToday(c.lastMessageAt || c.createdAt));
   const weekSessions = freeSessions.filter((c: any) => !isToday(c.lastMessageAt || c.createdAt) && isThisWeek(c.lastMessageAt || c.createdAt));
@@ -247,7 +303,23 @@ export default function BrainPage() {
       </div>
 
       {/* ── 메인 영역 ── */}
-      <div className="flex-1 bg-bg-card rounded-xl flex flex-col">
+      <div
+        className="flex-1 bg-bg-card rounded-xl flex flex-col relative"
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Drag overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-50 bg-bg-card/90 border-2 border-dashed border-primary rounded-xl flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-4xl mb-3">📎</p>
+              <p className="text-white font-medium text-lg">파일을 여기에 놓으세요</p>
+              <p className="text-text-muted text-sm mt-1">PDF, 이미지, 엑셀, 워드 등</p>
+            </div>
+          </div>
+        )}
         {tab === 'chat' ? (
           <>
             {/* 헤더 */}

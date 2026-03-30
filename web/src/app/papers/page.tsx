@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults, markPaperRead,
-  getJournalFields, searchJournals, addCustomJournal,
+  getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
   type PaperAlertSetting, type PaperAlertResult,
 } from '@/lib/api';
 
@@ -26,6 +26,13 @@ export default function PapersPage() {
   const [tab, setTab] = useState<'results' | 'journals' | 'keywords'>('results');
   const [filterStars, setFilterStars] = useState(0);
   const [error, setError] = useState('');
+
+  // PDF upload
+  const [isDragging, setIsDragging] = useState(false);
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfUploadResult, setPdfUploadResult] = useState<{ success: boolean; message: string; title?: string } | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   // Journal discovery
   const [fieldData, setFieldData] = useState<Record<string, Array<{ name: string; publisher: string; hasRss: boolean }>>>({});
@@ -160,6 +167,62 @@ export default function PapersPage() {
     finally { setAddLoading(false); }
   }
 
+  async function handlePdfUpload(file: File) {
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('PDF 파일만 업로드할 수 있습니다');
+      return;
+    }
+    setPdfUploading(true);
+    setPdfUploadResult(null);
+    try {
+      const result = await uploadPaperPdf(file);
+      setPdfUploadResult(result);
+      await loadResults();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPdfUploading(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+    }
+  }
+
+  function handlePdfFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) handlePdfUpload(file);
+  }
+
+  function handlePdfDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function handlePdfDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true);
+    }
+  }
+
+  function handlePdfDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }
+
+  function handlePdfDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handlePdfUpload(file);
+  }
+
   const filteredResults = filterStars > 0 ? results.filter(r => (r as any).stars >= filterStars) : results;
 
   return (
@@ -190,6 +253,53 @@ export default function PapersPage() {
           {crawlResult.totalFetched}편 수집 → ★★★{crawlResult.breakdown?.threeStars} / ★★{crawlResult.breakdown?.twoStars} / ★{crawlResult.breakdown?.oneStar} → {crawlResult.newSaved}편 신규
         </div>
       )}
+
+      {/* ── PDF Upload ── */}
+      <div
+        className="relative bg-bg-card rounded-xl border border-bg-input/50 p-5"
+        onDragOver={handlePdfDragOver}
+        onDragEnter={handlePdfDragEnter}
+        onDragLeave={handlePdfDragLeave}
+        onDrop={handlePdfDrop}
+      >
+        {isDragging && (
+          <div className="absolute inset-0 z-50 bg-bg-card/90 border-2 border-dashed border-primary rounded-xl flex items-center justify-center">
+            <div className="text-center">
+              <p className="text-4xl mb-3">📄</p>
+              <p className="text-white font-medium text-lg">파일을 여기에 놓으세요</p>
+              <p className="text-text-muted text-sm mt-1">PDF 논문 파일</p>
+            </div>
+          </div>
+        )}
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <h3 className="text-white font-semibold text-sm">📄 PDF 논문 업로드</h3>
+            <p className="text-text-muted text-xs mt-1">PDF 논문을 드래그하거나 버튼을 클릭하여 업로드하세요. AI가 자동으로 분석합니다.</p>
+          </div>
+          <input type="file" ref={pdfInputRef} onChange={handlePdfFileInput} className="hidden" accept=".pdf" />
+          <button
+            onClick={() => pdfInputRef.current?.click()}
+            disabled={pdfUploading}
+            className="px-4 py-2.5 bg-bg-input text-text-muted rounded-lg text-sm hover:text-white hover:bg-bg-input/80 transition-colors disabled:opacity-50 flex items-center gap-2"
+          >
+            {pdfUploading ? '⏳ 분석 중...' : '📎 파일 선택'}
+          </button>
+        </div>
+        {pdfUploading && (
+          <div className="mt-3 flex items-center gap-2">
+            <div className="h-1.5 flex-1 bg-bg-input rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '60%' }} />
+            </div>
+            <span className="text-xs text-text-muted">PDF 분석 중...</span>
+          </div>
+        )}
+        {pdfUploadResult && (
+          <div className={`mt-3 px-4 py-3 rounded-lg text-sm ${pdfUploadResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+            {pdfUploadResult.title && <p className="font-medium mb-1">{pdfUploadResult.title}</p>}
+            <p>{pdfUploadResult.message}</p>
+          </div>
+        )}
+      </div>
 
       {/* ── Results ── */}
       {tab === 'results' && (
