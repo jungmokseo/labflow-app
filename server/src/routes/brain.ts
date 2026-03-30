@@ -827,26 +827,56 @@ async function handleToolMessage(
     }
 
     case 'papers': {
-      // 논문 검색/알림 관련
-      const results = await prisma.paperAlertResult.findMany({
+      // 1. 연구실 핵심 논문 (Publication + 벡터 검색)
+      const publications = labIdStr ? await prisma.publication.findMany({
+        where: { labId: labIdStr },
+        orderBy: { year: 'desc' },
+      }) : [];
+      const pubList = publications.length > 0
+        ? publications.map(p => `- "${p.title}" (${p.journal || '?'}, ${p.year || '?'})${p.nickname ? ` [${p.nickname}]` : ''}${p.indexed ? ' ✅' : ''}`).join('\n')
+        : '';
+
+      // 2. 벡터 검색 (인덱싱된 논문에서 관련 내용 검색)
+      let ragContext = '';
+      try {
+        const { generateEmbedding: genEmbed, searchPapers: searchP } = await import('../services/embedding-service.js');
+        const { embedding } = await genEmbed(message);
+        const ragResults = await searchP(prisma, embedding, 5, 0.5);
+        if (ragResults.length > 0) {
+          ragContext = '\n\n[관련 논문 내용 (벡터 검색)]\n' + ragResults.map(r =>
+            `"${r.title}" — ${r.chunkText.slice(0, 300)}`
+          ).join('\n\n');
+        }
+      } catch { /* 임베딩 서비스 미설정 시 무시 */ }
+
+      // 3. 최신 논문 알림 결과
+      const alerts = labIdStr ? await prisma.paperAlertResult.findMany({
         where: { alert: { labId: labIdStr } },
         orderBy: [{ stars: 'desc' }, { createdAt: 'desc' }],
-        take: 10,
-      });
-      if (results.length === 0) return { response: '등록된 논문 알림 결과가 없습니다. 설정에서 키워드와 저널을 등록해주세요.', intent: 'papers_tool' };
+        take: 5,
+      }) : [];
+      const alertList = alerts.length > 0
+        ? alerts.map(r => `[${r.stars === 3 ? '★★★' : r.stars === 2 ? '★★' : '★'}] ${r.title} (${r.journal})\n  ${r.aiSummary || ''}`).join('\n\n')
+        : '';
 
-      const paperList = results.map(r =>
-        `[${r.stars === 3 ? '★★★' : r.stars === 2 ? '★★' : '★'}] ${r.title} (${r.journal})\n  ${r.aiSummary || r.abstract?.slice(0, 100) || ''}`
-      ).join('\n\n');
+      const context = [
+        pubList ? `[연구실 핵심 논문 ${publications.length}편]\n${pubList}` : '',
+        ragContext,
+        alertList ? `\n[최신 논문 알림]\n${alertList}` : '',
+      ].filter(Boolean).join('\n');
+
+      if (!context) return { response: '등록된 논문이 없습니다. PDF를 업로드하거나 논문 알림을 설정해주세요.', intent: 'papers_tool' };
 
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `당신은 연구 논문 브리핑 비서입니다. 최근 수집된 논문 목록을 참고하여 답변하세요.\n\n최근 논문:\n${paperList}` }] },
+        systemInstruction: { role: 'user', parts: [{ text: `당신은 연구 논문 비서입니다. 연구실의 핵심 논문과 최신 동향을 참고하여 답변하세요.
+핵심 논문의 별칭(예: "LM 논문", "핵심 논문 1번")이 있으면 해당 논문을 참조하세요.
+벡터 검색 결과가 있으면 실제 논문 내용을 기반으로 구체적으로 답변하세요.\n\n${context}` }] },
       });
-      return { response: result.response.text(), intent: 'papers_tool', metadata: { resultCount: results.length } };
+      return { response: result.response.text(), intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length } };
     }
 
     case 'meeting': {

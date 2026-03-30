@@ -311,7 +311,10 @@ model Publication {
   journal       String?
   year          Int?
   doi           String?
+  abstract      String?
   projectId     String?   @map("project_id")
+  indexed       Boolean   @default(false)          // 벡터 임베딩 완료 여부
+  nickname      String?                            // 별칭 (예: "핵심 논문 1번", "LM 논문")
   confidence    Float     @default(1.0)
   accessCount   Int       @default(0) @map("access_count")
   lastVerified  DateTime? @map("last_verified")
