@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>개인정보처리방침 — ResearchFlow</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; color: #1a1a2e; line-height: 1.7; }
+  h1 { font-size: 24px; border-bottom: 2px solid #6366f1; padding-bottom: 12px; }
+  h2 { font-size: 18px; margin-top: 32px; color: #6366f1; }
+  h3 { font-size: 15px; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #f5f5ff; }
+  .updated { color: #666; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>개인정보처리방침</h1>
+<p class="updated">시행일: 2026년 3월 29일 | 최종 수정: 2026년 3월 29일</p>
+
+<p>링크솔루텍(이하 "회사")은 「개인정보 보호법」 제30조에 따라 정보주체의 개인정보를 보호하고 이와 관련한 고충을 신속하고 원활하게 처리할 수 있도록 다음과 같이 개인정보 처리방침을 수립·공개합니다.</p>
+
+<h2>제1조 (개인정보의 처리 목적)</h2>
+<p>회사는 다음의 목적을 위하여 개인정보를 처리합니다.</p>
+<ol>
+  <li><strong>회원 가입 및 관리</strong>: 회원 식별, 서비스 이용 자격 확인, 고지사항 전달</li>
+  <li><strong>연구실 관리 서비스 제공</strong>: Lab Profile 설정, 구성원 관리, 과제 관리, 논문 관리</li>
+  <li><strong>이메일 연동 서비스</strong>: Gmail OAuth를 통한 이메일 요약, 번역, 답장 초안 생성</li>
+  <li><strong>AI 기반 분석</strong>: 의도 분류, 논문 요약, 이메일 분류, 음성 대화 처리</li>
+  <li><strong>서비스 개선</strong>: 이용 통계 분석, 서비스 품질 향상</li>
+</ol>
+
+<h2>제2조 (처리하는 개인정보 항목 및 보유 기간)</h2>
+<table>
+  <tr><th>항목</th><th>수집 방법</th><th>보유 기간</th><th>용도</th></tr>
+  <tr><td>이메일, 이름</td><td>Clerk 회원가입</td><td>회원 탈퇴 시까지</td><td>계정 식별, 로그인</td></tr>
+  <tr><td>연구실 구성원 이름, 이메일, 전화번호</td><td>사용자 직접 입력</td><td>서비스 이용 기간</td><td>연구실 구성원 관리</td></tr>
+  <tr><td>Gmail OAuth 토큰</td><td>Google OAuth 인증</td><td>연동 해제 시까지</td><td>이메일 브리핑 서비스</td></tr>
+  <tr><td>대화 내역, 메모, 캡처</td><td>서비스 이용 중 생성</td><td>서비스 이용 기간</td><td>AI 채팅, 기억 구조</td></tr>
+  <tr><td>음성 데이터</td><td>사용자 녹음</td><td>처리 후 즉시 삭제</td><td>음성 전사(STT)</td></tr>
+</table>
+
+<h2>제3조 (개인정보의 제3자 제공)</h2>
+<p>회사는 서비스 제공을 위해 다음의 외부 AI 서비스에 사용자 데이터를 전달합니다.</p>
+<table>
+  <tr><th>제공받는 자</th><th>제공 항목</th><th>제공 목적</th><th>보유 기간</th></tr>
+  <tr><td>Google (Gemini API)</td><td>사용자 질문, 메모, 문서 텍스트</td><td>의도 분류, 텍스트 분석</td><td>API 처리 후 미보관 (Google AI 정책)</td></tr>
+  <tr><td>Anthropic (Claude API)</td><td>이메일 내용, 회의 전사 텍스트</td><td>이메일 분류, 회의 요약</td><td>API 처리 후 30일 이내 삭제 (Anthropic 정책)</td></tr>
+  <tr><td>OpenAI (Realtime API)</td><td>음성 데이터, 대화 텍스트</td><td>음성 대화, 발음 교정</td><td>API 처리 후 30일 이내 삭제 (OpenAI 정책)</td></tr>
+</table>
+<p>각 서비스의 개인정보처리방침: <a href="https://policies.google.com/privacy">Google</a> | <a href="https://www.anthropic.com/privacy">Anthropic</a> | <a href="https://openai.com/privacy">OpenAI</a></p>
+
+<h2>제4조 (개인정보의 국외 이전)</h2>
+<p>제3조의 AI 서비스 제공을 위해 개인정보가 미국 소재 서버로 전송될 수 있습니다.</p>
+<table>
+  <tr><th>이전받는 자</th><th>이전 국가</th><th>이전 항목</th><th>이전 방법</th></tr>
+  <tr><td>Google LLC</td><td>미국</td><td>텍스트 데이터</td><td>API 호출 시 암호화 전송 (TLS)</td></tr>
+  <tr><td>Anthropic PBC</td><td>미국</td><td>텍스트 데이터</td><td>API 호출 시 암호화 전송 (TLS)</td></tr>
+  <tr><td>OpenAI LP</td><td>미국</td><td>음성/텍스트 데이터</td><td>API 호출 시 암호화 전송 (TLS/WebRTC)</td></tr>
+</table>
+
+<h2>제5조 (개인정보처리의 위탁)</h2>
+<table>
+  <tr><th>수탁자</th><th>위탁 업무</th></tr>
+  <tr><td>Railway (railway.app)</td><td>서버 호스팅 및 운영</td></tr>
+  <tr><td>Supabase (supabase.com)</td><td>데이터베이스 호스팅</td></tr>
+  <tr><td>Vercel (vercel.com)</td><td>웹 프론트엔드 호스팅</td></tr>
+  <tr><td>Clerk (clerk.com)</td><td>사용자 인증 서비스</td></tr>
+</table>
+
+<h2>제6조 (개인정보의 파기 절차 및 방법)</h2>
+<p>회사는 개인정보 보유 기간이 경과하거나 처리 목적이 달성된 경우, 해당 개인정보를 지체 없이 파기합니다.</p>
+<ul>
+  <li><strong>전자적 파일</strong>: 복구 불가능한 방법으로 삭제</li>
+  <li><strong>Gmail OAuth 토큰</strong>: 연동 해제 시 즉시 삭제</li>
+  <li><strong>회원 탈퇴</strong>: 탈퇴 요청 후 5일 이내 모든 개인정보 파기</li>
+</ul>
+
+<h2>제7조 (정보주체의 권리 및 행사 방법)</h2>
+<p>정보주체는 다음의 권리를 행사할 수 있습니다.</p>
+<ol>
+  <li>개인정보 열람 요청</li>
+  <li>오류 등이 있을 경우 정정 요청</li>
+  <li>삭제 요청</li>
+  <li>처리 정지 요청</li>
+</ol>
+<p>권리 행사 방법: 아래 개인정보 보호 책임자에게 이메일로 요청하시면 지체 없이 처리합니다.</p>
+
+<h2>제8조 (개인정보 보호 책임자)</h2>
+<table>
+  <tr><th>구분</th><th>내용</th></tr>
+  <tr><td>성명</td><td>서정목</td></tr>
+  <tr><td>직책</td><td>대표이사</td></tr>
+  <tr><td>연락처</td><td>jungmok.seo@gmail.com</td></tr>
+  <tr><td>소속</td><td>링크솔루텍</td></tr>
+</table>
+
+<h2>제9조 (개인정보의 안전성 확보 조치)</h2>
+<ul>
+  <li>모든 데이터 전송은 TLS 암호화</li>
+  <li>데이터베이스 접근은 인증된 사용자만 가능 (Prisma 데이터 격리)</li>
+  <li>AI API 호출 시 사용자별 요청 제한 (분당 20회, 일일 200회)</li>
+  <li>정기적 보안 감사 실시</li>
+</ul>
+
+<h2>제10조 (쿠키 및 자동 수집 장치)</h2>
+<p>회사는 서비스 이용 과정에서 다음과 같은 정보를 자동으로 수집할 수 있습니다.</p>
+<ul>
+  <li>로그인 세션 유지를 위한 쿠키 (Clerk 인증)</li>
+  <li>모바일 앱의 디바이스 정보 (Push 알림 전송용)</li>
+</ul>
+<p>쿠키 거부 방법: 브라우저 설정에서 쿠키를 거부할 수 있으나, 일부 서비스 이용이 제한될 수 있습니다.</p>
+
+<h2>제11조 (개인정보 처리방침의 변경)</h2>
+<p>이 개인정보 처리방침은 법령, 정책 또는 보안 기술의 변경에 따라 수정될 수 있으며, 변경 시 웹사이트를 통해 공지합니다.</p>
+
+<h2>제12조 (권익침해 구제 방법)</h2>
+<p>개인정보 침해에 대한 신고, 상담이 필요한 경우 아래 기관에 문의하실 수 있습니다.</p>
+<ul>
+  <li>개인정보 침해신고센터: (국번없이) 118 / <a href="https://privacy.kisa.or.kr">privacy.kisa.or.kr</a></li>
+  <li>개인정보 분쟁조정위원회: (국번없이) 1833-6972 / <a href="https://www.kopico.go.kr">kopico.go.kr</a></li>
+  <li>대검찰청 사이버수사과: (국번없이) 1301 / <a href="https://www.spo.go.kr">spo.go.kr</a></li>
+  <li>경찰청 사이버수사국: (국번없이) 182 / <a href="https://ecrm.police.go.kr">ecrm.police.go.kr</a></li>
+</ul>
+
+</body>
+</html>
