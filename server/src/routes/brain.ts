@@ -805,18 +805,22 @@ export async function brainRoutes(app: FastifyInstance) {
       }
     }
 
-    // 3. 메모 저장 요청
+    // 3. 메모 저장 요청 (자동 태깅 포함)
     if (intent === 'save_memo' && lab) {
+      const { autoTagByRules } = await import('../services/auto-tagger.js');
+      const autoTags = entities.tags ? [entities.tags] : autoTagByRules(message);
+      const title = message.length > 60 ? message.slice(0, 57) + '...' : message;
       await prisma.memo.create({
         data: {
           labId: lab.id,
           userId,
+          title,
           content: message,
           source: 'chat',
-          tags: entities.tags ? [entities.tags] : [],
+          tags: autoTags,
         },
       });
-      dbResult = '메모가 저장되었습니다.';
+      dbResult = `메모가 저장되었습니다. (태그: ${autoTags.join(', ')})`;
     }
 
     // 4. 용어 교정 등록

@@ -46,23 +46,143 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().min(1).max(50).default(20),
 });
 
-// ── 교정 사전 (전문 용어 / 기관명) ──────────────────────
-const CORRECTION_DICT = `
+// ── 교정 사전 (180+ 전문 용어) ─────────────────────────
+// Lab DomainDict에서 동적으로 로드 + 기본 사전 병합
+const BASE_CORRECTION_DICT = `
 ## 교정 사전 (오탈자 교정 시 참고)
+
+### 기관/연구실
 - 연세대학교, 연대, 연세대 → 연세대학교
 - BLISS Lab, 블리스랩, 블리스 랩 → BLISS Lab
 - 링크솔루텍, 링크 솔루텍 → 링크솔루텍
+
+### 분석/장비
+- SEM → SEM (주사전자현미경)
+- TEM → TEM (투과전자현미경)
+- AFM → AFM (원자력현미경)
+- XPS → XPS (X선 광전자 분광법)
+- XRD → XRD (X선 회절)
+- EDS, EDX → EDS (에너지분산형 X선 분광법)
+- FT-IR, FTIR, 적외선 → FT-IR (푸리에 변환 적외선 분광법)
+- Raman, 라만 → Raman 분광법
+- UV-Vis → UV-Vis (자외선-가시광선 분광법)
+- DLS → DLS (동적 광산란)
+- TGA → TGA (열중량 분석)
+- DSC → DSC (시차주사열량계)
+- DMA → DMA (동적기계분석)
+- NMR → NMR (핵자기공명)
+- GPC → GPC (겔투과크로마토그래피)
+- HPLC → HPLC (고성능 액체크로마토그래피)
+- ICP-MS → ICP-MS (유도결합플라즈마 질량분석)
+
+### 전자/PCB
 - PCB → PCB (인쇄회로기판)
+- FPCB → FPCB (연성인쇄회로기판)
+- sPCB → sPCB (신축성 인쇄회로기판)
+- Serpentine, 서펜타인 → Serpentine (사행 배선)
+- OLED → OLED (유기발광다이오드)
+- TFT → TFT (박막 트랜지스터)
+- ITO → ITO (인듐주석산화물)
+- PI → PI (폴리이미드)
+- PEDOT:PSS → PEDOT:PSS
+- MXene, 맥신 → MXene
+- BCI → BCI (뇌-컴퓨터 인터페이스)
+
+### 고분자/소재
+- PDMS → PDMS (폴리디메틸실록산)
+- PVA → PVA (폴리비닐알코올)
+- PAA → PAA (폴리아크릴산)
+- PEG → PEG (폴리에틸렌글리콜)
+- GelMA, 겔마 → GelMA (젤라틴메타크릴레이트)
+- PLGA → PLGA
+- Ecoflex, 에코플렉스 → Ecoflex
 - 하이드로겔, 하이드로 겔 → 하이드로겔
 - 바이오센서, 바이오 센서 → 바이오센서
-- PDMS → PDMS (폴리디메틸실록산)
-- OLED → OLED
-- 리소그래피, 리소 그래피 → 리소그래피
+
+### 코팅/접착
+- LOIS → LOIS (Liquid-Infused Omniphobic Surface)
+- L-VIP → L-VIP
+- ELFS → ELFS
+- TAB → TAB
+- SA-DOPA → SA-DOPA
+- d-HAPT → d-HAPT
+- 방오코팅, 방오 코팅 → 방오코팅 (antifouling coating)
+
+### 액체금속
+- PmLMP → PmLMP (Patterned micro Liquid Metal Particle)
+- SCOPE → SCOPE
+- 액체금속, 액체 금속 → 액체금속 (liquid metal)
+- Marangoni, 마랑고니 → Marangoni
+- EGaIn → EGaIn (Eutectic Gallium-Indium)
+- Galinstan → Galinstan
+
+### 프로세스
+- 리소그래피, 리소 그래피, 포토리소 → 리소그래피
+- 스핀코팅, 스핀 코팅 → 스핀코팅
+- 스퍼터링, 스파터링 → 스퍼터링
+- 에칭, 에칭 → 에칭
+- UV경화, UV 경화 → UV경화
+- 인쇄전자, 인쇄 전자 → 인쇄전자
+- 3D프린팅, 3D 프린팅 → 3D 프린팅
+- 잉크젯, 잉크 젯 → 잉크젯 프린팅
+
+### 바이오
+- in vitro, 인비트로 → in vitro
+- in vivo, 인비보 → in vivo
+- IRB → IRB (기관생명윤리위원회)
+- 임피던스, 임피댄스 → 임피던스
+- 지혈, 헤모스테이틱 → 지혈 (hemostatic)
+- cytotoxicity → 세포독성 (cytotoxicity)
+
+### 과제/제도
+- NRF → NRF (한국연구재단)
+- IITP → IITP (정보통신기획평가원)
+- BCCI → BCCI (바이오센테니얼)
 - SOP → SOP (Standard Operating Procedure)
-- PI → PI (폴리이미드)
-- ITO → ITO (인듐주석산화물)
-- TFT → TFT (박막 트랜지스터)
+- ACF → ACF (Anisotropic Conductive Film)
+- NCF → NCF (Non-Conductive Film)
 `.trim();
+
+/**
+ * Lab의 DomainDict에서 추가 교정 사전을 로드하여 병합
+ */
+async function buildCorrectionDict(userId: string): Promise<string> {
+  let labDict = '';
+  try {
+    const lab = await prisma.lab.findUnique({
+      where: { ownerId: userId },
+      include: { domainDict: true },
+    });
+    if (lab?.domainDict && lab.domainDict.length > 0) {
+      const entries = lab.domainDict
+        .map(d => `- ${d.wrongForm} → ${d.correctForm}`)
+        .join('\n');
+      labDict = `\n\n### 연구실 커스텀 사전\n${entries}`;
+    }
+  } catch { /* ignore */ }
+  return BASE_CORRECTION_DICT + labDict;
+}
+
+/**
+ * 이름 제거 후처리: LabMember 이름을 스캔하여 역할로 대체
+ */
+async function removeNames(text: string, userId: string): Promise<string> {
+  let result = text;
+  try {
+    const lab = await prisma.lab.findUnique({
+      where: { ownerId: userId },
+      include: { members: { where: { active: true } } },
+    });
+    if (lab?.members) {
+      for (const member of lab.members) {
+        const namePattern = new RegExp(member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+        const replacement = member.role || '팀원';
+        result = result.replace(namePattern, replacement);
+      }
+    }
+  } catch { /* ignore */ }
+  return result;
+}
 
 // ── Step 1: Gemini STT (오디오 → 정제 텍스트) ──────────
 const GEMINI_STT_PROMPT = `당신은 연구 미팅 오디오를 전사하는 전문 전사자입니다.
@@ -119,22 +239,27 @@ interface MeetingSummaryResult {
 
 async function summarizeWithSonnet(
   rawTranscription: string,
+  userId?: string,
 ): Promise<MeetingSummaryResult> {
   const anthropic = createAnthropicClient();
 
   if (!anthropic) {
-    // Gemini fallback (기존 방식)
     return fallbackSummarize(rawTranscription);
   }
+
+  // 동적 교정 사전 로드 (Lab DomainDict 포함)
+  const correctionDict = userId ? await buildCorrectionDict(userId) : BASE_CORRECTION_DICT;
 
   const systemPrompt = `당신은 연구 미팅 전사록을 분석하여 구조화된 회의록을 작성하는 전문 에디터입니다.
 
 ## 작업 순서
 1. **오탈자 교정**: 전사 과정에서 발생한 오인식을 교정 사전을 참고하여 수정
-2. **개인명 제거**: 특정 인물의 이름이 언급된 경우, 직함/역할로 대체 (예: "교수님", "팀원")
+2. **개인명 제거**: 특정 인물의 이름이 언급된 경우, 직함/역할로 대체 (예: "교수님", "팀원", "박사과정생")
+   - 이름을 직접 언급하지 마세요. "김OO가 발표했다" → "팀원이 발표했다"
+   - 액션 아이템에서도 "담당: 역할" 형태로만 기술
 3. **구조화 요약**: 아래 형식으로 정리
 
-${CORRECTION_DICT}
+${correctionDict}
 
 ## 출력 형식 (반드시 JSON으로만 응답)
 {
@@ -254,6 +379,7 @@ interface MeetingPipelineResult {
 async function processMeetingAudio(
   audioBuffer: Buffer,
   mimeType: string = 'audio/webm',
+  userId?: string,
 ): Promise<MeetingPipelineResult> {
   // Step 1: Gemini STT
   const rawTranscription = await transcribeAudio(audioBuffer, mimeType);
@@ -262,10 +388,19 @@ async function processMeetingAudio(
     throw new Error('음성을 인식할 수 없습니다. 다시 시도해주세요.');
   }
 
-  // Step 2: Sonnet 교정 + 구조화 요약
-  const summary = await summarizeWithSonnet(rawTranscription);
+  // Step 2: Sonnet 교정 + 구조화 요약 (동적 교정 사전 사용)
+  const summary = await summarizeWithSonnet(rawTranscription, userId);
 
-  // 구조화 요약을 읽기 좋은 텍스트로 변환
+  // Step 3: 이름 제거 후처리 (LabMember 기반)
+  if (userId) {
+    summary.correctedTranscription = await removeNames(summary.correctedTranscription, userId);
+    summary.actionItems = await Promise.all(summary.actionItems.map(a => removeNames(a, userId)));
+    summary.nextSteps = await Promise.all(summary.nextSteps.map(n => removeNames(n, userId)));
+    for (const d of summary.discussions) {
+      d.content = await removeNames(d.content, userId);
+    }
+  }
+
   const summaryText = formatSummaryText(summary);
 
   return {
@@ -350,7 +485,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     }
 
     try {
-      const result = await processMeetingAudio(audioBuffer, mimeType);
+      const result = await processMeetingAudio(audioBuffer, mimeType, user.id);
 
       const meeting = await prisma.meeting.create({
         data: {
@@ -482,6 +617,39 @@ export async function meetingRoutes(app: FastifyInstance) {
 
     await prisma.meeting.delete({ where: { id } });
     return reply.send({ success: true });
+  });
+
+  // ── POST /api/meetings/:id/export — Google Docs로 내보내기 ─
+  app.post('/api/meetings/:id/export', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const userId = request.userId!;
+
+    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+    const meeting = await prisma.meeting.findFirst({
+      where: { id, userId: user.id },
+    });
+    if (!meeting) return reply.code(404).send({ error: '회의를 찾을 수 없습니다' });
+
+    try {
+      const { createMeetingDoc } = await import('../services/google-docs.js');
+      let discussions: Array<{ topic: string; content: string }> = [];
+      try { discussions = typeof meeting.discussions === 'string' ? JSON.parse(meeting.discussions) : meeting.discussions as any || []; } catch { discussions = []; }
+
+      const result = await createMeetingDoc(user.id, {
+        title: meeting.title,
+        agenda: meeting.agenda,
+        discussions,
+        actionItems: meeting.actionItems,
+        nextSteps: meeting.nextSteps,
+        transcription: meeting.transcription || undefined,
+        date: meeting.createdAt.toISOString().split('T')[0],
+      });
+      return reply.send({ success: true, ...result });
+    } catch (error: any) {
+      return reply.code(500).send({ error: 'Google Docs 생성 실패', details: error.message });
+    }
   });
 
   // ── POST /api/meetings/transcribe — 전사만 (저장 없이) ─

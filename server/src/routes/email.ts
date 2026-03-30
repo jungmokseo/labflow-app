@@ -513,7 +513,8 @@ export async function emailRoutes(app: FastifyInstance) {
           'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose',
           'https://www.googleapis.com/auth/calendar.events',
-          // NOTE: Google Cloud Console에서 Calendar API 활성화 필요
+          'https://www.googleapis.com/auth/drive.file',  // Google Docs 생성용
+          // NOTE: Google Cloud Console에서 Calendar API + Drive API 활성화 필요
         ],
         state: request.userId,
       });
