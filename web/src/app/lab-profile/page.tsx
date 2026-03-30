@@ -306,8 +306,8 @@ export default function LabProfilePage() {
               <span className="text-xs text-text-muted">{completeness.percentage}%</span>
             </div>
           )}
-          <span className="bg-bg-input px-3 py-1 rounded-full text-xs text-text-muted">{lab.members.length}명</span>
-          <span className="bg-bg-input px-3 py-1 rounded-full text-xs text-text-muted">{lab.projects.length}과제</span>
+          <span className="bg-bg-input px-3 py-1 rounded-full text-xs text-text-muted">{(lab.members || []).length}명</span>
+          <span className="bg-bg-input px-3 py-1 rounded-full text-xs text-text-muted">{(lab.projects || []).length}과제</span>
         </div>
       </div>
 
@@ -325,7 +325,7 @@ export default function LabProfilePage() {
       <div className="flex gap-1 bg-bg-card rounded-lg p-1">
         {(['info', 'members', 'projects', 'dict'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} className={`flex-1 px-3 py-2 rounded text-sm ${tab === t ? 'bg-primary text-white' : 'text-text-muted hover:text-white'}`}>
-            {t === 'info' ? '기본 정보' : t === 'members' ? `구성원 (${lab.members.length})` : t === 'projects' ? `과제 (${lab.projects.length})` : `교정 사전 (${lab.domainDict.length})`}
+            {t === 'info' ? '기본 정보' : t === 'members' ? `구성원 (${(lab.members || []).length})` : t === 'projects' ? `과제 (${(lab.projects || []).length})` : `교정 사전 (${(lab.domainDict || []).length})`}
           </button>
         ))}
       </div>
@@ -342,7 +342,7 @@ export default function LabProfilePage() {
             <div>
               <span className="text-text-muted text-xs">연구 분야</span>
               <div className="flex flex-wrap gap-2 mt-1">
-                {lab.researchFields.length > 0 ? lab.researchFields.map(f => (
+                {(lab.researchFields || []).length > 0 ? (lab.researchFields || []).map((f: string) => (
                   <span key={f} className="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs">{f}</span>
                 )) : <span className="text-text-muted text-xs">미등록 — 대표 논문 DOI를 입력하면 자동 추출됩니다</span>}
               </div>
@@ -360,7 +360,7 @@ export default function LabProfilePage() {
               <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} placeholder="이메일" className="flex-1 bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <button onClick={handleAddMember} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
-            {lab.members.map(m => (
+            {(lab.members || []).map((m: any) => (
               <div key={m.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
                 <span className="text-lg">👤</span>
                 <div className="flex-1">
@@ -369,7 +369,7 @@ export default function LabProfilePage() {
                 </div>
               </div>
             ))}
-            {lab.members.length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. 미니브레인 대화로도 가능해요: "김태영 박사과정 추가해줘"</p>}
+            {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. 미니브레인 대화로도 가능해요: "김태영 박사과정 추가해줘"</p>}
           </div>
         )}
 
@@ -380,7 +380,7 @@ export default function LabProfilePage() {
               <input value={newProjectFunder} onChange={e => setNewProjectFunder(e.target.value)} placeholder="지원기관" className="w-40 bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <button onClick={handleAddProject} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
-            {lab.projects.map(p => (
+            {(lab.projects || []).map((p: any) => (
               <div key={p.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
                 <span className="text-lg">📋</span>
                 <div className="flex-1">
@@ -389,7 +389,7 @@ export default function LabProfilePage() {
                 </div>
               </div>
             ))}
-            {lab.projects.length === 0 && <p className="text-text-muted text-xs text-center py-4">과제 정보를 등록하면 사사 문구를 빠르게 조회할 수 있어요</p>}
+            {(lab.projects || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">과제 정보를 등록하면 사사 문구를 빠르게 조회할 수 있어요</p>}
           </div>
         )}
 
@@ -403,7 +403,7 @@ export default function LabProfilePage() {
               <button onClick={handleAddDict} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {lab.domainDict.map(d => (
+              {(lab.domainDict || []).map((d: any) => (
                 <div key={d.id} className="bg-bg-input p-2 rounded-lg flex items-center gap-2">
                   <span className="text-red-400 text-xs line-through">{d.wrongForm}</span>
                   <span className="text-text-muted text-xs">→</span>

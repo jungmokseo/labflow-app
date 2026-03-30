@@ -23,11 +23,12 @@ export default function PapersPage() {
   async function loadAlerts() {
     try {
       const data = await getPaperAlerts();
-      setAlerts(data.alerts);
-      setAvailableJournals(data.availableJournals);
-      if (data.alerts.length > 0) {
-        setKeywords(data.alerts[0].keywords.join(', '));
-        setSelectedJournals(data.alerts[0].journals);
+      setAlerts(data.alerts || data.data || []);
+      setAvailableJournals(data.availableJournals || []);
+      const alerts = data.alerts || data.data || [];
+      if (alerts.length > 0) {
+        setKeywords(alerts[0].keywords.join(', '));
+        setSelectedJournals(alerts[0].journals);
       }
     } catch (err: any) {
       if (!err.message.includes('404')) setError(err.message);
@@ -37,8 +38,8 @@ export default function PapersPage() {
   async function loadResults() {
     try {
       const data = await getPaperAlertResults();
-      setResults(data.results);
-      setUnreadCount(data.unreadCount);
+      setResults(data.results || data.data || []);
+      setUnreadCount(data.unreadCount || 0);
     } catch {}
   }
 

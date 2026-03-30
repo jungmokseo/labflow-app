@@ -100,12 +100,20 @@ export interface EmailBriefingItem {
   sender: string;
   senderName: string;
   subject: string;
+  snippet?: string;
   summary: string;
+  body?: string;
   category: string;
   categoryEmoji: string;
   date: string;
+  dateLocal?: string;
+  dateSender?: string;
+  dateSenderLabel?: string;
+  messageId?: string;
+  threadId?: string;
   group?: string;
   groupEmoji?: string;
+  matchedTimezone?: string;
 }
 
 export interface EmailProfile {
@@ -136,6 +144,27 @@ export async function updateEmailProfile(data: Partial<EmailProfile>) {
   return apiFetch<{ success: boolean; data: EmailProfile }>('/api/email/profile', {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+}
+
+export interface EmailBriefingHistoryEntry {
+  id: string;
+  date: string;
+  time: string;
+  title: string;
+  briefings: EmailBriefingItem[];
+  meta: { total: number; categories: Record<string, number>; groups: Record<string, number> };
+}
+
+export async function getEmailBriefingHistory(days = 30, limit = 20) {
+  return apiFetch<{ success: boolean; data: EmailBriefingHistoryEntry[]; count: number }>(
+    `/api/email/briefing/history?days=${days}&limit=${limit}`
+  );
+}
+
+export async function initEmailProfile() {
+  return apiFetch<{ success: boolean; initialized: boolean; data?: any }>('/api/email/profile/init', {
+    method: 'POST',
   });
 }
 
@@ -278,16 +307,173 @@ export async function getBriefingHistory(days = 7) {
 }
 
 // ── Lab Profile ─────────────────────────────────
+export interface LabProfile {
+  id: string;
+  name: string;
+  institution?: string;
+  department?: string;
+  piName?: string;
+  piEmail?: string;
+  researchFields: string[];
+  researchThemes?: Array<{ name: string; keywords: string[]; journals?: string[] }>;
+  homepageUrl?: string;
+  onboardingDone: boolean;
+  members?: Array<{ id: string; name: string; email?: string; role: string; permission?: string; team?: string }>;
+  projects?: Array<{ id: string; name: string; funder?: string; pi?: string; pm?: string; status?: string }>;
+  domainDict?: Array<{ id: string; wrongForm: string; correctForm: string; category?: string }>;
+}
+
 export async function getLabProfile() {
-  return apiFetch<{ data: unknown }>('/api/lab');
+  return apiFetch<LabProfile>('/api/lab');
+}
+
+export async function createLab(data: {
+  name: string;
+  institution?: string;
+  department?: string;
+  piName?: string;
+  piEmail?: string;
+  researchFields?: string[];
+  homepageUrl?: string;
+}) {
+  return apiFetch<LabProfile>('/api/lab', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateLab(data: Partial<LabProfile & {
+  acknowledgment?: string;
+  responseStyle?: string;
+}>) {
+  return apiFetch<LabProfile>('/api/lab', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function completeOnboarding(data: {
+  homepageUrl?: string;
+  keywords?: string[];
+  researchThemes?: Array<{ name: string; keywords: string[]; journals?: string[] }>;
+  emailAccounts?: Array<{ name: string; domains: string[]; emoji: string }>;
+}) {
+  return apiFetch<{ lab: LabProfile; extractedKeywords: string[] }>('/api/lab/onboarding', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getLabCompleteness() {
+  return apiFetch<{ completeness: number; missing: string[]; suggestions: string[] }>('/api/lab/completeness');
 }
 
 export async function getLabMembers() {
-  return apiFetch<{ data: Array<{ id: string; name: string; role: string; email: string; phone: string }> }>('/api/lab/members');
+  return apiFetch<Array<{ id: string; name: string; role: string; email: string; phone: string }>>('/api/lab/members');
+}
+
+export async function addLabMember(data: { name: string; email?: string; role?: string; phone?: string }) {
+  return apiFetch<{ id: string }>('/api/lab/members', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function removeLabMember(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/lab/members/${id}`, { method: 'DELETE' });
 }
 
 export async function getLabProjects() {
-  return apiFetch<{ data: Array<{ id: string; name: string; funder: string; pm: string; status: string }> }>('/api/lab/projects');
+  return apiFetch<Array<{ id: string; name: string; funder: string; pm: string; status: string }>>('/api/lab/projects');
+}
+
+export async function getLabDictionary() {
+  return apiFetch<Array<{ id: string; wrongForm: string; correctForm: string; category: string }>>('/api/lab/dictionary');
+}
+
+export async function addDictEntry(data: { wrongForm: string; correctForm: string; category?: string }) {
+  return apiFetch<{ id: string }>('/api/lab/dictionary', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+// ── 논문 알림 ──────────────────────────────────────
+export interface PaperAlertSetting {
+  id: string;
+  keywords: string[];
+  journals: string[];
+  schedule: string;
+  active: boolean;
+  lastRunAt: string | null;
+}
+
+export interface PaperAlertResult {
+  id: string;
+  title: string;
+  journal: string;
+  authors: string[];
+  abstract: string;
+  doi: string | null;
+  url?: string;
+  relevance: number;
+  read: boolean;
+  theme: string | null;
+  aiSummary?: string;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export async function getPaperAlerts() {
+  return apiFetch<{ success: boolean; data: PaperAlertSetting[]; alerts?: PaperAlertSetting[]; availableJournals?: string[] }>('/api/papers/alerts');
+}
+
+export async function savePaperAlert(data: { keywords: string[]; journals: string[]; schedule?: string }) {
+  return apiFetch<{ success: boolean; data: PaperAlertSetting }>('/api/papers/alerts', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function runPaperCrawl(alertId?: string) {
+  const path = alertId ? `/api/papers/alerts/${alertId}/run` : '/api/papers/crawl';
+  return apiFetch<{ success: boolean; data: PaperAlertResult[]; count: number }>(path, {
+    method: 'POST',
+  });
+}
+
+export async function getPaperAlertResults(alertId?: string) {
+  const path = alertId ? `/api/papers/alerts/${alertId}/results` : '/api/papers/results';
+  return apiFetch<{ success: boolean; data: PaperAlertResult[]; results?: PaperAlertResult[]; unreadCount?: number }>(path);
+}
+
+export async function markPaperRead(resultId: string) {
+  return apiFetch<{ success: boolean }>(`/api/papers/results/${resultId}/read`, { method: 'PATCH' });
+}
+
+// ── Lab Profile 추가 기능 ──────────────────────────
+export type Lab = LabProfile;
+
+export async function addLabProject(data: { name: string; funder?: string; pi?: string; pm?: string }) {
+  return apiFetch<{ id: string }>('/api/lab/projects', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function analyzeSeedPapers(data: string[] | { dois?: string[]; titles?: string[] }) {
+  const body = Array.isArray(data) ? { dois: data } : data;
+  return apiFetch<{ success: boolean; results: any[] }>('/api/lab/seed-paper', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function applySeedPaperResults(data: { keywords?: string[]; terms?: any[]; papers?: any[]; rssKeywords?: string[]; rssJournals?: string[]; setupAlerts?: boolean; setupPaperAlert?: boolean }) {
+  return apiFetch<{ success: boolean }>('/api/lab/seed-paper/apply', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 // ── 헬스 체크 ──────────────────────────────────────

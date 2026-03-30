@@ -18,8 +18,11 @@ import {
   checkEmailStatus,
   getEmailAuthUrl,
   getEmailBriefing,
+  getEmailBriefingHistory,
+  initEmailProfile,
   EmailBriefingItem,
   EmailBriefingMeta,
+  EmailBriefingHistoryEntry,
   translateEmail,
   createEmailDraft,
   extractEmailActions,
@@ -50,6 +53,10 @@ export default function EmailBriefingScreen() {
   const [meta, setMeta] = useState<EmailBriefingMeta | null>(null);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
+  // 브리핑 히스토리
+  const [history, setHistory] = useState<EmailBriefingHistoryEntry[]>([]);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
   // 이메일 상세 모달
   const [selectedEmail, setSelectedEmail] = useState<EmailBriefingItem | null>(null);
   const [translatedText, setTranslatedText] = useState<string | null>(null);
@@ -72,6 +79,7 @@ export default function EmailBriefingScreen() {
       const status = await checkEmailStatus();
       setIsConnected(status.connected);
       if (status.connected) {
+        try { await initEmailProfile(); } catch { /* ignore */ }
         await loadBriefing();
       }
     } catch (err: any) {
@@ -96,6 +104,11 @@ export default function EmailBriefingScreen() {
       } else if (result.meta.categories['action-needed'] > 0) {
         setExpandedCategory('action-needed');
       }
+      // 히스토리 로드
+      try {
+        const historyRes = await getEmailBriefingHistory(30, 20);
+        setHistory(historyRes.data);
+      } catch { /* 히스토리 실패는 무시 */ }
     } catch (err: any) {
       if (err.message?.includes('연동되지') || err.message?.includes('401')) {
         setIsConnected(false);
@@ -454,6 +467,70 @@ export default function EmailBriefingScreen() {
               <Text style={styles.loadingSubtext}>
                 처음 로딩 시 30초 정도 걸릴 수 있습니다
               </Text>
+            </View>
+          )}
+
+          {/* 이전 브리핑 히스토리 (토글) */}
+          {history.length > 0 && (
+            <View style={styles.historySection}>
+              <Text style={styles.historySectionTitle}>이전 브리핑</Text>
+              {history.map((entry) => (
+                <View key={entry.id} style={styles.historyCard}>
+                  <TouchableOpacity
+                    style={styles.historyHeader}
+                    onPress={() => setExpandedHistoryId(
+                      expandedHistoryId === entry.id ? null : entry.id
+                    )}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={expandedHistoryId === entry.id ? 'chevron-down' : 'chevron-forward'}
+                      size={16}
+                      color={colors.textMuted}
+                    />
+                    <View style={{ flex: 1, marginLeft: spacing.sm }}>
+                      <Text style={styles.historyTitle}>{entry.title}</Text>
+                      <Text style={styles.historyDate}>
+                        {new Date(entry.time).toLocaleString('ko-KR', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.historyBadges}>
+                      {entry.meta?.categories?.urgent ? (
+                        <Text style={[styles.historyBadge, { color: '#EF4444' }]}>⚠️{entry.meta.categories.urgent}</Text>
+                      ) : null}
+                      {entry.meta?.categories?.['action-needed'] ? (
+                        <Text style={[styles.historyBadge, { color: '#F59E0B' }]}>📝{entry.meta.categories['action-needed']}</Text>
+                      ) : null}
+                      <Text style={styles.historyCount}>{entry.meta?.total || entry.briefings?.length || 0}건</Text>
+                    </View>
+                  </TouchableOpacity>
+                  {expandedHistoryId === entry.id && entry.briefings?.length > 0 && (
+                    <View style={styles.historyBody}>
+                      {entry.briefings.map((email, i) => (
+                        <TouchableOpacity
+                          key={email.messageId || i}
+                          style={styles.historyEmailItem}
+                          onPress={() => openEmailDetail(email)}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.historyEmailCategory}>
+                            {CATEGORY_META[email.category]?.icon || '📧'}
+                          </Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.historyEmailSender} numberOfLines={1}>
+                              {email.groupEmoji ? `${email.groupEmoji} ` : ''}{email.senderName || email.sender}
+                            </Text>
+                            <Text style={styles.historyEmailSubject} numberOfLines={1}>{email.subject}</Text>
+                            <Text style={styles.historyEmailSummary} numberOfLines={1}>{email.summary}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
             </View>
           )}
         </View>
@@ -1005,5 +1082,84 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: '700',
     color: 'white',
+  },
+
+  // ── 브리핑 히스토리 ────────────────────────────
+  historySection: {
+    marginTop: spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: colors.bgInput,
+    paddingTop: spacing.lg,
+  },
+  historySectionTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  historyCard: {
+    backgroundColor: colors.bgCard,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.bgInput,
+    overflow: 'hidden',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+  },
+  historyTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  historyDate: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  historyBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  historyBadge: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+  },
+  historyCount: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+  },
+  historyBody: {
+    borderTopWidth: 1,
+    borderTopColor: colors.bgInput,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  historyEmailItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  historyEmailCategory: {
+    fontSize: 14,
+    marginTop: 2,
+  },
+  historyEmailSender: {
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  historyEmailSubject: {
+    fontSize: fontSize.xs,
+    color: colors.text,
+  },
+  historyEmailSummary: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
   },
 });

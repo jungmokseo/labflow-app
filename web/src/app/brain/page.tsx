@@ -24,15 +24,15 @@ export default function BrainPage() {
 
   async function loadChannels() {
     try {
-      const data = await getBrainChannels();
-      setChannels(data);
+      const res = await getBrainChannels();
+      setChannels(res.data || []);
     } catch {}
   }
 
   async function loadMessages(channelId: string) {
     try {
-      const data = await getChannelMessages(channelId);
-      setMessages(data);
+      const res = await getChannelMessages(channelId);
+      setMessages(res.data || []);
       setActiveChannelId(channelId);
     } catch {}
   }
@@ -71,8 +71,8 @@ export default function BrainPage() {
   async function handleSearch() {
     if (!searchQuery.trim()) return;
     try {
-      const results = await searchBrainMemory(searchQuery);
-      setSearchResults(results);
+      const res = await searchBrainMemory(searchQuery);
+      setSearchResults(res.data || res);
     } catch (err: any) {
       setSearchResults({ error: err.message });
     }
@@ -103,7 +103,6 @@ export default function BrainPage() {
               }`}
             >
               {ch.name || `대화 #${ch.id.slice(-4)}`}
-              <span className="text-xs opacity-50 ml-1">({ch._count.messages})</span>
             </button>
           ))}
         </div>

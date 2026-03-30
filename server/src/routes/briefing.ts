@@ -58,8 +58,9 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
   const items: BriefingItem[] = [];
 
   try {
-    const gmailToken = await basePrismaClient.gmailToken.findUnique({
+    const gmailToken = await basePrismaClient.gmailToken.findFirst({
       where: { userId },
+      orderBy: { primary: 'desc' },
     });
     if (!gmailToken) return items;
 
@@ -79,7 +80,7 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
     oauth2Client.on('tokens', async (tokens) => {
       try {
         await basePrismaClient.gmailToken.update({
-          where: { userId },
+          where: { id: gmailToken.id },
           data: {
             accessToken: tokens.access_token!,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,

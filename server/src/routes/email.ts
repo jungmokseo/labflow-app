@@ -440,20 +440,42 @@ export async function emailCallbackRoute(app: FastifyInstance) {
       const { tokens } = await oauth2Client.getToken(query.code);
       const user = await ensureUser(userId);
 
-      await prisma.gmailToken.upsert({
-        where: { userId: user.id },
-        create: {
-          userId: user.id,
-          accessToken: tokens.access_token!,
-          refreshToken: tokens.refresh_token || null,
-          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-        },
-        update: {
-          accessToken: tokens.access_token!,
-          refreshToken: tokens.refresh_token || undefined,
-          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-        },
+      // Gmail 계정 이메일 주소 조회
+      oauth2Client.setCredentials(tokens);
+      let gmailAddress = '';
+      try {
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        const profile = await gmail.users.getProfile({ userId: 'me' });
+        gmailAddress = profile.data.emailAddress || '';
+      } catch { /* 이메일 주소 조회 실패 시 빈 문자열 */ }
+
+      // 기존 토큰 중 같은 계정이 있으면 업데이트, 없으면 생성
+      const existingToken = await prisma.gmailToken.findFirst({
+        where: { userId: user.id, email: gmailAddress },
       });
+      const existingCount = await prisma.gmailToken.count({ where: { userId: user.id } });
+
+      if (existingToken) {
+        await prisma.gmailToken.update({
+          where: { id: existingToken.id },
+          data: {
+            accessToken: tokens.access_token!,
+            refreshToken: tokens.refresh_token || existingToken.refreshToken,
+            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          },
+        });
+      } else {
+        await prisma.gmailToken.create({
+          data: {
+            userId: user.id,
+            email: gmailAddress,
+            accessToken: tokens.access_token!,
+            refreshToken: tokens.refresh_token || null,
+            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+            primary: existingCount === 0, // 첫 번째 계정이면 primary
+          },
+        });
+      }
 
       // 성공: 앱으로 리다이렉트 또는 성공 페이지 표시
       if (env.NODE_ENV === 'development') {
@@ -508,21 +530,32 @@ export async function emailRoutes(app: FastifyInstance) {
       const user = await prisma.user.findFirst({ where: { clerkId: userId } });
       if (!user) return reply.send({ success: true, connected: false });
 
-      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
-      if (!gmailToken) return reply.send({ success: true, connected: false });
+      const allTokens = await prisma.gmailToken.findMany({
+        where: { userId: user.id },
+        orderBy: { primary: 'desc' },
+      });
+      if (allTokens.length === 0) return reply.send({ success: true, connected: false });
 
-      const isExpired = gmailToken.expiresAt && gmailToken.expiresAt < new Date();
+      const primaryToken = allTokens[0];
+      const isExpired = primaryToken.expiresAt && primaryToken.expiresAt < new Date();
       const rawProfile = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
 
       return reply.send({
         success: true,
         connected: !isExpired,
-        expiresAt: gmailToken.expiresAt?.toISOString() || null,
+        accounts: allTokens.map(t => ({
+          id: t.id,
+          email: t.email,
+          label: t.label,
+          primary: t.primary,
+          expired: t.expiresAt ? t.expiresAt < new Date() : false,
+        })),
+        accountCount: allTokens.length,
         hasProfile: !!rawProfile,
         classifyByGroup: rawProfile?.classifyByGroup ?? false,
         groupCount: rawProfile ? (rawProfile.groups as any[]).length : 0,
         lastBriefingAt: rawProfile?.lastBriefingAt?.toISOString() || null,
-        message: isExpired ? 'Gmail 토큰 만료' : 'Gmail 정상 연동',
+        message: isExpired ? 'Gmail 토큰 만료' : `Gmail ${allTokens.length}개 계정 연동됨`,
       });
     } catch (error: any) {
       return reply.code(500).send({ error: 'Gmail 상태 확인 실패', details: error.message });
@@ -598,7 +631,7 @@ export async function emailRoutes(app: FastifyInstance) {
       const user = await prisma.user.findFirst({ where: { clerkId: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
-      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
       if (!gmailToken) return reply.code(401).send({ error: 'Gmail 미연동', authUrl: '/api/email/auth/url' });
 
       // 프로필 로드 (없으면 기본값)
@@ -642,7 +675,7 @@ export async function emailRoutes(app: FastifyInstance) {
       oauth2Client.on('tokens', async (tokens) => {
         try {
           await prisma.gmailToken.update({
-            where: { userId: user!.id },
+            where: { id: gmailToken!.id },
             data: {
               accessToken: tokens.access_token!,
               expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
@@ -888,6 +921,32 @@ export async function emailRoutes(app: FastifyInstance) {
         buildGraphFromText(userId, emailGraphText, 'email').catch(() => {});
       }
 
+      // 📦 브리핑 히스토리 저장 (Memo에 JSON 형태로)
+      try {
+        await prisma.memo.create({
+          data: {
+            userId: user.id,
+            labId: request.labId || undefined,
+            title: `📧 이메일 브리핑 ${now.toISOString().split('T')[0]}`,
+            content: JSON.stringify({
+              briefings,
+              meta: {
+                total: briefings.length,
+                afterDate: afterDate.toISOString(),
+                lastBriefingAt: now.toISOString(),
+                timezone,
+                categories: categoryCounts,
+                groups: groupCounts,
+              },
+            }),
+            tags: ['email-briefing', 'auto'],
+            source: 'email-briefing',
+          },
+        });
+      } catch {
+        // 히스토리 저장 실패는 무시
+      }
+
       return reply.send({
         success: true,
         data: briefings,
@@ -929,7 +988,7 @@ export async function emailRoutes(app: FastifyInstance) {
       const user = await prisma.user.findFirst({ where: { clerkId: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
-      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
       if (!gmailToken) return reply.code(401).send({ error: 'Gmail 연동이 필요합니다' });
 
       const oauth2Client = createOAuth2Client();
@@ -1093,7 +1152,7 @@ export async function emailRoutes(app: FastifyInstance) {
       const user = await prisma.user.findFirst({ where: { clerkId: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
-      const gmailToken = await prisma.gmailToken.findUnique({ where: { userId: user.id } });
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
       if (!gmailToken) return reply.code(401).send({ error: 'Gmail/Calendar 연동이 필요합니다' });
 
       const oauth2Client = createOAuth2Client();
@@ -1141,5 +1200,98 @@ export async function emailRoutes(app: FastifyInstance) {
       }
       return reply.code(500).send({ error: '캘린더 이벤트 생성 실패', details: error.message });
     }
+  });
+
+  // ── GET /api/email/briefing/history — 이메일 브리핑 히스토리 ──
+  app.get('/api/email/briefing/history', async (request, reply) => {
+    const userId = request.userId!;
+    const query = z.object({
+      days: z.coerce.number().min(1).max(90).default(30),
+      limit: z.coerce.number().min(1).max(50).default(20),
+    }).parse(request.query);
+
+    try {
+      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
+
+      const memos = await prisma.memo.findMany({
+        where: {
+          userId: user.id,
+          source: 'email-briefing',
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: query.limit,
+      });
+
+      const history = memos.map(m => {
+        let parsed: any = {};
+        try { parsed = JSON.parse(m.content); } catch { /* ignore */ }
+        return {
+          id: m.id,
+          date: m.createdAt.toISOString().split('T')[0],
+          time: m.createdAt.toISOString(),
+          title: m.title,
+          briefings: parsed.briefings || [],
+          meta: parsed.meta || {},
+        };
+      });
+
+      return reply.send({ success: true, data: history, count: history.length });
+    } catch (error: any) {
+      return reply.code(500).send({ error: '히스토리 조회 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/profile/init — 기본 프로필 초기화 ──
+  app.post('/api/email/profile/init', async (request, reply) => {
+    const userId = request.userId!;
+    const user = await ensureUser(userId);
+
+    const existing = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
+    if (existing?.classifyByGroup) {
+      return reply.send({ success: true, message: '이미 설정된 프로필이 있습니다', initialized: false });
+    }
+
+    const defaultProfile = {
+      classifyByGroup: true,
+      groups: [
+        { name: '연세대학교', emoji: '🏫', domains: ['yonsei.ac.kr'] },
+        { name: '링크솔루텍', emoji: '🏢', domains: ['lynksolutec.com'] },
+      ] as any,
+      excludePatterns: [] as any,
+      keywords: [
+        '하이드로겔', '액체금속', '방오코팅', '이종소재접착제',
+        '웨어러블 바이오일렉트로닉스', '자가치유', 'PDMS', 'UV경화',
+        'hydrogel', 'liquid metal', 'antifouling', 'wearable bioelectronics',
+        'self-healing', 'heterogeneous adhesive',
+      ] as any,
+      importanceRules: [
+        { condition: '저널/출판사 Decision, Review results, Revision 메일', action: 'urgent로 최우선 상향', description: '논문 의사결정' },
+        { condition: 'Submission confirmation 메일', action: 'urgent로 상향', description: '투고 확인' },
+        { condition: 'Call for Papers, 투고 초대', action: 'info 또는 ads로 강등', description: 'CfP는 정보성' },
+        { condition: 'BCCI/바이오센테니얼 관련 + 기한 명시', action: 'urgent 또는 action-needed로 격상', description: 'BCCI 프로젝트' },
+        { condition: '학생 개인 발송 메일 (@yonsei.ac.kr)', action: 'action-needed 이상 유지', description: 'BLISS Lab 학생 메일 중요' },
+      ] as any,
+      senderTimezones: [
+        { domains: ['.kr', 'naver.com', 'daum.net', 'kakao.com'], timezone: 'Asia/Seoul', label: 'KST' },
+      ] as any,
+      timezone: 'America/New_York',
+    };
+
+    const rawProfile = await prisma.emailProfile.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, ...defaultProfile },
+      update: defaultProfile,
+    });
+
+    const profile = parseProfile(rawProfile);
+    return reply.send({
+      success: true,
+      initialized: true,
+      data: profileToResponse(profile, rawProfile.lastBriefingAt),
+    });
   });
 }

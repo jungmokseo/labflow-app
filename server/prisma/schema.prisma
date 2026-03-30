@@ -25,7 +25,7 @@ model User {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   captures        Capture[]
-  gmailToken      GmailToken?
+  gmailTokens     GmailToken[]
   emailProfile    EmailProfile?
   meetings        Meeting[]
   preferences     UserPreference[]
@@ -110,18 +110,23 @@ model Meeting {
   @@map("meetings")
 }
 
-// ── Gmail 인증 토큰 ─────────────────────────────────────
+// ── Gmail 인증 토큰 (멀티 계정 지원) ───────────────────────
 model GmailToken {
   id           String    @id @default(cuid())
-  userId       String    @unique @map("user_id")
+  userId       String    @map("user_id")
+  email        String    @default("")                // Gmail 계정 주소
+  label        String?                               // 표시 라벨 (예: "연세대", "링크솔루텍")
   accessToken  String    @map("access_token")
   refreshToken String?   @map("refresh_token")
   expiresAt    DateTime? @map("expires_at")
+  primary      Boolean   @default(false)             // 기본 계정 여부
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, email])
+  @@index([userId])
   @@map("gmail_tokens")
 }
 
@@ -217,6 +222,7 @@ model Lab {
   piName          String?   @map("pi_name")
   piEmail         String?   @map("pi_email")
   researchFields  String[]  @map("research_fields")
+  researchThemes  Json?     @map("research_themes")  // [{name, keywords[], journals[]}]
   homepageUrl     String?   @map("homepage_url")
   acknowledgment  String?
   responseStyle   String?   @map("response_style")
@@ -238,25 +244,36 @@ model Lab {
 
 // ── 연구실 멤버 ──────────────────────────────────────────
 model LabMember {
-  id            String    @id @default(cuid())
-  labId         String    @map("lab_id")
+  id            String        @id @default(cuid())
+  labId         String        @map("lab_id")
+  userId        String?       @map("user_id")       // Clerk 계정 연결 (로그인 시)
   name          String
   email         String?
-  role          String    @default("학생")
+  role          String        @default("학생")
+  permission    LabPermission @default(VIEWER)       // 접근 권한
+  team          String?                              // 팀 배정 (예: "LM팀", "Hydrogel팀")
   phone         String?
-  active        Boolean   @default(true)
-  confidence    Float     @default(1.0)
-  metadata      Json?     @default("{}")
-  accessCount   Int       @default(0) @map("access_count")
-  lastVerified  DateTime? @map("last_verified")
-  lastAccessed  DateTime? @map("last_accessed")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  active        Boolean       @default(true)
+  confidence    Float         @default(1.0)
+  metadata      Json?         @default("{}")
+  accessCount   Int           @default(0) @map("access_count")
+  lastVerified  DateTime?     @map("last_verified")
+  lastAccessed  DateTime?     @map("last_accessed")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
-  lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+  lab           Lab           @relation(fields: [labId], references: [id], onDelete: Cascade)
 
   @@index([labId, active])
+  @@index([userId])
   @@map("lab_members")
+}
+
+enum LabPermission {
+  OWNER     // PI — 전체 관리 (설정, 멤버, 삭제)
+  ADMIN     // 관리자 — 데이터 관리 (추가/수정, 멤버 초대)
+  EDITOR    // 편집자 — 데이터 추가/수정 (미팅 노트, 캡처 등)
+  VIEWER    // 열람자 — 읽기 전용 (브리핑 조회, 검색)
 }
 
 // ── 연구 프로젝트 ────────────────────────────────────────

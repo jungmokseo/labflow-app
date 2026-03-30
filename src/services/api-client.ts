@@ -484,6 +484,31 @@ export async function createCalendarEvent(params: {
   return result.data ?? result;
 }
 
+/** 이메일 브리핑 히스토리 항목 */
+export interface EmailBriefingHistoryEntry {
+  id: string;
+  date: string;
+  time: string;
+  title: string;
+  briefings: EmailBriefingItem[];
+  meta: { total: number; categories: Record<string, number>; groups: Record<string, number> };
+}
+
+/** 이메일 브리핑 히스토리 조회 */
+export async function getEmailBriefingHistory(
+  days = 30,
+  limit = 20,
+): Promise<{ data: EmailBriefingHistoryEntry[]; count: number }> {
+  const result = await apiFetch<any>(`/api/email/briefing/history?days=${days}&limit=${limit}`);
+  return { data: result.data ?? [], count: (result as any).count ?? 0 };
+}
+
+/** 기본 이메일 프로필 초기화 */
+export async function initEmailProfile(): Promise<{ initialized: boolean }> {
+  const result = await apiFetch<any>('/api/email/profile/init', { method: 'POST' });
+  return { initialized: (result as any).initialized ?? false };
+}
+
 // ── 미니브레인 (Lab Memory) API ─────────────────────────
 
 /** 미니브레인 대화 */

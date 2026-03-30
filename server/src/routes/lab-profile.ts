@@ -30,6 +30,7 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { analyzeSeedPaper, analyzeSeedPapers, type SeedPaperResult } from '../services/seed-paper.js';
+import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
 
 // ── Zod Schemas ─────────────────────────────────────
 const createLabSchema = z.object({
@@ -42,21 +43,35 @@ const createLabSchema = z.object({
   homepageUrl: z.string().url().optional(),
 });
 
+const researchThemeSchema = z.object({
+  name: z.string().min(1),
+  keywords: z.array(z.string()),
+  journals: z.array(z.string()).optional(),
+});
+
 const updateLabSchema = createLabSchema.partial().extend({
   acknowledgment: z.string().optional(),
   responseStyle: z.string().optional(),
+  researchThemes: z.array(researchThemeSchema).optional(),
 });
 
 const onboardingSchema = z.object({
   homepageUrl: z.string().url().optional(),
   keywords: z.array(z.string()).optional(),
-  // 나중에 PDF 업로드 기반 키워드 추출도 지원
+  researchThemes: z.array(researchThemeSchema).optional(),
+  emailAccounts: z.array(z.object({
+    name: z.string(),
+    domains: z.array(z.string()),
+    emoji: z.string().max(4).default('📧'),
+  })).optional(),
 });
 
 const memberSchema = z.object({
   name: z.string().min(1),
   email: z.string().email().optional(),
   role: z.string().default('학생'),
+  permission: z.enum(['OWNER', 'ADMIN', 'EDITOR', 'VIEWER']).default('VIEWER'),
+  team: z.string().optional(),
   phone: z.string().optional(),
 });
 
@@ -153,6 +168,12 @@ export async function labProfileRoutes(app: FastifyInstance) {
       where: { id: lab.id },
       data: body,
     });
+
+    // Lab 프로필 변경 시 자동 동기화
+    syncLabProfileToAllFeatures(request.userId!, lab.id).catch(err =>
+      console.warn('Lab sync failed:', err)
+    );
+
     return updated;
   });
 
@@ -163,28 +184,42 @@ export async function labProfileRoutes(app: FastifyInstance) {
     const body = onboardingSchema.parse(request.body);
 
     let keywords = body.keywords || [];
+    let researchThemes = body.researchThemes || [];
 
-    // 홈페이지 URL이 제공되면 Gemini로 키워드 추출 시도
-    if (body.homepageUrl && keywords.length === 0) {
+    // 홈페이지 URL이 제공되면 Gemini로 구조화된 테마 추출 시도
+    if (body.homepageUrl && keywords.length === 0 && researchThemes.length === 0) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-        const prompt = `다음 연구실 홈페이지 URL을 보고, 이 연구실의 주요 연구 분야 키워드를 5~10개 추출해주세요.
+        const prompt = `다음 연구실 홈페이지를 분석하여, 연구 테마를 구조화해주세요.
 URL: ${body.homepageUrl}
 연구실명: ${lab.name}
+${lab.institution ? `소속: ${lab.institution}` : ''}
 
-JSON 배열로만 응답해주세요. 예: ["biosensor", "flexible electronics", "wearable"]`;
+다음 JSON 형식으로만 응답:
+{
+  "keywords": ["keyword1", "keyword2", ...],
+  "themes": [
+    {"name": "테마명 (한글)", "keywords": ["영문키워드1", "한글키워드1", ...], "journals": ["관련 저널명"]}
+  ]
+}
+themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
 
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim();
-        const match = text.match(/\[.*\]/s);
-        if (match) {
-          keywords = JSON.parse(match[0]);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          keywords = parsed.keywords || [];
+          researchThemes = (parsed.themes || []).map((t: any) => ({
+            name: t.name,
+            keywords: t.keywords || [],
+            journals: t.journals || [],
+          }));
         }
       } catch (err) {
-        // 키워드 추출 실패해도 온보딩은 진행
         console.warn('Keyword extraction failed:', err);
       }
     }
@@ -194,9 +229,15 @@ JSON 배열로만 응답해주세요. 예: ["biosensor", "flexible electronics",
       data: {
         onboardingDone: true,
         researchFields: keywords.length > 0 ? keywords : lab.researchFields,
+        researchThemes: researchThemes.length > 0 ? researchThemes as any : undefined,
         homepageUrl: body.homepageUrl || lab.homepageUrl,
       },
     });
+
+    // Lab 프로필 → 이메일/논문 알림 자동 동기화
+    syncLabProfileToAllFeatures(request.userId!, lab.id).catch(err =>
+      console.warn('Lab sync failed:', err)
+    );
 
     return { lab: updated, extractedKeywords: keywords };
   });
@@ -409,6 +450,59 @@ JSON 배열로만 응답해주세요. 예: ["biosensor", "flexible electronics",
       data: { active: false },
     });
     return { success: true };
+  });
+
+  // ── PUT /api/lab/members/:id — 멤버 정보 수정 ──────
+  app.put('/api/lab/members/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const lab = await requireLab(request.userId!, reply);
+    if (!lab) return;
+    const body = memberSchema.partial().parse(request.body);
+    const updated = await prisma.labMember.update({
+      where: { id: request.params.id },
+      data: body,
+    });
+    return updated;
+  });
+
+  // ── POST /api/lab/members/join — 초대된 멤버가 계정 연결 ──
+  app.post('/api/lab/members/join', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const body = z.object({
+      labId: z.string(),
+      email: z.string().email(),
+    }).parse(request.body);
+
+    // 해당 Lab에서 이메일로 초대된 멤버를 찾기
+    const member = await prisma.labMember.findFirst({
+      where: {
+        labId: body.labId,
+        email: body.email,
+        active: true,
+        userId: null, // 아직 연결 안 된 멤버만
+      },
+    });
+
+    if (!member) {
+      return reply.code(404).send({
+        error: '초대된 멤버를 찾을 수 없습니다. PI에게 이메일로 초대를 요청해주세요.',
+      });
+    }
+
+    // 유저 ID 연결
+    const updated = await prisma.labMember.update({
+      where: { id: member.id },
+      data: { userId },
+    });
+
+    return { success: true, member: updated };
+  });
+
+  // ── GET /api/lab/my-permission — 현재 유저의 권한 확인 ──
+  app.get('/api/lab/my-permission', async (request: FastifyRequest, reply: FastifyReply) => {
+    return {
+      permission: request.labPermission || null,
+      labId: request.labId || null,
+    };
   });
 
   // ── Projects CRUD ─────────────────────────────────

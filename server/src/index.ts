@@ -24,6 +24,7 @@ import { paperRoutes } from './routes/papers.js';
 import { labCaptureRoutes } from './routes/lab-captures.js';
 import { briefingRoutes } from './routes/briefing.js';
 import { setupRequestContextHook } from './middleware/auth.js';
+import { resolveLabPermission } from './middleware/permissions.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -65,6 +66,9 @@ async function buildApp() {
 
   // ── Data isolation context hook ────────────────────
   setupRequestContextHook(app);
+
+  // ── Lab 권한 해석 (auth + context 후에 실행) ──────
+  app.addHook('onRequest', resolveLabPermission);
 
   // ── 라우트 등록 ────────────────────────────────────
   await app.register(healthRoutes);
