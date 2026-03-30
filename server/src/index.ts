@@ -22,6 +22,7 @@ import { labProfileRoutes } from './routes/lab-profile.js';
 import { paperAlertRoutes } from './routes/paper-alerts.js';
 import { paperRoutes } from './routes/papers.js';
 import { labCaptureRoutes } from './routes/lab-captures.js';
+import { briefingRoutes } from './routes/briefing.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 
 async function buildApp() {
@@ -79,6 +80,7 @@ async function buildApp() {
     await app.register(paperAlertRoutes);
     await app.register(paperRoutes);
     await app.register(labCaptureRoutes);
+    await app.register(briefingRoutes);
 
   return app;
 }
