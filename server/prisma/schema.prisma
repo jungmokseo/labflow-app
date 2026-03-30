@@ -398,6 +398,9 @@ model PaperAlertResult {
   abstract    String?
   aiSummary   String?   @map("ai_summary")
   relevance   Float     @default(0.0)
+  stars       Int       @default(0)             // ★ 1~3 relevance rating
+  themes      String[]  @default([])            // matched theme names
+  doi         String?
   read        Boolean   @default(false)
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
