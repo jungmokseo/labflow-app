@@ -1,7 +1,19 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { brainChat, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage } from '@/lib/api';
+import { brainChat, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage, type BrainTool } from '@/lib/api';
+
+const TOOLS: Array<{ key: BrainTool; icon: string; label: string }> = [
+  { key: 'general', icon: '🧠', label: '자유 대화' },
+  { key: 'email', icon: '📧', label: '이메일' },
+  { key: 'papers', icon: '📚', label: '논문' },
+  { key: 'meeting', icon: '🎙️', label: '미팅' },
+  { key: 'calendar', icon: '📅', label: '캘린더' },
+  { key: 'memo', icon: '📝', label: '메모' },
+  { key: 'members', icon: '👥', label: '구성원' },
+  { key: 'projects', icon: '📋', label: '과제' },
+  { key: 'search', icon: '🔍', label: '검색' },
+];
 
 export default function BrainPage() {
   const [channels, setChannels] = useState<BrainChannel[]>([]);
@@ -9,6 +21,7 @@ export default function BrainPage() {
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeTool, setActiveTool] = useState<BrainTool>('general');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any>(null);
   const [tab, setTab] = useState<'chat' | 'search'>('chat');
@@ -45,7 +58,7 @@ export default function BrainPage() {
     setLoading(true);
 
     try {
-      const result = await brainChat(msg, activeChannelId || undefined);
+      const result = await brainChat(msg, activeChannelId || undefined, activeTool);
       setMessages(prev => [...prev, {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -155,13 +168,31 @@ export default function BrainPage() {
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="p-4 border-t border-bg-input/50">
-              <div className="flex gap-2">
+            <div className="border-t border-bg-input/50">
+              {/* Tool selector */}
+              <div className="px-4 pt-3 pb-1 flex gap-1 overflow-x-auto">
+                {TOOLS.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setActiveTool(t.key)}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
+                      activeTool === t.key
+                        ? 'bg-primary text-white'
+                        : 'bg-bg-input/50 text-text-muted hover:text-white hover:bg-bg-input'
+                    }`}
+                  >
+                    <span>{t.icon}</span>
+                    <span>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Input */}
+              <div className="px-4 pb-4 pt-2 flex gap-2">
                 <input
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                  placeholder="메시지를 입력하세요..."
+                  placeholder={activeTool === 'general' ? '메시지를 입력하세요...' : `${TOOLS.find(t => t.key === activeTool)?.icon} ${TOOLS.find(t => t.key === activeTool)?.label} 모드 — 질문하세요...`}
                   className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
