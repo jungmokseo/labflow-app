@@ -222,6 +222,55 @@ export async function seedKnowledgeGraph() {
   return apiFetch<{ success: boolean; data: { nodesCreated: number; edgesCreated: number }; message: string }>('/api/graph/seed', { method: 'POST' });
 }
 
+// ── 미니브레인 (Brain Chat) ─────────────────────────
+export async function brainChat(message: string, channelId?: string) {
+  return apiFetch<{ response: string; channelId: string; intent: string }>('/api/brain/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, channelId }),
+  });
+}
+
+export async function getBrainChannels() {
+  return apiFetch<{ data: Array<{ id: string; name: string; type: string; createdAt: string }> }>('/api/brain/channels');
+}
+
+export async function createBrainChannel(type = 'BRAIN', name?: string) {
+  return apiFetch<{ data: { id: string } }>('/api/brain/channels', {
+    method: 'POST',
+    body: JSON.stringify({ type, name }),
+  });
+}
+
+export async function getBrainMessages(channelId: string) {
+  return apiFetch<{ data: Array<{ id: string; role: string; content: string; createdAt: string }> }>(`/api/brain/channels/${channelId}`);
+}
+
+export async function searchBrainMemory(query: string, type = 'all') {
+  return apiFetch<{ data: unknown[] }>(`/api/brain/search?query=${encodeURIComponent(query)}&type=${type}`);
+}
+
+// ── 브리핑 ──────────────────────────────────────
+export async function getBriefing() {
+  return apiFetch<{ date: string; urgent: unknown[]; important: unknown[]; info: unknown[]; stats: { totalEmails: number; newPapers: number; pendingCaptures: number; upcomingMeetings: number } }>('/api/briefing');
+}
+
+export async function getBriefingHistory(days = 7) {
+  return apiFetch<{ briefings: unknown[]; count: number }>(`/api/briefing/history?days=${days}`);
+}
+
+// ── Lab Profile ─────────────────────────────────
+export async function getLabProfile() {
+  return apiFetch<{ data: unknown }>('/api/lab');
+}
+
+export async function getLabMembers() {
+  return apiFetch<{ data: Array<{ id: string; name: string; role: string; email: string; phone: string }> }>('/api/lab/members');
+}
+
+export async function getLabProjects() {
+  return apiFetch<{ data: Array<{ id: string; name: string; funder: string; pm: string; status: string }> }>('/api/lab/projects');
+}
+
 // ── 헬스 체크 ──────────────────────────────────────
 export async function checkHealth() {
   try {
