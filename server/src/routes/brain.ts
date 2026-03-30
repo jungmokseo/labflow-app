@@ -1265,12 +1265,10 @@ export async function brainRoutes(app: FastifyInstance) {
     if (intent === 'daily_brief') {
       const { dailyBrief } = await import('../services/knowledge-graph.js');
       dbResult = await dailyBrief(userId);
-    }
-    if (intent === 'emerge') {
+    } else if (intent === 'emerge') {
       const { emergeInsights } = await import('../services/knowledge-graph.js');
       dbResult = await emergeInsights(userId);
-    }
-    if (intent === 'weekly_review') {
+    } else if (intent === 'weekly_review') {
       const { weeklyReview } = await import('../services/knowledge-graph.js');
       dbResult = await weeklyReview(userId);
     }

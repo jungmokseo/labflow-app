@@ -434,6 +434,15 @@ JSON 배열로만 응답:
 //  THINKING COMMANDS — 옵시디언 스타일 인사이트 서피싱
 // ══════════════════════════════════════════════════════
 
+/** Sanitize LLM output before storing in DB */
+function sanitizeLlmOutput(text: string, maxLength = 5000): string {
+  return text
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')  // strip script tags
+    .replace(/<[^>]+>/g, '')  // strip all HTML tags
+    .slice(0, maxLength)
+    .trim();
+}
+
 /**
  * /today — 오늘 할 일 우선순위 브리핑
  * 캘린더 + 이메일 긴급 + 논문 알림 + 미완료 액션아이템 + 최근 메모를 통합
@@ -542,7 +551,7 @@ ${recentMemos.map(m => `- ${m.title || m.content.slice(0, 40)}`).join('\n') || '
 ${briefingData}` }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
-    return result.response.text();
+    return sanitizeLlmOutput(result.response.text());
   } catch {
     // fallback: raw data 반환
     return `📋 **오늘의 브리핑**\n\n` +
@@ -655,7 +664,7 @@ ${projects.map(p => p.name).join(', ') || '과제 없음'}
 ${analysisData}` }] }],
       generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
     });
-    return `🔮 **Emerge — 숨겨진 연결 발견**\n\n${result.response.text()}`;
+    return `🔮 **Emerge — 숨겨진 연결 발견**\n\n${sanitizeLlmOutput(result.response.text())}`;
   } catch {
     if (weakTies.length === 0 && isolatedRecent.length === 0) {
       return '🔮 아직 충분한 데이터가 없습니다. 대화, 미팅, 논문이 쌓이면 숨겨진 연결을 찾아드립니다.';
@@ -750,7 +759,7 @@ ${weekAlerts.map(a => `- ${'★'.repeat(a.stars || 1)} ${a.title}`).join('\n') |
 ${weekData}` }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
-    return `📊 **주간 리뷰**\n\n${result.response.text()}`;
+    return `📊 **주간 리뷰**\n\n${sanitizeLlmOutput(result.response.text())}`;
   } catch {
     return `📊 **주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
       `미팅: ${weekMeetings.length}건 | 캡처: ${weekCaptures.length}건 (완료: ${completedCaptures}건) | 대화: ${weekMessages}회\n` +

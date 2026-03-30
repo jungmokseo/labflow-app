@@ -478,11 +478,8 @@ export async function emailCallbackRoute(app: FastifyInstance) {
       }
 
       // 성공: 웹 앱으로 리다이렉트
-      if (env.NODE_ENV === 'development') {
-        return reply.redirect('http://localhost:3000/email');
-      }
-      // Production: 웹 앱 이메일 페이지로 리다이렉트
-      return reply.redirect('https://labflow-web.vercel.app/email');
+      const frontendUrl = env.NODE_ENV === 'development' ? 'http://localhost:3000' : env.FRONTEND_URL;
+      return reply.redirect(`${frontendUrl}/email`);
     } catch (error: any) {
       app.log.error({ err: error }, 'Gmail OAuth callback failed');
       return reply.code(400).send({ error: 'Gmail 연동 실패', details: error.message });
