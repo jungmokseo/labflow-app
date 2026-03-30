@@ -169,7 +169,7 @@ export async function labProfileRoutes(app: FastifyInstance) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
         const prompt = `다음 연구실 홈페이지 URL을 보고, 이 연구실의 주요 연구 분야 키워드를 5~10개 추출해주세요.
 URL: ${body.homepageUrl}

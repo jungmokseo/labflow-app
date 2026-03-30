@@ -12,7 +12,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // ── 타입 정의 ──────────────────────────────────────────
 export interface ExtractedRelation {

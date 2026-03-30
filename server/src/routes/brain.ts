@@ -126,7 +126,8 @@ type Intent =
   | 'multi_hop'     // 복합 질의 (여러 DB 조합)
   | 'query_stale'   // 오래된/신뢰도 낮은 정보 조회 (메타기억)
   | 'save_memo' | 'search_memory' | 'general_chat' | 'add_dict'
-  | 'capture_create' | 'capture_list' | 'capture_complete';
+  | 'capture_create' | 'capture_list' | 'capture_complete'
+  | 'fallback_search'; // Intent 분류 실패 시 DB 범용 검색
 
 interface ClassifiedIntent {
   intent: Intent;
@@ -191,7 +192,8 @@ multi_hop인 경우 "hops" 배열을 추가하세요:
   } catch (err) {
     console.warn('Intent classification failed:', err);
   }
-  return { intent: 'general_chat', entities: {} };
+  // Intent 분류 실패 시 DB 범용 검색 우선 시도 (할루시네이션 방지)
+  return { intent: 'fallback_search', entities: { query: '' } };
 }
 
 // ══════════════════════════════════════════════════════
@@ -441,7 +443,7 @@ async function fallbackCrossSearch(
 //  SINGLE-HOP DB QUERY (기존 로직 유지 + 유도형 응답)
 // ══════════════════════════════════════════════════════
 
-async function handleDbQuery(intent: Intent, entities: Record<string, string>, labId: string): Promise<string | null> {
+async function handleDbQuery(intent: Intent, entities: Record<string, string>, labId: string, userId: string, message: string): Promise<string | null> {
   switch (intent) {
     case 'query_project': {
       const projects = await prisma.project.findMany({ where: { labId } });
@@ -501,10 +503,12 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
       const members = await prisma.labMember.findMany({ where: { labId, active: true } });
       if (members.length === 0) return '등록된 구성원이 없습니다. 구성원 정보를 등록하시겠어요?';
 
-      const name = entities.name || entities.query || '';
+      const rawName = entities.name || entities.query || '';
+      // "김민수 학생" → "김민수" 로 정제 (역할 접미사 제거)
+      const name = rawName.replace(/\s*(학생|교수|박사|석사|연구원|인턴|포닥)$/, '').trim();
       if (name) {
         const matched = members.filter(m =>
-          m.name.includes(name) || (m.email && m.email.includes(name))
+          m.name.includes(name) || name.includes(m.name) || (m.email && m.email.includes(name))
         );
         if (matched.length > 0) {
           trackAccess('labMember', matched.map(m => m.id)).catch(() => {});
@@ -523,7 +527,7 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
 
     case 'query_meeting': {
       const meetings = await prisma.meeting.findMany({
-        where: { userId: labId },
+        where: { userId },
         orderBy: { createdAt: 'desc' },
         take: 5,
       });
@@ -578,6 +582,29 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
           `${i + 1}. [${item.type}] **${item.name}**\n   신뢰도: ${(item.confidence * 100).toFixed(0)}% | ${item.ageMonths}개월 전 등록`
         ).join('\n') +
         '\n\n💡 정보를 확인하셨다면 "OO 정보 최신 확인" 이라고 말씀해 주세요.';
+    }
+
+    case 'fallback_search': {
+      // Intent 분류 실패 시 DB 범용 검색 우선 시도
+      const allMembers = await prisma.labMember.findMany({ where: { labId, active: true } });
+      const allProjects = await prisma.project.findMany({ where: { labId } });
+      const allMemos = await prisma.memo.findMany({ where: { labId }, take: 20, orderBy: { createdAt: 'desc' } });
+
+      const words = message.replace(/[?？을를이가에서의로는은]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+      const results: string[] = [];
+
+      for (const word of words) {
+        const matchedM = allMembers.filter(m => m.name.includes(word));
+        const matchedP = allProjects.filter(p => p.name.includes(word) || p.funder?.includes(word));
+        if (matchedM.length) results.push(`👤 구성원: ${matchedM.map(m => `${m.name}(${m.role})`).join(', ')}`);
+        if (matchedP.length) results.push(`📋 과제: ${matchedP.map(p => p.name).join(', ')}`);
+      }
+
+      if (results.length > 0) {
+        return `다음과 관련된 정보를 찾았습니다:\n\n${results.join('\n')}`;
+      }
+      // DB에서도 못 찾으면 null → general_chat으로 이동
+      return null;
     }
 
     default:
@@ -772,9 +799,9 @@ export async function brainRoutes(app: FastifyInstance) {
       if (intent === 'multi_hop') {
         // 멀티홉 체이닝 실행
         dbResult = await executeMultiHopQuery(message, entities, hops, lab.id);
-      } else if (['query_project', 'query_publication', 'query_member', 'query_meeting', 'query_stale'].includes(intent)) {
-        // 단일홉 조회 (메타기억 포함)
-        dbResult = await handleDbQuery(intent, entities, lab.id);
+      } else if (['query_project', 'query_publication', 'query_member', 'query_meeting', 'query_stale', 'fallback_search'].includes(intent)) {
+        // 단일홉 조회 (메타기억 포함) + 범용 검색
+        dbResult = await handleDbQuery(intent, entities, lab.id, userId, message);
       }
     }
 
