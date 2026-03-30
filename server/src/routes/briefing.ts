@@ -16,6 +16,7 @@ import { basePrismaClient } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { aiRateLimiter } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
+import { getTodayEvents } from '../services/calendar.js';
 
 // ── Schemas ──────────────────────────────────────
 const briefingQuerySchema = z.object({
@@ -50,6 +51,7 @@ interface BriefingResponse {
     newPapers: number;
     pendingCaptures: number;
     upcomingMeetings: number;
+    calendarEvents?: number;
   };
 }
 
@@ -243,6 +245,28 @@ async function getTodayMeetings(userId: string): Promise<BriefingItem[]> {
   return items;
 }
 
+// ── Helper: Google Calendar 오늘 일정 ──────────────
+async function getCalendarEvents(userId: string): Promise<BriefingItem[]> {
+  const items: BriefingItem[] = [];
+  try {
+    const events = await getTodayEvents(userId);
+    for (const e of events) {
+      const startTime = e.start.includes('T')
+        ? new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        : '종일';
+      items.push({
+        type: 'meeting', // 캘린더 일정도 meeting 타입으로 분류
+        id: e.id,
+        priority: 'important',
+        title: e.title,
+        summary: `${startTime}${e.location ? ` · ${e.location}` : ''}`,
+        metadata: { source: 'google-calendar', htmlLink: e.htmlLink, allDay: e.allDay },
+      });
+    }
+  } catch { /* ignore */ }
+  return items;
+}
+
 // ── Routes ──────────────────────────────────────
 export async function briefingRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authMiddleware);
@@ -255,16 +279,17 @@ export async function briefingRoutes(app: FastifyInstance) {
     const userId = request.userId!;
     const labId = request.labId;
 
-    // 모든 데이터 소스를 병렬 수집
-    const [emails, papers, captures, meetings] = await Promise.all([
+    // 모든 데이터 소스를 병렬 수집 (캘린더 포함)
+    const [emails, papers, captures, meetings, calendarEvents] = await Promise.all([
       getEmailSummary(userId),
       labId ? getPaperAlerts(labId) : Promise.resolve([]),
       getPendingCaptures(userId),
       getTodayMeetings(userId),
+      getCalendarEvents(userId),
     ]);
 
     // 전체 항목 합치기
-    const allItems = [...emails, ...papers, ...captures, ...meetings];
+    const allItems = [...emails, ...papers, ...captures, ...meetings, ...calendarEvents];
 
     // 우선순위별 분류
     const urgent = allItems.filter(i => i.priority === 'urgent');
@@ -281,7 +306,8 @@ export async function briefingRoutes(app: FastifyInstance) {
         totalEmails: emails.length,
         newPapers: papers.length,
         pendingCaptures: captures.length,
-        upcomingMeetings: meetings.length,
+        upcomingMeetings: meetings.length + calendarEvents.length,
+        calendarEvents: calendarEvents.length,
       },
     };
 

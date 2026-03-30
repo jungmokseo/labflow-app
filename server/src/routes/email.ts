@@ -913,13 +913,28 @@ export async function emailRoutes(app: FastifyInstance) {
         });
       }
 
-      // 🔗 비동기 지식 그래프 관계 추출 (이메일 발신자↔주제↔키워드)
+      // 🔗 비동기 지식 그래프 관계 추출
       const emailGraphText = briefings
-        .slice(0, 10) // 최대 10개만
+        .slice(0, 10)
         .map((b: any) => `${b.senderName || b.sender}: ${b.subject} — ${b.summary || ''}`)
         .join('\n');
       if (emailGraphText.length > 20) {
         buildGraphFromText(userId, emailGraphText, 'email').catch(() => {});
+      }
+
+      // 📅 일정 메일에서 이벤트 감지 → pending events
+      const scheduleEmails = briefings.filter((b: any) => b.category === 'schedule');
+      if (scheduleEmails.length > 0) {
+        import('../services/calendar.js').then(({ detectEventsFromText }) => {
+          const schedText = scheduleEmails.map((b: any) => `${b.subject}: ${b.summary}`).join('\n');
+          detectEventsFromText(schedText, 'email', 'briefing-' + now.toISOString().split('T')[0])
+            .then(async (events) => {
+              const { savePendingEvent } = await import('./calendar.js');
+              for (const evt of events) {
+                await savePendingEvent(user!.id, request.labId, evt);
+              }
+            });
+        }).catch(() => {});
       }
 
       // 📦 브리핑 히스토리 저장 (Memo에 JSON 형태로)

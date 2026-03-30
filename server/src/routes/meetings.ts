@@ -502,7 +502,7 @@ export async function meetingRoutes(app: FastifyInstance) {
         },
       });
 
-      // 🔗 비동기 지식 그래프 관계 추출 (응답 지연 없음)
+      // 🔗 비동기 지식 그래프 관계 추출
       const graphText = [
         result.title,
         ...result.agenda,
@@ -510,6 +510,20 @@ export async function meetingRoutes(app: FastifyInstance) {
         ...result.actionItems,
       ].join('\n');
       buildGraphFromText(userId, graphText, 'meeting').catch(() => {});
+
+      // 📅 일정 감지 → pending events (비동기, 응답 지연 없음)
+      const scheduleText = [...result.nextSteps, ...result.actionItems].join('\n');
+      if (scheduleText.length > 10) {
+        import('../services/calendar.js').then(({ detectEventsFromText }) =>
+          detectEventsFromText(scheduleText, 'meeting', meeting.id)
+            .then(async (events) => {
+              const { savePendingEvent } = await import('./calendar.js');
+              for (const evt of events) {
+                await savePendingEvent(user.id, request.labId, evt);
+              }
+            })
+        ).catch(() => {});
+      }
 
       return reply.code(201).send({
         success: true,

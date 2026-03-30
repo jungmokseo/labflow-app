@@ -512,6 +512,56 @@ export async function applySeedPaperResults(data: { keywords?: string[]; terms?:
   });
 }
 
+// ── 캘린더 ──────────────────────────────────────
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  location?: string;
+  allDay: boolean;
+  htmlLink?: string;
+}
+
+export interface PendingEvent {
+  id: string;
+  title: string;
+  date: string;
+  time?: string;
+  location?: string;
+  description?: string;
+  source: string;
+  confidence: number;
+  createdAt: string;
+}
+
+export async function getCalendarToday() {
+  return apiFetch<{ success: boolean; events: CalendarEvent[]; count: number }>('/api/calendar/today');
+}
+
+export async function getCalendarWeek() {
+  return apiFetch<{ success: boolean; events: CalendarEvent[]; count: number }>('/api/calendar/week');
+}
+
+export async function getPendingEvents() {
+  return apiFetch<{ success: boolean; pending: PendingEvent[]; count: number }>('/api/calendar/pending');
+}
+
+export async function approvePendingEvent(id: string) {
+  return apiFetch<{ success: boolean; eventId: string; htmlLink: string; message: string }>(`/api/calendar/pending/${id}/approve`, { method: 'POST' });
+}
+
+export async function dismissPendingEvent(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/calendar/pending/${id}/dismiss`, { method: 'POST' });
+}
+
+export async function createCalendarEventApi(data: { title: string; date: string; time?: string; location?: string; description?: string }) {
+  return apiFetch<{ success: boolean; eventId: string; htmlLink: string }>('/api/calendar/create', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 // ── 헬스 체크 ──────────────────────────────────────
 export async function checkHealth() {
   try {
