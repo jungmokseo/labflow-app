@@ -497,6 +497,7 @@ export async function emailRoutes(app: FastifyInstance) {
       const oauth2Client = createOAuth2Client();
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
+        prompt: 'consent',  // 항상 새 refresh_token 발급 (재연동 시 필수)
         scope: [
           'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose',
