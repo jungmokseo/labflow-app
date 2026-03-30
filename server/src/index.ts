@@ -17,7 +17,7 @@ import { meetingRoutes } from './routes/meetings.js';
 import { voiceChatbotRoutes } from './routes/voice-chatbot.js';
 import { knowledgeGraphRoutes } from './routes/knowledge-graph.js';
 import { resetRoutes } from './routes/reset.js';
-import { brainRoutes } from './routes/brain.js';
+import { brainRoutes, archiveOldSessions } from './routes/brain.js';
 import { labProfileRoutes } from './routes/lab-profile.js';
 import { paperAlertRoutes, startPaperAlertCron } from './routes/paper-alerts.js';
 import { paperRoutes } from './routes/papers.js';
@@ -97,8 +97,9 @@ async function start() {
           const app = await buildApp();
           await app.listen({ port: env.PORT, host: env.HOST });
 
-      // 논문 알림 cron 시작
+      // 논문 알림 cron + 세션 아카이브
       startPaperAlertCron();
+      setInterval(() => archiveOldSessions().catch(() => {}), 24 * 60 * 60 * 1000);
 
       console.log(`
       ╔═══════════════════════════════════════════════╗

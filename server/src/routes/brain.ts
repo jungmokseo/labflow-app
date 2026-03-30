@@ -913,6 +913,26 @@ async function handleToolMessage(
 //  ROUTES
 // ══════════════════════════════════════════════════════
 
+/**
+ * 30일 이상 된 자유 대화 세션을 자동 아카이브 (삭제 아님)
+ */
+export async function archiveOldSessions() {
+  try {
+    const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const result = await prisma.channel.updateMany({
+      where: {
+        tool: 'general',
+        archived: false,
+        lastMessageAt: { lt: threshold },
+      },
+      data: { archived: true },
+    });
+    if (result.count > 0) {
+      console.log(`📦 Archived ${result.count} old free chat sessions`);
+    }
+  } catch { /* ignore */ }
+}
+
 export async function brainRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authMiddleware);
   app.addHook('onRequest', aiRateLimiter);
