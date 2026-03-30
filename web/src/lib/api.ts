@@ -253,7 +253,7 @@ export async function seedKnowledgeGraph() {
 }
 
 // ── 미니브레인 (Brain Chat) ─────────────────────────
-export type BrainTool = 'general' | 'email' | 'papers' | 'meeting' | 'calendar' | 'memo' | 'members' | 'projects' | 'search';
+export type BrainTool = 'general' | 'email' | 'papers' | 'meeting' | 'calendar';
 
 export async function brainChat(message: string, channelId?: string, tool?: BrainTool) {
   return apiFetch<{ response: string; channelId: string; intent: string; tool?: string; metadata?: any }>('/api/brain/chat', {

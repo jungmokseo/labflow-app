@@ -3,16 +3,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { brainChat, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage, type BrainTool } from '@/lib/api';
 
-const TOOLS: Array<{ key: BrainTool; icon: string; label: string }> = [
-  { key: 'general', icon: '🧠', label: '자유 대화' },
-  { key: 'email', icon: '📧', label: '이메일' },
-  { key: 'papers', icon: '📚', label: '논문' },
-  { key: 'meeting', icon: '🎙️', label: '미팅' },
-  { key: 'calendar', icon: '📅', label: '캘린더' },
-  { key: 'memo', icon: '📝', label: '메모' },
-  { key: 'members', icon: '👥', label: '구성원' },
-  { key: 'projects', icon: '📋', label: '과제' },
-  { key: 'search', icon: '🔍', label: '검색' },
+const TOOLS: Array<{ key: BrainTool; icon: string; label: string; persistent: boolean }> = [
+  { key: 'general', icon: '🧠', label: '자유 대화', persistent: false },
+  { key: 'email', icon: '📧', label: '이메일', persistent: true },
+  { key: 'papers', icon: '📚', label: '논문', persistent: true },
+  { key: 'meeting', icon: '🎙️', label: '미팅', persistent: true },
+  { key: 'calendar', icon: '📅', label: '캘린더', persistent: true },
 ];
 
 export default function BrainPage() {
@@ -174,7 +170,11 @@ export default function BrainPage() {
                 {TOOLS.map(t => (
                   <button
                     key={t.key}
-                    onClick={() => setActiveTool(t.key)}
+                    onClick={() => {
+                      setActiveTool(t.key);
+                      // 영구 세션 도구는 channelId를 서버가 관리 → null로 리셋
+                      if (t.persistent) setActiveChannelId(null);
+                    }}
                     className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
                       activeTool === t.key
                         ? 'bg-primary text-white'
@@ -183,6 +183,7 @@ export default function BrainPage() {
                   >
                     <span>{t.icon}</span>
                     <span>{t.label}</span>
+                    {t.persistent && <span className="w-1.5 h-1.5 rounded-full bg-green-400 ml-0.5" title="영구 세션" />}
                   </button>
                 ))}
               </div>

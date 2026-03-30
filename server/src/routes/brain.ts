@@ -99,15 +99,11 @@ const chatSchema = z.object({
   channelId: z.string().optional(),
   message: z.string().min(1),
   tool: z.enum([
-    'general',       // 기본 대화 (intent 자동 분류)
-    'email',         // 📧 이메일 브리핑
-    'papers',        // 📚 논문 검색/알림
-    'meeting',       // 🎙️ 미팅 관련
-    'calendar',      // 📅 캘린더/일정
-    'memo',          // 📝 메모 저장
-    'members',       // 👥 구성원 조회
-    'projects',      // 📋 과제 조회
-    'search',        // 🔍 범용 검색
+    'general',       // 기본 대화 (intent 자동 분류 + 즉시 액션 포함)
+    'email',         // 📧 이메일 브리핑 (영구 세션)
+    'papers',        // 📚 논문 검색/알림 (영구 세션)
+    'meeting',       // 🎙️ 미팅 관련 (영구 세션)
+    'calendar',      // 📅 캘린더/일정 (영구 세션)
   ]).default('general'),
 });
 
@@ -797,7 +793,7 @@ async function generateSessionTitle(messages: Array<{ role: string; content: str
 //  TOOL-SPECIFIC HANDLERS
 // ══════════════════════════════════════════════════════
 
-type ToolName = 'email' | 'papers' | 'meeting' | 'calendar' | 'memo' | 'members' | 'projects' | 'search';
+type ToolName = 'email' | 'papers' | 'meeting' | 'calendar';
 
 async function handleToolMessage(
   tool: ToolName,
@@ -908,79 +904,6 @@ async function handleToolMessage(
       return { response: result.response.text(), intent: 'calendar_tool', metadata: { todayCount: todayEvents.length, weekCount: weekEvents.length, pendingCount: pending.length } };
     }
 
-    case 'memo': {
-      // 메모 저장 (자동 태깅)
-      const { autoTagByRules } = await import('../services/auto-tagger.js');
-      const tags = autoTagByRules(message);
-      const title = message.length > 60 ? message.slice(0, 57) + '...' : message;
-      if (labIdStr) {
-        await prisma.memo.create({
-          data: { labId: labIdStr, userId, title, content: message, source: 'chat-tool', tags },
-        });
-      }
-      return { response: `메모가 저장되었습니다.\n태그: ${tags.join(', ')}`, intent: 'memo_tool', metadata: { tags } };
-    }
-
-    case 'members': {
-      if (!labIdStr) return { response: '연구실이 설정되지 않았습니다.', intent: 'members_tool' };
-      const members = await prisma.labMember.findMany({
-        where: { labId: labIdStr, active: true },
-        orderBy: { name: 'asc' },
-      });
-      const memberList = members.map(m => `- ${m.name} (${m.role})${m.email ? ` ${m.email}` : ''}${m.team ? ` [${m.team}]` : ''}`).join('\n');
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `구성원 정보를 참고하여 답변하세요.\n\n구성원 목록 (${members.length}명):\n${memberList}` }] },
-      });
-      return { response: result.response.text(), intent: 'members_tool' };
-    }
-
-    case 'projects': {
-      if (!labIdStr) return { response: '연구실이 설정되지 않았습니다.', intent: 'projects_tool' };
-      const projects = await prisma.project.findMany({ where: { labId: labIdStr } });
-      const projList = projects.map(p => `- ${p.name}${p.funder ? ` (${p.funder})` : ''}${p.number ? ` [${p.number}]` : ''}`).join('\n');
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `과제 정보를 참고하여 답변하세요.\n\n과제 목록 (${projects.length}건):\n${projList}` }] },
-      });
-      return { response: result.response.text(), intent: 'projects_tool' };
-    }
-
-    case 'search': {
-      // 범용 검색 (모든 DB)
-      if (!labIdStr) return { response: '연구실이 설정되지 않았습니다.', intent: 'search_tool' };
-      const [members, projects, pubs, memos] = await Promise.all([
-        prisma.labMember.findMany({ where: { labId: labIdStr, active: true } }),
-        prisma.project.findMany({ where: { labId: labIdStr } }),
-        prisma.publication.findMany({ where: { labId: labIdStr } }),
-        prisma.memo.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 20 }),
-      ]);
-
-      const searchContext = [
-        `구성원 ${members.length}명: ${members.map(m => m.name).join(', ')}`,
-        `과제 ${projects.length}건: ${projects.map(p => p.name).join(', ')}`,
-        `논문 ${pubs.length}편`,
-        `메모 ${memos.length}건`,
-      ].join('\n');
-
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `연구실 데이터를 검색하여 답변하세요.\n\n${searchContext}` }] },
-      });
-      return { response: result.response.text(), intent: 'search_tool' };
-    }
-
     default:
       return { response: '알 수 없는 도구입니다.', intent: 'unknown_tool' };
   }
@@ -1006,11 +929,9 @@ export async function brainRoutes(app: FastifyInstance) {
     let isNewSession = false;
 
     if (tool !== 'general') {
-      // 도구별 영구 세션: 기존 세션 찾기 or 생성
+      // 4개 도구별 영구 세션: 기존 세션 찾기 or 생성
       const TOOL_NAMES: Record<string, string> = {
-        email: '📧 이메일', papers: '📚 논문', meeting: '🎙️ 미팅',
-        calendar: '📅 캘린더', memo: '📝 메모', members: '👥 구성원',
-        projects: '📋 과제', search: '🔍 검색',
+        email: '📧 이메일', papers: '📚 논문', meeting: '🎙️ 미팅', calendar: '📅 캘린더',
       };
       let toolChannel = await prisma.channel.findFirst({
         where: { userId, tool, archived: false },
