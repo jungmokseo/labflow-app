@@ -425,7 +425,41 @@ export interface PaperAlertResult {
 }
 
 export async function getPaperAlerts() {
-  return apiFetch<{ success: boolean; data: PaperAlertSetting[]; alerts?: PaperAlertSetting[]; availableJournals?: string[] }>('/api/papers/alerts');
+  return apiFetch<{
+    success: boolean; data: PaperAlertSetting[];
+    alerts?: PaperAlertSetting[]; availableJournals?: string[];
+    journalCategories?: Record<string, string[]>;
+    researchThemes?: Array<{ name: string; keywords: string[] }>;
+  }>('/api/papers/alerts');
+}
+
+export async function getJournalFields() {
+  return apiFetch<{
+    fields: string[];
+    journalsByField: Record<string, Array<{ name: string; publisher: string }>>;
+    totalJournals: number;
+  }>('/api/papers/journals/fields');
+}
+
+export async function searchJournals(query: string) {
+  return apiFetch<{
+    results: Array<{ name: string; issn: string | null; publisher: string | null; rssUrl: string | null; citedByCount: number }>;
+    query: string;
+  }>(`/api/papers/journals/search?q=${encodeURIComponent(query)}`);
+}
+
+export async function addCustomJournal(data: { name: string; rssUrl: string; publisher?: string }) {
+  return apiFetch<{ success: boolean; sampleCount: number }>('/api/papers/journals/custom', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function validateRssUrl(rssUrl: string) {
+  return apiFetch<{ valid: boolean; itemCount: number; sampleTitle: string | null }>('/api/papers/journals/validate', {
+    method: 'POST',
+    body: JSON.stringify({ rssUrl }),
+  });
 }
 
 export async function savePaperAlert(data: { keywords: string[]; journals: string[]; schedule?: string }) {

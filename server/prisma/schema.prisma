@@ -369,15 +369,16 @@ model Memo {
 
 // ── 논문 알림 설정 ───────────────────────────────────────
 model PaperAlert {
-  id          String    @id @default(cuid())
-  labId       String    @map("lab_id")
-  keywords    String[]
-  journals    String[]
-  schedule    String    @default("weekly")
-  active      Boolean   @default(true)
-  lastRunAt   DateTime? @map("last_run_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  labId        String    @map("lab_id")
+  keywords     String[]
+  journals     String[]                          // built-in journal names
+  customFeeds  Json?     @map("custom_feeds")    // [{name, rssUrl, publisher?}]
+  schedule     String    @default("weekly")
+  active       Boolean   @default(true)
+  lastRunAt    DateTime? @map("last_run_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   lab         Lab              @relation(fields: [labId], references: [id], onDelete: Cascade)
   results     PaperAlertResult[]
