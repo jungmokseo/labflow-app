@@ -255,11 +255,49 @@ export async function seedKnowledgeGraph() {
 // ── 미니브레인 (Brain Chat) ─────────────────────────
 export type BrainTool = 'general' | 'email' | 'papers' | 'meeting' | 'calendar';
 
-export async function brainChat(message: string, channelId?: string, tool?: BrainTool) {
+export async function brainChat(message: string, channelId?: string, tool?: BrainTool, fileId?: string) {
   return apiFetch<{ response: string; channelId: string; intent: string; tool?: string; metadata?: any }>('/api/brain/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, channelId, tool: tool || 'general' }),
+    body: JSON.stringify({ message, channelId, tool: tool || 'general', fileId }),
   });
+}
+
+export interface UploadResult {
+  success: boolean;
+  fileId: string;
+  type: string;
+  filename: string;
+  suggestedAction: string;
+  message: string;
+  preview: string;
+  structured?: any;
+  metadata?: any;
+}
+
+export async function brainUpload(file: File): Promise<UploadResult> {
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers: Record<string, string> = {};
+  if (tokenGetter) {
+    const token = await tokenGetter();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+
+  const res = await fetch(`${API_BASE}/api/brain/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || `Upload Error: ${res.status}`);
+  }
+
+  return res.json();
 }
 
 export async function getBrainChannels() {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { brainChat, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage, type BrainTool } from '@/lib/api';
+import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage, type BrainTool, type UploadResult } from '@/lib/api';
 
 const TOOLS: Array<{ key: BrainTool; icon: string; label: string; persistent: boolean }> = [
   { key: 'general', icon: '🧠', label: '자유 대화', persistent: false },
@@ -42,6 +42,9 @@ export default function BrainPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any>(null);
   const [tab, setTab] = useState<'chat' | 'search'>('chat');
+  const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadChannels(); }, []);
@@ -93,15 +96,43 @@ export default function BrainPage() {
     loadMessages(ch.id);
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const result = await brainUpload(file);
+      setUploadedFile(result);
+      // 파일 처리 결과를 메시지로 표시
+      setMessages(prev => [...prev, {
+        id: `file-${Date.now()}`,
+        role: 'assistant',
+        content: result.message,
+        createdAt: new Date().toISOString(),
+      }]);
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        id: `err-${Date.now()}`,
+        role: 'assistant',
+        content: `파일 처리 실패: ${err.message}`,
+        createdAt: new Date().toISOString(),
+      }]);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
   async function handleSend() {
     if (!input.trim() || loading) return;
     const msg = input;
+    const currentFileId = uploadedFile?.fileId;
     setInput('');
     setMessages(prev => [...prev, { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() }]);
     setLoading(true);
 
     try {
-      const result = await brainChat(msg, activeChannelId || undefined, activeTool);
+      const result = await brainChat(msg, activeChannelId || undefined, activeTool, currentFileId);
       setMessages(prev => [...prev, {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -309,8 +340,27 @@ export default function BrainPage() {
                   </button>
                 ))}
               </div>
+              {/* 업로드된 파일 표시 */}
+              {uploadedFile && (
+                <div className="px-4 pt-2 flex items-center gap-2">
+                  <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
+                    📎 {uploadedFile.filename}
+                    <button onClick={() => setUploadedFile(null)} className="ml-1 text-blue-400/50 hover:text-blue-400">✕</button>
+                  </span>
+                </div>
+              )}
               {/* 입력 */}
               <div className="px-4 pb-4 pt-2 flex gap-2">
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden"
+                  accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="px-3 py-3 bg-bg-input text-text-muted rounded-xl hover:text-white hover:bg-bg-input/80 transition-colors disabled:opacity-50"
+                  title="파일 업로드"
+                >
+                  {uploading ? '⏳' : '📎'}
+                </button>
                 <input
                   value={input}
                   onChange={e => setInput(e.target.value)}
