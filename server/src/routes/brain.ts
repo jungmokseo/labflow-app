@@ -135,6 +135,9 @@ type Intent =
   | 'query_stale'   // 오래된/신뢰도 낮은 정보 조회 (메타기억)
   | 'save_memo' | 'search_memory' | 'general_chat' | 'add_dict'
   | 'capture_create' | 'capture_list' | 'capture_complete'
+  | 'daily_brief'   // /today — 오늘 우선순위 브리핑
+  | 'emerge'        // /emerge — 숨겨진 연결 발견
+  | 'weekly_review'  // /weekly — 주간 리뷰
   | 'fallback_search'; // Intent 분류 실패 시 DB 범용 검색
 
 interface ClassifiedIntent {
@@ -174,6 +177,9 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 - capture_create: 빠른 캡처 생성 (메모/태스크/아이디어 기록 요청). 예: "이거 메모해줘", "할 일 추가", "아이디어 저장"
 - capture_list: 캡처 목록 조회 요청. 예: "캡처 보여줘", "할 일 목록", "아이디어 뭐 있어?"
 - capture_complete: 캡처 완료 처리. 예: "이거 완료", "다 했어", "태스크 끝"
+- daily_brief: 오늘 브리핑/우선순위 요청. 예: "오늘 할 일", "today", "오늘 브리핑", "오늘 뭐해야 해?"
+- emerge: 숨겨진 연결/패턴 발견 요청. 예: "아이디어 연결 찾아줘", "패턴 찾아", "emerge", "숨겨진 연결", "연구 교차점"
+- weekly_review: 주간 리뷰/정리 요청. 예: "이번 주 정리", "주간 리뷰", "이번주 뭐 했지?", "weekly"
 - general_chat: 일반 대화
 
 multi_hop인 경우 "hops" 배열을 추가하세요:
@@ -1253,6 +1259,20 @@ export async function brainRoutes(app: FastifyInstance) {
       } else {
         dbResult = '일치하는 캡처를 찾을 수 없습니다.';
       }
+    }
+
+    // 4-2. Thinking Commands (daily_brief, emerge, weekly_review)
+    if (intent === 'daily_brief') {
+      const { dailyBrief } = await import('../services/knowledge-graph.js');
+      dbResult = await dailyBrief(userId);
+    }
+    if (intent === 'emerge') {
+      const { emergeInsights } = await import('../services/knowledge-graph.js');
+      dbResult = await emergeInsights(userId);
+    }
+    if (intent === 'weekly_review') {
+      const { weeklyReview } = await import('../services/knowledge-graph.js');
+      dbResult = await weeklyReview(userId);
     }
 
     // 5. 3층 컨텍스트 빌드

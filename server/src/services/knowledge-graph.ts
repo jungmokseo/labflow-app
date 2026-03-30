@@ -430,6 +430,334 @@ JSON 배열로만 응답:
   }
 }
 
+// ══════════════════════════════════════════════════════
+//  THINKING COMMANDS — 옵시디언 스타일 인사이트 서피싱
+// ══════════════════════════════════════════════════════
+
+/**
+ * /today — 오늘 할 일 우선순위 브리핑
+ * 캘린더 + 이메일 긴급 + 논문 알림 + 미완료 액션아이템 + 최근 메모를 통합
+ */
+export async function dailyBrief(userId: string): Promise<string> {
+  const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
+  const labId = lab?.id;
+
+  // 병렬로 모든 데이터 수집
+  const [
+    todayMeetings,
+    recentCaptures,
+    pendingEvents,
+    recentMemos,
+    recentAlerts,
+    recentBriefing,
+    unreadAlerts,
+  ] = await Promise.all([
+    // 오늘 미팅
+    prisma.meeting.findMany({
+      where: { userId, createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    // 미완료 캡처 (태스크)
+    prisma.capture.findMany({
+      where: { userId, status: 'active', category: 'TASK' },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
+      take: 10,
+    }),
+    // 대기 중 캘린더 일정
+    prisma.memo.findMany({
+      where: { userId, source: 'pending-event', tags: { has: 'pending' } },
+      take: 5,
+    }),
+    // 최근 메모 (오늘)
+    prisma.memo.findMany({
+      where: { userId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    }),
+    // 최신 논문 알림 (읽지 않은 것)
+    labId ? prisma.paperAlertResult.findMany({
+      where: { alert: { labId }, read: false },
+      orderBy: [{ stars: 'desc' }, { createdAt: 'desc' }],
+      take: 5,
+    }) : [],
+    // 최근 이메일 브리핑
+    prisma.memo.findFirst({
+      where: { userId, source: 'email-briefing' },
+      orderBy: { createdAt: 'desc' },
+    }),
+    // 안 읽은 논문 알림 수
+    labId ? prisma.paperAlertResult.count({
+      where: { alert: { labId }, read: false },
+    }) : 0,
+  ]);
+
+  // 이메일 브리핑에서 긴급/대응필요 추출
+  let urgentEmails = 0;
+  let actionEmails = 0;
+  if (recentBriefing?.content) {
+    try {
+      const data = JSON.parse(recentBriefing.content);
+      const items = Array.isArray(data) ? data : data.briefings || [];
+      urgentEmails = items.filter((e: any) => e.category === 'urgent').length;
+      actionEmails = items.filter((e: any) => e.category === 'action-needed').length;
+    } catch { /* ignore */ }
+  }
+
+  // Gemini로 우선순위 브리핑 생성
+  const briefingData = `
+오늘 날짜: ${new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+
+[이메일] 긴급: ${urgentEmails}건, 대응필요: ${actionEmails}건
+${recentBriefing ? `마지막 브리핑: ${recentBriefing.createdAt.toLocaleString('ko-KR')}` : '브리핑 없음'}
+
+[미완료 태스크 ${recentCaptures.length}건]
+${recentCaptures.map((c, i) => `${i + 1}. [${c.priority}] ${c.summary || c.content.slice(0, 50)}`).join('\n') || '없음'}
+
+[대기 중 일정 ${pendingEvents.length}건]
+${pendingEvents.map(m => { try { const e = JSON.parse(m.content); return `- ${e.title} (${e.date})`; } catch { return ''; } }).filter(Boolean).join('\n') || '없음'}
+
+[오늘 미팅 ${todayMeetings.length}건]
+${todayMeetings.map(m => `- ${m.title}`).join('\n') || '없음'}
+
+[안 읽은 논문 알림 ${unreadAlerts}건]
+${recentAlerts.map(a => `- ${'★'.repeat(a.stars || 1)} ${a.title} (${a.journal})`).join('\n') || '없음'}
+
+[최근 메모 ${recentMemos.length}건]
+${recentMemos.map(m => `- ${m.title || m.content.slice(0, 40)}`).join('\n') || '없음'}
+`.trim();
+
+  try {
+    const result = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: `다음 정보를 바탕으로 오늘의 우선순위 브리핑을 작성하세요.
+
+규칙:
+1. 가장 긴급한 것부터 순서대로 정리
+2. 이메일 긴급 건이 있으면 최우선
+3. 마감이 가까운 태스크 강조
+4. 논문 알림 중 별 3개짜리는 꼭 언급
+5. 마지막에 "오늘의 포커스" 한 줄 제안
+6. 한국어로 작성, 이모지 사용
+
+${briefingData}` }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
+    });
+    return result.response.text();
+  } catch {
+    // fallback: raw data 반환
+    return `📋 **오늘의 브리핑**\n\n` +
+      (urgentEmails > 0 ? `⚠️ 긴급 이메일 ${urgentEmails}건\n` : '') +
+      (actionEmails > 0 ? `📝 대응필요 이메일 ${actionEmails}건\n` : '') +
+      (recentCaptures.length > 0 ? `\n✅ 미완료 태스크 ${recentCaptures.length}건\n${recentCaptures.map(c => `  - ${c.summary || c.content.slice(0, 50)}`).join('\n')}\n` : '') +
+      (unreadAlerts > 0 ? `\n📚 안 읽은 논문 ${unreadAlerts}건\n` : '') +
+      (pendingEvents.length > 0 ? `\n📅 대기 중 일정 ${pendingEvents.length}건\n` : '');
+  }
+}
+
+/**
+ * /emerge — 숨겨진 연결 발견 (weak tie surfacing)
+ * Knowledge Graph에서 약한 연결 + 최근 활동에서 반복 패턴을 찾아 인사이트 생성
+ */
+export async function emergeInsights(userId: string): Promise<string> {
+  const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
+  const labId = lab?.id;
+
+  // 1. Weak ties: weight가 낮지만 존재하는 연결 (의외의 연결)
+  const weakTies = await prisma.$queryRaw<Array<{
+    fromName: string; fromType: string; toName: string; toType: string;
+    relation: string; weight: number; evidence: string;
+  }>>`
+    SELECT fn.name as "fromName", fn.entity_type as "fromType",
+           tn.name as "toName", tn.entity_type as "toType",
+           ke.relation, ke.weight, ke.evidence
+    FROM knowledge_edges ke
+    JOIN knowledge_nodes fn ON ke.from_node_id = fn.id
+    JOIN knowledge_nodes tn ON ke.to_node_id = tn.id
+    WHERE fn.user_id = ${userId}
+      AND ke.weight <= 2
+      AND ke.weight >= 1
+    ORDER BY ke.updated_at DESC
+    LIMIT 15
+  `;
+
+  // 2. 고립 노드 중 최근 것 (아직 연결 안 된 새로운 개념)
+  const isolatedRecent = await prisma.$queryRaw<Array<{
+    name: string; entityType: string; createdAt: Date;
+  }>>`
+    SELECT kn.name, kn.entity_type as "entityType", kn.created_at as "createdAt"
+    FROM knowledge_nodes kn
+    WHERE kn.user_id = ${userId}
+      AND NOT EXISTS (SELECT 1 FROM knowledge_edges WHERE from_node_id = kn.id)
+      AND NOT EXISTS (SELECT 1 FROM knowledge_edges WHERE to_node_id = kn.id)
+    ORDER BY kn.created_at DESC
+    LIMIT 10
+  `;
+
+  // 3. 최근 2주간 반복 언급된 키워드 (대화 + 메모에서)
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const recentMessages = await prisma.message.findMany({
+    where: {
+      channel: { userId },
+      role: 'user',
+      createdAt: { gte: twoWeeksAgo },
+    },
+    select: { content: true },
+    take: 100,
+  });
+  const recentMemos = labId ? await prisma.memo.findMany({
+    where: { labId, createdAt: { gte: twoWeeksAgo } },
+    select: { content: true, title: true, tags: true },
+    take: 50,
+  }) : [];
+
+  // 4. 서로 다른 과제에서 공유되는 키워드 (교차점)
+  const projects = labId ? await prisma.project.findMany({
+    where: { labId },
+    select: { name: true, metadata: true },
+  }) : [];
+
+  // Gemini로 연결 분석
+  const analysisData = `
+[Weak Ties — 약한 연결 (의외의 관계)]
+${weakTies.length > 0
+    ? weakTies.map(t => `${t.fromName}(${t.fromType}) --${t.relation}--> ${t.toName}(${t.toType}) [weight:${t.weight}] "${t.evidence || ''}"`).join('\n')
+    : '약한 연결 없음'}
+
+[고립 노드 — 아직 연결되지 않은 개념]
+${isolatedRecent.map(n => `${n.name} (${n.entityType})`).join(', ') || '없음'}
+
+[최근 2주 대화 키워드]
+${recentMessages.map(m => m.content.slice(0, 100)).join(' | ').slice(0, 2000) || '대화 없음'}
+
+[최근 메모 태그]
+${recentMemos.flatMap(m => m.tags).join(', ') || '태그 없음'}
+
+[진행 중 과제]
+${projects.map(p => p.name).join(', ') || '과제 없음'}
+`.trim();
+
+  try {
+    const result = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: `당신은 연구 인사이트 발견 전문가입니다. 아래 데이터에서 숨겨진 연결과 새로운 가능성을 찾아주세요.
+
+분석 요청:
+1. **의외의 연결**: Weak tie 중에서 실제로 유용할 수 있는 연결을 찾으세요. 예: "A 과제의 센서 기술이 B 과제의 패키징 문제를 해결할 수 있음"
+2. **떠오르는 패턴**: 최근 대화/메모에서 반복적으로 등장하지만 아직 구체화되지 않은 아이디어
+3. **고립된 가치**: 아직 다른 개념과 연결되지 않았지만 잠재력이 있는 개념
+4. **교차 가능성**: 서로 다른 과제/분야 사이의 시너지 기회
+
+규칙:
+- 각 인사이트는 구체적이어야 함 (추상적인 조언 금지)
+- "~할 수 있습니다" 대신 "~해보는 건 어떨까요?" 형태로 제안
+- 3-5개 인사이트, 한국어, 이모지 사용
+- 가장 흥미로운 것부터 정렬
+
+${analysisData}` }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
+    });
+    return `🔮 **Emerge — 숨겨진 연결 발견**\n\n${result.response.text()}`;
+  } catch {
+    if (weakTies.length === 0 && isolatedRecent.length === 0) {
+      return '🔮 아직 충분한 데이터가 없습니다. 대화, 미팅, 논문이 쌓이면 숨겨진 연결을 찾아드립니다.';
+    }
+    return `🔮 **약한 연결 ${weakTies.length}개 발견**\n\n` +
+      weakTies.slice(0, 5).map(t => `• ${t.fromName} ↔ ${t.toName} (${t.relation})`).join('\n');
+  }
+}
+
+/**
+ * /weekly — 이번 주 활동 리뷰 + 다음 주 제안
+ */
+export async function weeklyReview(userId: string): Promise<string> {
+  const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
+  const labId = lab?.id;
+
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [
+    weekMeetings,
+    weekCaptures,
+    weekMemos,
+    weekMessages,
+    weekAlerts,
+    completedCaptures,
+    graphGrowth,
+  ] = await Promise.all([
+    prisma.meeting.findMany({
+      where: { userId, createdAt: { gte: weekAgo } },
+      select: { title: true, summary: true, actionItems: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.capture.findMany({
+      where: { userId, createdAt: { gte: weekAgo }, status: 'active' },
+      select: { summary: true, category: true, priority: true, content: true },
+    }),
+    labId ? prisma.memo.findMany({
+      where: { labId, createdAt: { gte: weekAgo } },
+      select: { title: true, source: true, tags: true, content: true },
+    }) : [],
+    prisma.message.count({
+      where: { channel: { userId }, createdAt: { gte: weekAgo } },
+    }),
+    labId ? prisma.paperAlertResult.findMany({
+      where: { alert: { labId }, createdAt: { gte: weekAgo } },
+      orderBy: { stars: 'desc' },
+      take: 5,
+    }) : [],
+    prisma.capture.count({
+      where: { userId, completedAt: { gte: weekAgo } },
+    }),
+    // Knowledge Graph 성장
+    Promise.all([
+      prisma.knowledgeNode.count({ where: { userId, createdAt: { gte: weekAgo } } }),
+      prisma.knowledgeEdge.count({ where: { fromNode: { userId }, createdAt: { gte: weekAgo } } }),
+    ]),
+  ]);
+
+  const [newNodes, newEdges] = graphGrowth;
+
+  const weekData = `
+기간: ${weekAgo.toLocaleDateString('ko-KR')} ~ ${new Date().toLocaleDateString('ko-KR')}
+
+[미팅 ${weekMeetings.length}건]
+${weekMeetings.map(m => `- ${m.title} (${m.createdAt.toLocaleDateString('ko-KR')})\n  액션아이템: ${m.actionItems.join(', ') || '없음'}`).join('\n') || '없음'}
+
+[캡처 활동] 새로 생성: ${weekCaptures.length}건, 완료: ${completedCaptures}건
+${weekCaptures.slice(0, 5).map(c => `- [${c.category}/${c.priority}] ${c.summary || c.content.slice(0, 50)}`).join('\n') || '없음'}
+
+[메모 ${weekMemos.length}건]
+${weekMemos.slice(0, 5).map(m => `- [${m.source}] ${m.title || m.content.slice(0, 40)}`).join('\n') || '없음'}
+
+[AI 대화] ${weekMessages}회 대화
+
+[논문 알림 하이라이트]
+${weekAlerts.map(a => `- ${'★'.repeat(a.stars || 1)} ${a.title}`).join('\n') || '없음'}
+
+[Knowledge Graph 성장] +${newNodes} 노드, +${newEdges} 관계
+`.trim();
+
+  try {
+    const result = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: `다음 데이터를 바탕으로 주간 리뷰를 작성하세요.
+
+규칙:
+1. "이번 주 요약" — 핵심 활동 3-5줄
+2. "미완료 사항" — 아직 처리 안 된 액션아이템이나 태스크
+3. "이번 주 하이라이트" — 가장 의미 있었던 활동
+4. "다음 주 제안" — 데이터 기반으로 다음 주에 집중할 것 2-3개 제안
+5. 한국어, 이모지, 간결하게
+
+${weekData}` }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
+    });
+    return `📊 **주간 리뷰**\n\n${result.response.text()}`;
+  } catch {
+    return `📊 **주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
+      `미팅: ${weekMeetings.length}건 | 캡처: ${weekCaptures.length}건 (완료: ${completedCaptures}건) | 대화: ${weekMessages}회\n` +
+      `Knowledge Graph: +${newNodes} 노드, +${newEdges} 관계`;
+  }
+}
+
 // ── 초기 시드: 기존 데이터에서 그래프 생성 ────────────
 export async function seedGraphFromExistingData(userId: string): Promise<{ nodesCreated: number; edgesCreated: number }> {
   let nodesCreated = 0;
