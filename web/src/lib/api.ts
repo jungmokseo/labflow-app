@@ -120,7 +120,8 @@ export async function getEmailStatus() {
 }
 
 export async function getEmailAuthUrl() {
-  return apiFetch<{ success: boolean; url: string }>('/api/email/auth/url');
+  const res = await apiFetch<{ success: boolean; authUrl: string }>('/api/email/auth/url');
+  return { ...res, url: res.authUrl };
 }
 
 export async function getEmailBriefing(maxResults = 15) {
@@ -242,7 +243,25 @@ export async function createBrainChannel(type = 'BRAIN', name?: string) {
 }
 
 export async function getBrainMessages(channelId: string) {
-  return apiFetch<{ data: Array<{ id: string; role: string; content: string; createdAt: string }> }>(`/api/brain/channels/${channelId}`);
+  return apiFetch<{ data: BrainMessage[] }>(`/api/brain/channels/${channelId}`);
+}
+
+// Alias for backward compat
+export const getChannelMessages = getBrainMessages;
+
+// ── Brain 타입 ──────────────────────────────────
+export interface BrainChannel {
+  id: string;
+  name: string;
+  type: string;
+  createdAt: string;
+}
+
+export interface BrainMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
 }
 
 export async function searchBrainMemory(query: string, type = 'all') {
