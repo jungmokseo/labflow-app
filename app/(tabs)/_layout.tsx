@@ -27,103 +27,99 @@ export default function TabLayout() {
         headerShadowVisible: false,
       }}
     >
+      {/* ── 4 Primary Tabs ── */}
       <Tabs.Screen
-        name="index"
+        name="briefing"
         options={{
-          title: 'ë¯¸ëë¸ë ì¸',
+          title: '브리핑',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bulb-outline" size={size} color={color} />
+            <Ionicons name="sunny-outline" size={size} color={color} />
           ),
-          headerTitle: 'ð§  ë¯¸ëë¸ë ì¸',
+          headerTitle: '📋 오늘의 브리핑',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
         name="brain-chat"
         options={{
-          title: 'AI ì±í',
+          title: '채팅',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
-          headerTitle: 'ð¬ AI íì¤í¸ ì±í',
-          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
-        }}
-      />
-      <Tabs.Screen
-        name="memo"
-        options={{
-          title: 'ìº¡ì²',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flash-outline" size={size} color={color} />
-          ),
-          headerTitle: 'ð ë¹ ë¥¸ ìº¡ì²',
-          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
-        }}
-      />
-      <Tabs.Screen
-        name="paper-alerts"
-        options={{
-          title: 'ë¼ë¬¸',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
-          ),
-          headerTitle: 'ð ë¼ë¬¸ ìë¦¼',
-          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
-        }}
-      />
-      <Tabs.Screen
-        name="knowledge-graph"
-        options={{
-          title: 'ê·¸ëí',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="git-network-outline" size={size} color={color} />
-          ),
-          headerTitle: 'ð¸ï¸ ì§ì ê·¸ëí',
+          headerTitle: '💬 AI 채팅',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
         name="chatbot"
         options={{
-          title: 'ë³´ì´ì¤',
+          title: '보이스',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="mic-outline" size={size} color={color} />
           ),
-          headerTitle: 'ðï¸ AI ë³´ì´ì¤ ì±ë´',
-          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
-        }}
-      />
-      <Tabs.Screen
-        name="email"
-        options={{
-          title: 'ì´ë©ì¼',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mail-outline" size={size} color={color} />
-          ),
-          headerTitle: 'âï¸ ì´ë©ì¼ ë¸ë¦¬í',
-          headerTitleStyle: { fontSize: 18, fontWeight: '700' },
-        }}
-      />
-      <Tabs.Screen
-        name="meeting"
-        options={{
-          title: 'íì',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
-          ),
-          headerTitle: 'ðï¸ íì ë¸í¸',
+          headerTitle: '🎙️ 논문 토론 · 영어 튜터',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
         }}
       />
       <Tabs.Screen
         name="onboarding"
         options={{
-          title: 'ì¤ì ',
+          title: '프로필',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
-          headerTitle: 'âï¸ ì°êµ¬ì¤ ì¤ì ',
+          headerTitle: '⚙️ 연구실 프로필',
           headerTitleStyle: { fontSize: 18, fontWeight: '700' },
+        }}
+      />
+
+      {/* ── Hidden Tabs (accessible via chat, not shown in tab bar) ── */}
+      <Tabs.Screen
+        name="index"
+        options={{
+          href: null, // Hide from tab bar
+          title: '미니브레인',
+          headerTitle: '🧠 미니브레인',
+        }}
+      />
+      <Tabs.Screen
+        name="memo"
+        options={{
+          href: null,
+          title: '캡처',
+          headerTitle: '⚡ 빠른 캡처',
+        }}
+      />
+      <Tabs.Screen
+        name="paper-alerts"
+        options={{
+          href: null,
+          title: '논문',
+          headerTitle: '📚 논문 알림',
+        }}
+      />
+      <Tabs.Screen
+        name="knowledge-graph"
+        options={{
+          href: null,
+          title: '그래프',
+          headerTitle: '🕸️ 지식 그래프',
+        }}
+      />
+      <Tabs.Screen
+        name="email"
+        options={{
+          href: null,
+          title: '이메일',
+          headerTitle: '✉️ 이메일 브리핑',
+        }}
+      />
+      <Tabs.Screen
+        name="meeting"
+        options={{
+          href: null,
+          title: '회의',
+          headerTitle: '🗓️ 회의 노트',
         }}
       />
     </Tabs>
