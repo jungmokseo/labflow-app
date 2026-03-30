@@ -16,6 +16,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { aiRateLimiter } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
 import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
 
@@ -736,6 +737,7 @@ JSON 배열: [{"type": "dict"|"memo", "data": {...}}]`;
 
 export async function brainRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authMiddleware);
+  app.addHook('onRequest', aiRateLimiter);
 
   // ── Chat (3층 기억 + 멀티홉 체이닝) ──────────────
   app.post('/api/brain/chat', async (request: FastifyRequest, reply: FastifyReply) => {

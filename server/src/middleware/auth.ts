@@ -30,9 +30,7 @@ export async function authMiddleware(
     const token = authHeader.slice(7);
 
     if (env.CLERK_SECRET_KEY) {
-      // Clerk Secret Key가 있으면 JWT 검증 시도
       try {
-        // 동적 import — @clerk/fastify가 미설치면 catch로
         const { verifyToken } = await import('@clerk/backend' as string);
         const payload = await verifyToken(token, {
           secretKey: env.CLERK_SECRET_KEY,
@@ -40,14 +38,10 @@ export async function authMiddleware(
         request.userId = payload.sub;
         return;
       } catch (err: any) {
-        // 검증 실패 시 로그만 남기고 dev header로 fallback
         request.log.warn({ err: err.message }, 'Clerk JWT verification failed');
       }
-    } else {
-      // Clerk 미설정 — Bearer 토큰이 있으면 임시 사용자로 허용
-      request.userId = 'bearer-user';
-      return;
     }
+    // Clerk 미설정 시 Bearer 토큰 무시 — dev header나 dev mode로 fallback
   }
 
   // ── 2. X-Dev-User-Id (MVP 개발 모드) ──────────────
@@ -95,9 +89,16 @@ export async function optionalAuth(
   _reply: FastifyReply,
 ) {
   const authHeader = request.headers.authorization;
-  if (authHeader?.startsWith('Bearer ')) {
-    // Clerk 검증은 생략 — 선택적 인증이므로
-    request.userId = 'bearer-user';
+  if (authHeader?.startsWith('Bearer ') && env.CLERK_SECRET_KEY) {
+    try {
+      const { verifyToken } = await import('@clerk/backend' as string);
+      const payload = await verifyToken(authHeader.slice(7), {
+        secretKey: env.CLERK_SECRET_KEY,
+      });
+      request.userId = payload.sub;
+    } catch {
+      // Optional auth — verification failure is OK
+    }
     return;
   }
   const devUserId = request.headers['x-dev-user-id'] as string;
@@ -122,10 +123,24 @@ export function setupRequestContextHook(app: import('fastify').FastifyInstance) 
   app.addHook('onRequest', async (request) => {
     if (request.userId) {
       // Lab을 조회하여 labId를 자동 설정 (prisma-filter에서 사용)
-      // NOTE: requestContext.enterWith()로 동기적 설정 — Fastify는 async_hooks와 호환
+      let labId = request.labId;
+      if (!labId) {
+        try {
+          const lab = await basePrismaClient.lab.findFirst({
+            where: { ownerId: request.userId },
+            select: { id: true },
+          });
+          if (lab) {
+            labId = lab.id;
+            request.labId = lab.id;
+          }
+        } catch {
+          // Lab 조회 실패는 무시 — labId 없이 진행
+        }
+      }
       requestContext.enterWith({
         userId: request.userId,
-        labId: request.labId,
+        labId,
       });
     }
   });
