@@ -35,7 +35,26 @@ export async function authMiddleware(
         const payload = await verifyToken(token, {
           secretKey: env.CLERK_SECRET_KEY,
         });
-        request.userId = payload.sub;
+        // Clerk ID(payload.sub)로 실제 DB User를 조회하여 cuid를 사용
+        const clerkId = payload.sub;
+        try {
+          const user = await basePrismaClient.user.findFirst({
+            where: { clerkId },
+            select: { id: true },
+          });
+          if (user) {
+            request.userId = user.id;
+          } else {
+            // DB에 없는 Clerk 유저 → 자동 생성
+            const email = (payload as any).email || `${clerkId}@clerk.user`;
+            const newUser = await basePrismaClient.user.create({
+              data: { clerkId, email, name: (payload as any).name || null },
+            });
+            request.userId = newUser.id;
+          }
+        } catch {
+          request.userId = clerkId; // DB 조회 실패 시 fallback
+        }
         return;
       } catch (err: any) {
         request.log.warn({ err: err.message }, 'Clerk JWT verification failed');
@@ -95,7 +114,11 @@ export async function optionalAuth(
       const payload = await verifyToken(authHeader.slice(7), {
         secretKey: env.CLERK_SECRET_KEY,
       });
-      request.userId = payload.sub;
+      const user = await basePrismaClient.user.findFirst({
+        where: { clerkId: payload.sub },
+        select: { id: true },
+      });
+      request.userId = user?.id || payload.sub;
     } catch {
       // Optional auth — verification failure is OK
     }
