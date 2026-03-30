@@ -19,7 +19,7 @@ import { knowledgeGraphRoutes } from './routes/knowledge-graph.js';
 import { resetRoutes } from './routes/reset.js';
 import { brainRoutes } from './routes/brain.js';
 import { labProfileRoutes } from './routes/lab-profile.js';
-import { paperAlertRoutes } from './routes/paper-alerts.js';
+import { paperAlertRoutes, startPaperAlertCron } from './routes/paper-alerts.js';
 import { paperRoutes } from './routes/papers.js';
 import { labCaptureRoutes } from './routes/lab-captures.js';
 import { briefingRoutes } from './routes/briefing.js';
@@ -94,6 +94,9 @@ async function start() {
     try {
           const app = await buildApp();
           await app.listen({ port: env.PORT, host: env.HOST });
+
+      // 논문 알림 cron 시작
+      startPaperAlertCron();
 
       console.log(`
       ╔═══════════════════════════════════════════════╗

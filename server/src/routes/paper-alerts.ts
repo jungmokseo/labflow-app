@@ -177,8 +177,54 @@ const alertSettingSchema = z.object({
     rssUrl: z.string().url(),
     publisher: z.string().optional(),
   })).optional(),
-  schedule: z.enum(['daily', 'weekly']).default('weekly'),
+  schedule: z.enum(['daily', 'weekly', 'manual']).default('weekly'),
 });
+
+// ── Cron 스케줄러 (서버 시작 시 실행) ────────────────
+let cronInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startPaperAlertCron() {
+  if (cronInterval) return;
+  // 매 1시간마다 체크 (실제 실행은 스케줄에 따라 결정)
+  cronInterval = setInterval(async () => {
+    try {
+      await checkAndRunScheduledAlerts();
+    } catch (err) {
+      console.error('Paper alert cron error:', err);
+    }
+  }, 60 * 60 * 1000); // 1시간
+  console.log('📚 Paper alert cron started (hourly check)');
+}
+
+export function stopPaperAlertCron() {
+  if (cronInterval) { clearInterval(cronInterval); cronInterval = null; }
+}
+
+async function checkAndRunScheduledAlerts() {
+  const now = new Date();
+  const alerts = await prisma.paperAlert.findMany({
+    where: { active: true, schedule: { not: 'manual' } },
+    include: { lab: true },
+  });
+
+  for (const alert of alerts) {
+    const lastRun = alert.lastRunAt || new Date(0);
+    const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60);
+
+    let shouldRun = false;
+    if (alert.schedule === 'daily' && hoursSinceLastRun >= 23) shouldRun = true;
+    if (alert.schedule === 'weekly' && hoursSinceLastRun >= 167) shouldRun = true; // ~7일
+
+    if (shouldRun) {
+      console.log(`📚 Running scheduled paper alert: ${alert.id} (${alert.schedule})`);
+      try {
+        await runPaperCrawl(alert, alert.lab);
+      } catch (err) {
+        console.error(`Paper alert ${alert.id} failed:`, err);
+      }
+    }
+  }
+}
 
 // ── RSS Parser ──────────────────────────────────────
 interface RssItem {
@@ -276,6 +322,90 @@ function guessRssUrl(source: any): string | null {
   }
   if (issn) return `https://rss.sciencedirect.com/publication/science/${issn.replace('-', '')}`;
   return null;
+}
+
+// ── 크롤링 실행 함수 (라우트 + cron 공용) ────────────
+export async function runPaperCrawl(
+  alert: { id: string; keywords: string[]; journals: string[]; customFeeds: any; lastRunAt: Date | null },
+  lab: { researchThemes: any },
+) {
+  const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
+  const flatKeywords = alert.keywords as string[];
+
+  // T_last: lastRunAt 이후 논문만 수집 (없으면 7일 전)
+  const tLast = alert.lastRunAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  // 크롤링 대상
+  const feeds: Array<{ name: string; rssUrl: string }> = [];
+  for (const name of alert.journals) {
+    const j = JOURNAL_BY_NAME.get(name);
+    if (j?.rssUrl) feeds.push({ name: j.name, rssUrl: j.rssUrl });
+  }
+  feeds.push(...((alert.customFeeds as Array<{ name: string; rssUrl: string }> | null) || []).filter(f => f.rssUrl));
+
+  if (feeds.length === 0) return { totalFetched: 0, matched: 0, newSaved: 0, journals: [], breakdown: { threeStars: 0, twoStars: 0, oneStar: 0 } };
+
+  // 병렬 RSS
+  const allItems = (await Promise.all(
+    feeds.map(async f => (await parseRssFeed(f.rssUrl)).map(item => ({ ...item, journal: f.name })))
+  )).flat();
+
+  // T_last 날짜 필터: pubDate가 lastRunAt 이후인 것만
+  const afterTLast = allItems.filter(item => {
+    if (!item.pubDate) return true; // pubDate 없으면 포함 (ACS 등 일부 저널)
+    try {
+      const pubMs = new Date(item.pubDate).getTime();
+      return pubMs >= tLast.getTime();
+    } catch { return true; }
+  });
+
+  // 스코어링 + 필터
+  const scored = afterTLast
+    .map(item => ({ ...item, ...scoreByThemes(item, themes, flatKeywords) }))
+    .filter(item => item.stars > 0)
+    .sort((a, b) => b.stars - a.stars || b.score - a.score)
+    .slice(0, 30);
+
+  // 저장 (제목 기반 중복 제거 + CrossRef + AI 요약)
+  let savedCount = 0;
+  for (const item of scored) {
+    if (await prisma.paperAlertResult.findFirst({ where: { alertId: alert.id, title: item.title } })) continue;
+
+    let enrichedAbstract = item.description, enrichedAuthors = item.authors;
+    if (item.doi && item.stars >= 2) {
+      const cr = await enrichWithCrossRef(item.doi);
+      if (cr?.abstract) enrichedAbstract = cr.abstract;
+      if (cr?.authors) enrichedAuthors = cr.authors.join(', ');
+    }
+    const summary = item.stars >= 2 ? await generatePaperSummary(item.title, enrichedAbstract, item.matchedThemes) : '';
+
+    await prisma.paperAlertResult.create({
+      data: {
+        alertId: alert.id, title: item.title, authors: enrichedAuthors,
+        journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
+        url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
+        aiSummary: summary, relevance: item.score, stars: item.stars, themes: item.matchedThemes,
+      },
+    });
+    savedCount++;
+  }
+
+  // T_last 업데이트
+  await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: new Date() } });
+
+  return {
+    totalFetched: allItems.length,
+    afterTLastFilter: afterTLast.length,
+    matched: scored.length,
+    newSaved: savedCount,
+    tLast: tLast.toISOString(),
+    journals: feeds.map(f => f.name),
+    breakdown: {
+      threeStars: scored.filter(s => s.stars === 3).length,
+      twoStars: scored.filter(s => s.stars === 2).length,
+      oneStar: scored.filter(s => s.stars === 1).length,
+    },
+  };
 }
 
 // ── Routes ──────────────────────────────────────────
@@ -411,12 +541,23 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     for (const field of ALL_FIELDS) {
       fieldMap[field] = BUILT_IN_JOURNALS.filter(j => j.fields.includes(field)).map(j => j.name);
     }
+    // 다음 실행 예정 시간 계산
+    const primaryAlert = alerts[0];
+    let nextRunEstimate: string | null = null;
+    if (primaryAlert?.lastRunAt && primaryAlert.schedule !== 'manual') {
+      const lastRun = new Date(primaryAlert.lastRunAt);
+      const interval = primaryAlert.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+      nextRunEstimate = new Date(lastRun.getTime() + interval).toISOString();
+    }
+
     return {
       alerts,
       availableJournals: BUILT_IN_JOURNALS.filter(j => !!j.rssUrl).map(j => j.name),
       journalCategories: fieldMap,
       maxJournals: MAX_JOURNALS,
       researchThemes: (lab.researchThemes as ResearchTheme[] | null) || [],
+      scheduleOptions: ['daily', 'weekly', 'manual'],
+      nextRunEstimate,
     };
   });
 
@@ -453,68 +594,15 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     }));
   });
 
-  // ── 수동 크롤링 ──────────────────────────────────
+  // ── 수동 크롤링 (T_last 기반 필터링) ──────────────
   app.post('/api/papers/alerts/run', async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await prisma.lab.findUnique({ where: { ownerId: request.userId! } });
     if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
     const alert = await prisma.paperAlert.findFirst({ where: { labId: lab.id, active: true } });
     if (!alert) return reply.code(404).send({ error: '논문 알림 설정이 없습니다.' });
 
-    const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
-    const flatKeywords = alert.keywords as string[];
-
-    // 크롤링 대상
-    const feeds: Array<{ name: string; rssUrl: string }> = [];
-    for (const name of alert.journals) {
-      const j = JOURNAL_BY_NAME.get(name);
-      if (j?.rssUrl) feeds.push({ name: j.name, rssUrl: j.rssUrl });
-    }
-    feeds.push(...((alert.customFeeds as Array<{ name: string; rssUrl: string }> | null) || []).filter(f => f.rssUrl));
-
-    if (feeds.length === 0) return reply.code(400).send({ error: '모니터링할 저널이 없습니다.' });
-
-    // 병렬 RSS
-    const allItems = (await Promise.all(
-      feeds.map(async f => (await parseRssFeed(f.rssUrl)).map(item => ({ ...item, journal: f.name })))
-    )).flat();
-
-    // 스코어링 + 필터
-    const scored = allItems
-      .map(item => ({ ...item, ...scoreByThemes(item, themes, flatKeywords) }))
-      .filter(item => item.stars > 0)
-      .sort((a, b) => b.stars - a.stars || b.score - a.score)
-      .slice(0, 30);
-
-    // 저장
-    let savedCount = 0;
-    for (const item of scored) {
-      if (await prisma.paperAlertResult.findFirst({ where: { alertId: alert.id, title: item.title } })) continue;
-
-      let enrichedAbstract = item.description, enrichedAuthors = item.authors;
-      if (item.doi && item.stars >= 2) {
-        const cr = await enrichWithCrossRef(item.doi);
-        if (cr?.abstract) enrichedAbstract = cr.abstract;
-        if (cr?.authors) enrichedAuthors = cr.authors.join(', ');
-      }
-      const summary = item.stars >= 2 ? await generatePaperSummary(item.title, enrichedAbstract, item.matchedThemes) : '';
-
-      await prisma.paperAlertResult.create({
-        data: {
-          alertId: alert.id, title: item.title, authors: enrichedAuthors,
-          journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
-          url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
-          aiSummary: summary, relevance: item.score, stars: item.stars, themes: item.matchedThemes,
-        },
-      });
-      savedCount++;
-    }
-
-    await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: new Date() } });
-    return {
-      totalFetched: allItems.length, matched: scored.length, newSaved: savedCount,
-      journals: feeds.map(f => f.name),
-      breakdown: { threeStars: scored.filter(s => s.stars === 3).length, twoStars: scored.filter(s => s.stars === 2).length, oneStar: scored.filter(s => s.stars === 1).length },
-    };
+    const result = await runPaperCrawl(alert, lab);
+    return result;
   });
 
   // ── 결과 목록 ────────────────────────────────────
