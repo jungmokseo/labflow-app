@@ -436,16 +436,18 @@ export async function getPaperAlerts() {
 export async function getJournalFields() {
   return apiFetch<{
     fields: string[];
-    journalsByField: Record<string, Array<{ name: string; publisher: string }>>;
+    journalsByField: Record<string, Array<{ name: string; publisher: string; hasRss: boolean }>>;
     totalJournals: number;
   }>('/api/papers/journals/fields');
 }
 
 export async function searchJournals(query: string) {
   return apiFetch<{
-    results: Array<{ name: string; issn: string | null; publisher: string | null; rssUrl: string | null; citedByCount: number }>;
-    query: string;
-  }>(`/api/papers/journals/search?q=${encodeURIComponent(query)}`);
+    results: Array<{ name: string; publisher: string | null; rssUrl: string | null; source: string; citedByCount: number }>;
+  }>('/api/papers/journals/search', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
 }
 
 export async function addCustomJournal(data: { name: string; rssUrl: string; publisher?: string }) {
