@@ -331,6 +331,10 @@ export async function brainUpload(file: File): Promise<UploadResult> {
   return res.json();
 }
 
+export async function getAutoBrief() {
+  return apiFetch<{ success: boolean; briefing: string | null; cached: boolean; generatedAt: string }>('/api/brain/auto-brief');
+}
+
 export async function getBrainChannels() {
   return apiFetch<{ data: Array<{ id: string; name: string; type: string; createdAt: string }> }>('/api/brain/channels');
 }

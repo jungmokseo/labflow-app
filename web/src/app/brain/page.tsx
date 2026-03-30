@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainChannel, type BrainMessage, type BrainTool, type UploadResult } from '@/lib/api';
+import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, getAutoBrief, type BrainChannel, type BrainMessage, type BrainTool, type UploadResult } from '@/lib/api';
 
 const TOOLS: Array<{ key: BrainTool; icon: string; label: string; persistent: boolean }> = [
   { key: 'general', icon: '🧠', label: '자유 대화', persistent: false },
@@ -45,11 +45,34 @@ export default function BrainPage() {
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [autoBrief, setAutoBrief] = useState<string | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefDismissed, setBriefDismissed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
 
-  useEffect(() => { loadChannels(); }, []);
+  useEffect(() => { loadChannels(); loadAutoBrief(); }, []);
+
+  async function loadAutoBrief() {
+    // 오늘 이미 닫았으면 스킵
+    const dismissedToday = sessionStorage.getItem('brief-dismissed');
+    if (dismissedToday === new Date().toISOString().split('T')[0]) {
+      setBriefDismissed(true);
+      return;
+    }
+    setBriefLoading(true);
+    try {
+      const res = await getAutoBrief();
+      if (res.success && res.briefing) setAutoBrief(res.briefing);
+    } catch { /* ignore */ }
+    finally { setBriefLoading(false); }
+  }
+
+  function dismissBrief() {
+    setBriefDismissed(true);
+    sessionStorage.setItem('brief-dismissed', new Date().toISOString().split('T')[0]);
+  }
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const loadChannels = useCallback(async () => {
@@ -345,6 +368,25 @@ export default function BrainPage() {
 
             {/* 메시지 영역 */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* 자동 브리핑 배너 */}
+              {!briefDismissed && autoBrief && activeTool === 'general' && messages.length === 0 && (
+                <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-xl p-4 relative">
+                  <button onClick={dismissBrief} className="absolute top-2 right-3 text-text-muted hover:text-white text-sm">✕</button>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">📋</span>
+                    <span className="text-sm font-semibold text-white">오늘의 브리핑</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">자동 생성</span>
+                  </div>
+                  <div className="text-sm text-text-main whitespace-pre-wrap leading-relaxed">{autoBrief}</div>
+                </div>
+              )}
+              {briefLoading && activeTool === 'general' && messages.length === 0 && (
+                <div className="bg-bg-input/30 rounded-xl p-4 flex items-center gap-3">
+                  <div className="animate-spin w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full" />
+                  <span className="text-sm text-text-muted">오늘의 브리핑을 준비하고 있습니다...</span>
+                </div>
+              )}
+
               {messages.length === 0 && (
                 <div className="text-center text-text-muted py-12">
                   <p className="text-4xl mb-4">{activeToolInfo?.icon || '🧠'}</p>
