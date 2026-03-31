@@ -64,12 +64,54 @@ function buildEmbeddableText(record: EmbeddableRecord): string {
   return parts.join('\n').slice(0, 8000);
 }
 
+/**
+ * 텍스트를 의미 단위 청크로 분할 (긴 메모의 검색 정밀도 향상)
+ * - 500자 이하: 단일 청크
+ * - 500자 초과: 단락 기반 분할 + 제목/태그 컨텍스트 프리픽스
+ */
+function chunkRecord(record: EmbeddableRecord): Array<{ index: number; text: string }> {
+  const fullText = buildEmbeddableText(record);
+
+  if (fullText.length <= 500) {
+    return [{ index: 0, text: fullText }];
+  }
+
+  // 컨텍스트 프리픽스: 모든 청크에 제목+태그를 포함 (검색 시 맥락 유지)
+  const prefix = [
+    record.source ? `[${record.source}]` : '',
+    record.title || '',
+    record.tags?.length ? `태그: ${record.tags.join(', ')}` : '',
+  ].filter(Boolean).join(' | ');
+
+  const prefixStr = prefix ? `${prefix}\n` : '';
+  const maxChunkSize = 450 - prefixStr.length;
+
+  // 단락 기반 분할
+  const paragraphs = record.content.split(/\n\n+|\n(?=[■•\-\d]+\.?\s)/);
+  const chunks: Array<{ index: number; text: string }> = [];
+  let currentChunk = '';
+  let idx = 0;
+
+  for (const para of paragraphs) {
+    if (currentChunk.length + para.length > maxChunkSize && currentChunk.length > 0) {
+      chunks.push({ index: idx++, text: `${prefixStr}${currentChunk.trim()}` });
+      currentChunk = '';
+    }
+    currentChunk += para + '\n';
+  }
+  if (currentChunk.trim()) {
+    chunks.push({ index: idx, text: `${prefixStr}${currentChunk.trim()}` });
+  }
+
+  return chunks.length > 0 ? chunks : [{ index: 0, text: fullText }];
+}
+
 export async function embedAndStore(
   prisma: any,
   record: EmbeddableRecord,
 ): Promise<{ stored: boolean; skipped: boolean }> {
-  const text = buildEmbeddableText(record);
-  const hash = computeContentHash(text);
+  const fullText = buildEmbeddableText(record);
+  const hash = computeContentHash(fullText);
 
   // Check if already embedded with same content
   const existing = await prisma.$queryRawUnsafe(`
@@ -82,36 +124,34 @@ export async function embedAndStore(
     return { stored: false, skipped: true };
   }
 
-  // Delete old embedding if content changed
+  // Delete old embeddings (all chunks) if content changed
   await prisma.$queryRawUnsafe(`
     DELETE FROM memo_embeddings WHERE source_id = $1 AND source_type = $2
   `, record.sourceId, record.sourceType);
 
-  // Generate embedding
-  const { embedding } = await generateEmbedding(text);
-  const vectorStr = `[${embedding.join(',')}]`;
+  // 청킹: 긴 텍스트는 분할하여 각각 임베딩
+  const chunks = chunkRecord(record);
 
-  await prisma.$queryRawUnsafe(`
-    INSERT INTO memo_embeddings (source_type, source_id, lab_id, user_id, title, chunk_index, chunk_text, content_hash, embedding, metadata)
-    VALUES ($1, $2, $3, $4, $5, 0, $6, $7, $8::vector, $9::jsonb)
-    ON CONFLICT (source_id, source_type, chunk_index) DO UPDATE SET
-      title = EXCLUDED.title,
-      chunk_text = EXCLUDED.chunk_text,
-      content_hash = EXCLUDED.content_hash,
-      embedding = EXCLUDED.embedding,
-      metadata = EXCLUDED.metadata,
-      updated_at = now()
-  `,
-    record.sourceType,
-    record.sourceId,
-    record.labId || null,
-    record.userId || null,
-    record.title || null,
-    text,
-    hash,
-    vectorStr,
-    JSON.stringify(record.metadata || {}),
-  );
+  for (const chunk of chunks) {
+    const { embedding } = await generateEmbedding(chunk.text);
+    const vectorStr = `[${embedding.join(',')}]`;
+
+    await prisma.$queryRawUnsafe(`
+      INSERT INTO memo_embeddings (source_type, source_id, lab_id, user_id, title, chunk_index, chunk_text, content_hash, embedding, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector, $10::jsonb)
+    `,
+      record.sourceType,
+      record.sourceId,
+      record.labId || null,
+      record.userId || null,
+      record.title || null,
+      chunk.index,
+      chunk.text,
+      hash,
+      vectorStr,
+      JSON.stringify(record.metadata || {}),
+    );
+  }
 
   return { stored: true, skipped: false };
 }
@@ -333,45 +373,81 @@ async function keywordFallback(
   }));
 }
 
-// ── 4. Reranker ──────────────────────────────────
+// ── 4. Reranker (Gemini Cross-Encoder + Rule-based fallback) ──
 
-export function rerank(
+/**
+ * Cross-encoder 리랭킹: Gemini Flash가 쿼리-결과 관련성을 0-10으로 평가
+ * 규칙 기반보다 훨씬 정확 (의미적 관련성 판단)
+ * 비용: Gemini Flash는 무료 티어 내에서 동작
+ */
+export async function rerank(
   results: SearchResult[],
-  options?: { topK?: number; boostRecent?: boolean },
-): RankedResult[] {
+  query?: string,
+  options?: { topK?: number },
+): Promise<RankedResult[]> {
   const topK = options?.topK || 8;
+
+  if (results.length === 0) return [];
+
+  // Cross-encoder: Gemini Flash로 관련성 평가
+  if (query && results.length > 1) {
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const candidates = results.slice(0, 15).map((r, i) =>
+        `[${i}] ${r.title || ''}: ${r.chunkText.substring(0, 200)}`
+      ).join('\n');
+
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text:
+          `사용자 질문: "${query}"\n\n아래 검색 결과의 관련성을 0-10으로 평가하세요. JSON 배열로만 응답:\n\n${candidates}\n\n응답: [{"i":0,"s":8},{"i":1,"s":3},...] (i=인덱스, s=점수)`
+        }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 512 },
+      });
+
+      const text = result.response.text().trim();
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        const scores = JSON.parse(match[0]) as Array<{i: number; s: number}>;
+        const scoreMap = new Map(scores.map(s => [s.i, s.s]));
+
+        const ranked = results.slice(0, 15).map((r, i) => ({
+          ...r,
+          finalScore: (scoreMap.get(i) || 5) / 10,
+          citation: 0,
+        }));
+
+        ranked.sort((a, b) => b.finalScore - a.finalScore);
+        return ranked.slice(0, topK).map((r, i) => ({ ...r, citation: i + 1 }));
+      }
+    } catch (err) {
+      console.warn('Cross-encoder rerank failed, using rule-based:', err);
+    }
+  }
+
+  // Fallback: 규칙 기반 리랭킹
+  return rerankByRules(results, topK);
+}
+
+function rerankByRules(results: SearchResult[], topK: number): RankedResult[] {
+  const sourceBoost: Record<string, number> = {
+    'faq': 1.15, 'account': 1.10, 'regulation': 1.05,
+    'lab-project': 1.0, 'member': 1.0, 'project': 1.0, 'publication': 0.95,
+  };
 
   const ranked = results.map((r, i) => {
     let score = r.combinedScore;
-
-    // Access frequency boost (from metadata)
     const accessCount = (r.metadata as any)?.accessCount || 0;
-    if (accessCount > 0) {
-      score *= (1 + 0.1 * Math.log10(accessCount + 1));
-    }
-
-    // Source type boost: FAQ > account > regulation > others
-    const sourceBoost: Record<string, number> = {
-      'faq': 1.15,
-      'account': 1.10,
-      'regulation': 1.05,
-      'lab-project': 1.0,
-      'member': 1.0,
-      'project': 1.0,
-      'publication': 0.95,
-    };
+    if (accessCount > 0) score *= (1 + 0.1 * Math.log10(accessCount + 1));
     const source = (r.metadata as any)?.source || r.sourceType;
     score *= sourceBoost[source] || 1.0;
-
     return { ...r, finalScore: score, citation: i + 1 };
   });
 
   ranked.sort((a, b) => b.finalScore - a.finalScore);
-
-  return ranked.slice(0, topK).map((r, i) => ({
-    ...r,
-    citation: i + 1,
-  }));
+  return ranked.slice(0, topK).map((r, i) => ({ ...r, citation: i + 1 }));
 }
 
 // ── 5. Grounded Prompt Builder ───────────────────

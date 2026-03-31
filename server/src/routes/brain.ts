@@ -1232,7 +1232,7 @@ export async function brainRoutes(app: FastifyInstance) {
         try {
           const searchResults = await hybridSearch(basePrismaClient, message, userId, lab.id, { limit: 10 });
           if (searchResults.length > 0) {
-            const ranked = rerank(searchResults, { topK: 8 });
+            const ranked = await rerank(searchResults, message, { topK: 8 });
             ragResultCount = ranked.length;
             ragUsed = true;
 
