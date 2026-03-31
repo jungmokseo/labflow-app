@@ -92,9 +92,11 @@ export default function BrainPage() {
   async function loadMessages(channelId: string) {
     try {
       const res = await getChannelMessages(channelId);
-      setMessages(res.data || []);
+      setMessages(res.data || res || []);
       setActiveChannelId(channelId);
-    } catch {}
+    } catch (err) {
+      console.error('Failed to load messages for channel', channelId, err);
+    }
   }
 
   async function handleSelectTool(tool: BrainTool) {
@@ -189,6 +191,14 @@ export default function BrainPage() {
       if (result.channelId && result.channelId !== activeChannelId) {
         setActiveChannelId(result.channelId);
         loadChannels(); // 사이드바 새로고침
+        // 새 채널의 메시지를 서버에서 로드하여 동기화
+        try {
+          const res = await getChannelMessages(result.channelId);
+          const serverMsgs = res.data || res || [];
+          if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
+            setMessages(serverMsgs);
+          }
+        } catch {}
       }
     } catch (err: any) {
       setMessages(prev => [...prev, {
