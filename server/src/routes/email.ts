@@ -1182,17 +1182,16 @@ export async function emailRoutes(app: FastifyInstance) {
         const dateStr = formatDateWithTimezone(internalDate, timezone);
         const toCC = `${getHeader('to')} ${getHeader('cc')}`.trim();
 
-        // 기관 분류: To/Cc 주소 기반 (발신자보다 수신 주소가 더 정확)
+        // 기관 분류: profile.groups의 도메인으로 To/Cc + From 동적 매칭
         let groupLabel = '👤개인';
-        const toCcLower = toCC.toLowerCase();
-        if (toCcLower.includes('@yonsei.ac.kr') || toCcLower.includes('bliss.yonsei')) {
-          groupLabel = '🏫연세대학교';
-        } else if (toCcLower.includes('@lynksolutec.com')) {
-          groupLabel = '🏢링크솔루텍';
-        } else {
-          // fallback: 발신자 도메인으로 판별
-          const groupMatch = domainMatchGroup(sender, profile);
-          if (groupMatch) groupLabel = `${groupMatch.emoji}${groupMatch.name}`;
+        const allAddresses = `${toCC} ${sender}`.toLowerCase();
+        if (profile.classifyByGroup && profile.groups.length > 0) {
+          for (const g of profile.groups) {
+            if (g.domains?.some((d: string) => allAddresses.includes(d.toLowerCase()))) {
+              groupLabel = `${g.emoji}${g.name}`;
+              break;
+            }
+          }
         }
 
         parsedEmails.push({
@@ -1283,11 +1282,15 @@ export async function emailRoutes(app: FastifyInstance) {
         text += `\n   날짜: ${e.dateStr}`;
         text += `\n   미리보기: ${e.snippet}`;
 
-        // 본문 열람 규칙: ⚠️긴급/📝대응필요 → 전체 본문, @yonsei.ac.kr 학생 발송 → 본문
+        // 본문 열람 규칙: ⚠️긴급/📝대응필요 → 전체 본문, 소속 기관 도메인 발송 → 본문
         const isUrgentOrAction = cls?.category === 'urgent' || cls?.category === 'action-needed';
-        const isStudentEmail = e.sender.toLowerCase().includes('@yonsei.ac.kr');
-        const isDearJungmok = e.snippet?.toLowerCase().includes('dear jungmok');
-        if (e.body && e.body.length > 10 && (isUrgentOrAction || isStudentEmail || isDearJungmok || cls?.needs_detail)) {
+        // 동적: 사용자의 첫 번째 그룹(소속 기관) 도메인으로 학생/내부 이메일 판별
+        const primaryDomains = profile.groups?.[0]?.domains || [];
+        const isInternalEmail = primaryDomains.some((d: string) => e.sender.toLowerCase().includes(d.toLowerCase()));
+        // 동적: 사용자 이름으로 "Dear {name}" 패턴 매칭
+        const userFirstName = (user.name || '').split(' ').pop()?.toLowerCase() || '';
+        const isDearUser = userFirstName.length > 1 && e.snippet?.toLowerCase().includes(`dear ${userFirstName}`);
+        if (e.body && e.body.length > 10 && (isUrgentOrAction || isInternalEmail || isDearUser || cls?.needs_detail)) {
           text += `\n   본문:\n${e.body.substring(0, 1000)}`;
         }
 
@@ -1374,14 +1377,14 @@ ${groupRules}
 | 🛒 | 광고 | 프로모션, Call for Papers, 투고 초대 |
 
 ## 중요도 조정
-- 연구 키워드(하이드로겔, 액체금속, 방오코팅, 웨어러블 바이오일렉트로닉스, 자가치유 PDMS) → 1단계 상향
+${(profile.keywords as string[]).length > 0 ? `- 연구/사업 키워드(${(profile.keywords as string[]).join(', ')}) → 1단계 상향` : ''}
 - Submission confirmation, Decision, Review results → ⚠️ 최우선 상향
 - Call for Papers, 투고 초대 → 📰 또는 🛒 강등
 
 ## Gemini 1차 분류 통계
 ⚠️긴급 ${urgentCount} · 📝대응필요 ${actionCount} · 📅일정 ${scheduleCount} · 📰정보성 ${infoCount} · 🛒광고 ${adsCount}
 
-${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBriefing.substring(0, 2000)}\n\n위 이전 브리핑에서 추적 중인 건(Medtronic, 논문 수정, 과제 마감 등)의 상태가 업데이트되었는지 확인하고, 📊 요약에 진행 상황을 반영하세요.` : ''}
+${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBriefing.substring(0, 2000)}\n\n위 이전 브리핑에서 추적 중인 건의 상태가 업데이트되었는지 확인하고, 📊 요약에 진행 상황을 반영하세요.` : ''}
 
 ## 출력 포맷 (정확히 따르세요)
 
@@ -1389,21 +1392,13 @@ ${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBrief
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 총 ~N건 신규 (${afterTimeStr} 이후) | ⚠️ 긴급 N건 · 대응필요 N건 · 정보성 N건+ · 광고 ~N건
 
-🏫 연세대학교 (N건)
-──────────────
-⚠️ 제목 (시간) — 요약. 마감/조치사항.
-→ 구체적 액션
-📝 제목 (시간) — 요약. 핵심 판단 포인트.
-📅 제목 (시간) — 이벤트 설명. 마감일.
-📰 발신자 (시간) — 한 줄 요약.
-
-🏢 링크솔루텍 (N건)
-──────────────
-(동일 포맷)
+${profile.groups.length > 0
+  ? profile.groups.map((g: any) => `${g.emoji} ${g.name} (N건)\n──────────────\n(이모지 + 제목 + 시간 + 맥락 분석)`).join('\n\n')
+  : '📧 수신 이메일 (N건)\n──────────────\n(이모지 + 제목 + 시간 + 맥락 분석)'}
 
 👤 개인 (N건)
 ──────────────
-(동일 포맷)
+(위 기관에 해당하지 않는 메일)
 
 🛒 광고/프로모션 (N건)
 [발신자] · [발신자] · ... (한 줄 압축)

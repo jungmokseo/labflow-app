@@ -121,8 +121,8 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
         const from = headers.find(h => h.name === 'From')?.value || '알 수 없음';
         const subject = headers.find(h => h.name === 'Subject')?.value || '(제목 없음)';
 
-        // 간단한 우선순위 판단: 학생/내부 이메일 = important, 나머지 = info
-        const isInternal = from.includes('yonsei') || from.includes('ac.kr');
+        // 간단한 우선순위 판단: 내부 이메일(.ac.kr, .edu 등 교육기관) = important
+        const isInternal = from.includes('.ac.kr') || from.includes('.edu') || from.includes('.ac.');
         const hasUrgentKeyword = subject.includes('긴급') || subject.includes('urgent') || subject.includes('deadline') || subject.includes('마감');
 
         items.push({
