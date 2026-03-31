@@ -598,14 +598,65 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
         '\n\n💡 정보를 확인하셨다면 "OO 정보 최신 확인" 이라고 말씀해 주세요.';
     }
 
+    case 'search_memory': {
+      // 메모/FAQ/계정정보 등 범용 메모리 검색
+      const keyword = entities.query || entities.keyword || message.replace(/[?？을를이가에서의로는은해줘줘요알려]/g, ' ').trim();
+      const words = keyword.split(/\s+/).filter(w => w.length > 1);
+
+      // OR 검색: 각 단어가 title 또는 content에 포함
+      const memos = await prisma.memo.findMany({
+        where: {
+          userId,
+          OR: words.flatMap(w => [
+            { title: { contains: w, mode: 'insensitive' as const } },
+            { content: { contains: w, mode: 'insensitive' as const } },
+            { tags: { has: w } },
+          ]),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+
+      if (memos.length > 0) {
+        return memos.map((m, i) =>
+          `${i + 1}. [${m.source || '메모'}] **${m.title || '(제목없음)'}**\n${m.content.substring(0, 300)}`
+        ).join('\n\n');
+      }
+
+      // Memo에서 못 찾으면 다른 DB도 검색
+      const members = await prisma.labMember.findMany({ where: { labId, active: true } });
+      const matchedMembers = members.filter(m => words.some(w => m.name.includes(w)));
+      if (matchedMembers.length > 0) {
+        return matchedMembers.map(m => `👤 ${m.name} (${m.role}) — ${m.email || ''}`).join('\n');
+      }
+
+      return null;
+    }
+
     case 'fallback_search': {
       // Intent 분류 실패 시 DB 범용 검색 우선 시도
+      const words = message.replace(/[?？을를이가에서의로는은해줘줘요알려정보]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+      const results: string[] = [];
+
+      // Memo 검색 (가장 많은 데이터)
+      const memos = await prisma.memo.findMany({
+        where: {
+          userId,
+          OR: words.flatMap(w => [
+            { title: { contains: w, mode: 'insensitive' as const } },
+            { content: { contains: w, mode: 'insensitive' as const } },
+          ]),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      });
+      if (memos.length > 0) {
+        results.push(...memos.map(m => `💡 [${m.source || '메모'}] **${m.title}**\n${m.content.substring(0, 200)}`));
+      }
+
+      // 구성원/과제 검색
       const allMembers = await prisma.labMember.findMany({ where: { labId, active: true } });
       const allProjects = await prisma.project.findMany({ where: { labId } });
-      const allMemos = await prisma.memo.findMany({ where: { labId }, take: 20, orderBy: { createdAt: 'desc' } });
-
-      const words = message.replace(/[?？을를이가에서의로는은]/g, ' ').split(/\s+/).filter(w => w.length > 1);
-      const results: string[] = [];
 
       for (const word of words) {
         const matchedM = allMembers.filter(m => m.name.includes(word));
@@ -615,7 +666,7 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
       }
 
       if (results.length > 0) {
-        return `다음과 관련된 정보를 찾았습니다:\n\n${results.join('\n')}`;
+        return `다음과 관련된 정보를 찾았습니다:\n\n${results.join('\n\n')}`;
       }
       // DB에서도 못 찾으면 null → general_chat으로 이동
       return null;
