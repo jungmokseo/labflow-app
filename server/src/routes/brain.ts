@@ -1219,6 +1219,32 @@ export async function brainRoutes(app: FastifyInstance) {
       }
     }
 
+    // 2.5 Memo fallback: 1차 DB 결과가 없거나 "못 찾았습니다" 계열이면 Memo 검색
+    if (!dbResult || dbResult.includes('없습니다') || dbResult.includes('찾지 못했')) {
+      const words = message.replace(/[?？을를이가에서의로는은해줘줘요알려정보계정]/g, ' ').split(/\s+/).filter(w => w.length > 1);
+      if (words.length > 0) {
+        const memoResults = await prisma.memo.findMany({
+          where: {
+            userId,
+            OR: words.flatMap(w => [
+              { title: { contains: w, mode: 'insensitive' as const } },
+              { content: { contains: w, mode: 'insensitive' as const } },
+            ]),
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        });
+        if (memoResults.length > 0) {
+          const memoText = memoResults.map((m, i) =>
+            `${i + 1}. [${m.source || '메모'}] ${m.title || ''}\n${m.content.substring(0, 300)}`
+          ).join('\n\n');
+          dbResult = dbResult && !dbResult.includes('없습니다')
+            ? `${dbResult}\n\n[추가 메모리 검색 결과]\n${memoText}`
+            : memoText;
+        }
+      }
+    }
+
     // 3. 메모 저장 요청 (자동 태깅 포함)
     if (intent === 'save_memo' && lab) {
       const { autoTagByRules } = await import('../services/auto-tagger.js');
