@@ -1202,46 +1202,142 @@ export async function brainRoutes(app: FastifyInstance) {
       });
     }
 
-    // ── 기본 모드: 의도 자동 분류 (multi_hop 포함) ──
+    // ── 기본 모드: 의도 분류 + RAG 병렬 검색 ──
     const classified = await classifyIntent(message);
     const { intent, entities, hops } = classified;
 
-    // 2. DB 조회 — 멀티홉 vs 단일홉
+    // 2. RAG: 데이터 중심 병렬 검색 (intent와 무관하게 항상 실행)
+    //    Intent는 액션 커맨드(save_memo, capture_*)에만 사용
+    //    데이터 조회는 모든 테이블을 병렬 검색 후 결과 합산
     let dbResult: string | null = null;
 
-    if (lab) {
-      if (intent === 'multi_hop') {
-        // 멀티홉 체이닝 실행
-        dbResult = await executeMultiHopQuery(message, entities, hops, lab.id);
-      } else if (['query_project', 'query_publication', 'query_member', 'query_meeting', 'query_stale', 'search_memory', 'fallback_search'].includes(intent)) {
-        // 단일홉 조회 (메타기억 포함) + 범용 검색
-        dbResult = await handleDbQuery(intent, entities, lab.id, userId, message);
-      }
-    }
+    // 2a. 검색 키워드 추출
+    const searchWords = message
+      .replace(/[?？！!을를이가에서의로는은해줘줘요알려정보보여뭐있어]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 1);
 
-    // 2.5 Memo fallback: 1차 DB 결과가 없거나 "못 찾았습니다" 계열이면 Memo 검색
-    if (!dbResult || dbResult.includes('없습니다') || dbResult.includes('찾지 못했')) {
-      const words = message.replace(/[?？을를이가에서의로는은해줘줘요알려정보계정]/g, ' ').split(/\s+/).filter(w => w.length > 1);
-      if (words.length > 0) {
-        const memoResults = await prisma.memo.findMany({
+    if (lab && intent !== 'save_memo' && intent !== 'capture_create' && intent !== 'capture_complete'
+        && intent !== 'daily_brief' && intent !== 'emerge' && intent !== 'weekly_review'
+        && intent !== 'add_dict') {
+
+      // multi_hop은 기존 로직 유지 (복합 조회)
+      if (intent === 'multi_hop' && hops && hops.length > 0) {
+        dbResult = await executeMultiHopQuery(message, entities, hops, lab.id);
+      }
+
+      // RAG 병렬 검색: Memo(98% 데이터) + 구조화 테이블을 동시에 검색
+      const [memoResults, memberResults, projectResults, pubResults] = await Promise.all([
+        // Memo: 키워드 OR 검색 (제목, 내용, 태그)
+        searchWords.length > 0 ? prisma.memo.findMany({
           where: {
-            userId,
-            OR: words.flatMap(w => [
-              { title: { contains: w, mode: 'insensitive' as const } },
-              { content: { contains: w, mode: 'insensitive' as const } },
-            ]),
+            OR: [{ userId }, { labId: lab.id }],
+            AND: {
+              OR: searchWords.flatMap(w => [
+                { title: { contains: w, mode: 'insensitive' as const } },
+                { content: { contains: w, mode: 'insensitive' as const } },
+                { tags: { has: w } },
+              ]),
+            },
           },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ accessCount: 'desc' }, { createdAt: 'desc' }],
+          take: 8,
+        }) : Promise.resolve([]),
+
+        // LabMember: 이름/역할 매칭
+        prisma.labMember.findMany({
+          where: {
+            labId: lab.id,
+            active: true,
+            OR: searchWords.map(w => ({
+              OR: [
+                { name: { contains: w, mode: 'insensitive' as const } },
+                { role: { contains: w, mode: 'insensitive' as const } },
+                { team: { contains: w, mode: 'insensitive' as const } },
+              ],
+            })),
+          },
           take: 5,
-        });
-        if (memoResults.length > 0) {
-          const memoText = memoResults.map((m, i) =>
-            `${i + 1}. [${m.source || '메모'}] ${m.title || ''}\n${m.content.substring(0, 300)}`
-          ).join('\n\n');
-          dbResult = dbResult && !dbResult.includes('없습니다')
-            ? `${dbResult}\n\n[추가 메모리 검색 결과]\n${memoText}`
-            : memoText;
-        }
+        }),
+
+        // Project: 이름/키워드 매칭
+        prisma.project.findMany({
+          where: {
+            labId: lab.id,
+            OR: searchWords.map(w => ({
+              OR: [
+                { name: { contains: w, mode: 'insensitive' as const } },
+                { funder: { contains: w, mode: 'insensitive' as const } },
+                { status: { contains: w, mode: 'insensitive' as const } },
+              ],
+            })),
+          },
+          take: 5,
+        }),
+
+        // Publication: 제목/저널 매칭
+        prisma.publication.findMany({
+          where: {
+            labId: lab.id,
+            OR: searchWords.map(w => ({
+              OR: [
+                { title: { contains: w, mode: 'insensitive' as const } },
+                { journal: { contains: w, mode: 'insensitive' as const } },
+              ],
+            })),
+          },
+          take: 5,
+        }),
+      ]);
+
+      // 결과 합산 (Memo 우선)
+      const resultParts: string[] = [];
+
+      if (memoResults.length > 0) {
+        resultParts.push(
+          `[메모/FAQ/계정 검색 결과 — ${memoResults.length}건]\n` +
+          memoResults.map((m, i) =>
+            `${i + 1}. [${m.source || '메모'}] ${m.title || '(제목없음)'}\n${m.content.substring(0, 400)}`
+          ).join('\n\n')
+        );
+      }
+
+      if (memberResults.length > 0) {
+        resultParts.push(
+          `[구성원 검색 결과 — ${memberResults.length}명]\n` +
+          memberResults.map(m =>
+            `👤 ${m.name} (${m.role || ''}) ${m.email || ''} ${m.team || ''}`
+          ).join('\n')
+        );
+      }
+
+      if (projectResults.length > 0) {
+        resultParts.push(
+          `[과제 검색 결과 — ${projectResults.length}건]\n` +
+          projectResults.map(p =>
+            `📋 ${p.name} — ${p.funder || ''} | ${p.status || ''} | 기간: ${p.period || ''}`
+          ).join('\n')
+        );
+      }
+
+      if (pubResults.length > 0) {
+        resultParts.push(
+          `[논문 검색 결과 — ${pubResults.length}편]\n` +
+          pubResults.map(p =>
+            `📄 ${p.title.substring(0, 80)} — ${p.journal || ''} (${p.year || ''})`
+          ).join('\n')
+        );
+      }
+
+      // 병렬 검색 결과가 있으면 기존 intent 결과와 합산
+      if (resultParts.length > 0) {
+        const ragResult = resultParts.join('\n\n');
+        dbResult = dbResult ? `${dbResult}\n\n${ragResult}` : ragResult;
+      }
+
+      // 병렬 검색에서도 못 찾았으면 기존 intent 핸들러 시도 (fallback)
+      if (!dbResult) {
+        dbResult = await handleDbQuery(intent, entities, lab.id, userId, message);
       }
     }
 
