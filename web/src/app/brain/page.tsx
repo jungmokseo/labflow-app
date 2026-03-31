@@ -97,27 +97,44 @@ export default function BrainPage() {
     } catch {}
   }
 
-  function handleSelectTool(tool: BrainTool) {
+  async function handleSelectTool(tool: BrainTool) {
     setActiveTool(tool);
-    if (tool !== 'general') {
-      // 영구 세션: 기존 세션 있으면 로드
-      const existing = toolSessions.find((c: any) => c.tool === tool);
-      if (existing) {
-        loadMessages(existing.id);
+    // 항상 서버에서 최신 채널 목록을 가져온 후 세션 선택
+    try {
+      const res = await getBrainChannels();
+      const data = res.data || res;
+      let tools: any[] = [];
+      let frees: any[] = [];
+      if (Array.isArray(data)) {
+        tools = data.filter((c: any) => c.tool && c.tool !== 'general');
+        frees = data.filter((c: any) => !c.tool || c.tool === 'general');
       } else {
-        // 새 세션은 첫 메시지 보낼 때 서버에서 생성
-        setActiveChannelId(null);
-        setMessages([]);
+        tools = (data as any).toolSessions || [];
+        frees = (data as any).freeSessions || [];
       }
-    } else {
-      // 자유 대화: 가장 최근 세션 로드 (없으면 빈 상태 → 첫 메시지에서 생성)
-      const recent = freeSessions[0];
-      if (recent) {
-        loadMessages(recent.id);
+      setToolSessions(tools);
+      setFreeSessions(frees);
+
+      if (tool !== 'general') {
+        const existing = tools.find((c: any) => c.tool === tool);
+        if (existing) {
+          loadMessages(existing.id);
+        } else {
+          setActiveChannelId(null);
+          setMessages([]);
+        }
       } else {
-        setActiveChannelId(null);
-        setMessages([]);
+        const recent = frees[0];
+        if (recent) {
+          loadMessages(recent.id);
+        } else {
+          setActiveChannelId(null);
+          setMessages([]);
+        }
       }
+    } catch {
+      setActiveChannelId(null);
+      setMessages([]);
     }
   }
 
