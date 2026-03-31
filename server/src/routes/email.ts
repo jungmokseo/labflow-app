@@ -261,6 +261,77 @@ ${keywordSection}${importanceSection}
 - 같은 스레드의 여러 메일은 하나로 합쳐 최신 상태로 요약.`;
 }
 
+/** 도메인 매칭으로 기관 찾기 */
+function domainMatchGroup(sender: string, profile: UserProfile | null): { name: string; emoji: string } | null {
+  if (!profile?.classifyByGroup || !profile.groups?.length) return null;
+  const senderLower = sender.toLowerCase();
+  for (const g of profile.groups) {
+    if (g.domains?.length > 0 && g.domains.some((d: string) => senderLower.includes(d.toLowerCase()))) {
+      return { name: g.name, emoji: g.emoji };
+    }
+  }
+  return null;
+}
+
+/**
+ * 규칙 기반 이메일 분류 (Sonnet 없을 때 fallback)
+ * 도메인 매칭 + 키워드 규칙으로 기관/성격 분류
+ */
+function classifyByRules(
+  subject: string,
+  sender: string,
+  snippet: string,
+  profile: UserProfile | null,
+): EmailClassification {
+  const subjectLower = subject.toLowerCase();
+  const senderLower = sender.toLowerCase();
+  const text = `${subject} ${snippet}`.toLowerCase();
+
+  // 1. 성격별 분류 (키워드 매칭)
+  let category: EmailCategory = 'info';
+  if (/긴급|urgent|asap|deadline|마감|즉시/.test(text)) {
+    category = 'urgent';
+  } else if (/검토|확인.*요청|결재|승인|제출|회신|답변.*바|요청드|부탁드/.test(text)) {
+    category = 'action-needed';
+  } else if (/일정|미팅|회의|세미나|워크숍|참석|zoom|meet|calendar|초대/.test(text)) {
+    category = 'schedule';
+  } else if (/no-?reply|noreply|newsletter|unsubscribe|수신거부|광고/.test(senderLower)) {
+    category = 'ads';
+  }
+
+  // 2. 기관별 분류 (도메인 매칭)
+  let group: string | undefined;
+  let groupEmoji: string | undefined;
+  if (profile?.classifyByGroup && profile.groups?.length > 0) {
+    for (const g of profile.groups) {
+      if (g.domains?.length > 0 && g.domains.some((d: string) => senderLower.includes(d.toLowerCase()))) {
+        group = g.name;
+        groupEmoji = g.emoji;
+        break;
+      }
+    }
+    if (!group) {
+      // 매칭 안 되면 마지막 그룹 (보통 "개인")
+      const lastGroup = profile.groups[profile.groups.length - 1];
+      group = lastGroup?.name || '개인';
+      groupEmoji = lastGroup?.emoji || '👤';
+    }
+  }
+
+  // 3. 요약 생성 (snippet에서 핵심 추출)
+  let summary = snippet || subject;
+  if (summary.length > 80) summary = summary.slice(0, 77) + '...';
+
+  return {
+    category,
+    confidence: 0.6,
+    summary,
+    needsBody: false,
+    group,
+    groupEmoji,
+  };
+}
+
 /**
  * Sonnet 기반 이메일 분류
  */
@@ -272,14 +343,10 @@ async function classifyEmailsWithSonnet(
   const anthropic = createAnthropicClient();
 
   if (!anthropic) {
-    // fallback — Sonnet 미설정 시 기본 info
+    // fallback — Sonnet 미설정 시 규칙 기반 분류
     emails.forEach((e) => {
-      results.set(String(e.index), {
-        category: 'info',
-        confidence: 0.5,
-        summary: e.subject.substring(0, 50),
-        needsBody: false,
-      });
+      const cls = classifyByRules(e.subject, e.sender, e.snippet, profile);
+      results.set(String(e.index), cls);
     });
     return results;
   }
@@ -853,8 +920,8 @@ export async function emailRoutes(app: FastifyInstance) {
           dateLocal: formatDateWithTimezone(email.internalDate, timezone),
           category: cls.category,
           categoryEmoji: CATEGORY_EMOJI[cls.category],
-          group: cls.group,
-          groupEmoji: cls.groupEmoji,
+          group: cls.group || domainMatchGroup(email.sender, profile)?.name || '개인',
+          groupEmoji: cls.groupEmoji || domainMatchGroup(email.sender, profile)?.emoji || '👤',
           summary: cls.summary,
           messageId: email.messageId,
           threadId: email.threadId,
