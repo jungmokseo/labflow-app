@@ -609,12 +609,14 @@ export async function emailRoutes(app: FastifyInstance) {
       if (allTokens.length === 0) return reply.send({ success: true, connected: false });
 
       const primaryToken = allTokens[0];
-      const isExpired = primaryToken.expiresAt && primaryToken.expiresAt < new Date();
+      // refresh_token이 있으면 access_token 만료와 무관하게 connected
+      // Google OAuth2 클라이언트가 자동으로 refresh 처리함
+      const hasRefreshToken = !!primaryToken.refreshToken;
       const rawProfile = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
 
       return reply.send({
         success: true,
-        connected: !isExpired,
+        connected: hasRefreshToken || (primaryToken.expiresAt ? primaryToken.expiresAt > new Date() : true),
         accounts: allTokens.map(t => ({
           id: t.id,
           email: t.email,
@@ -627,7 +629,7 @@ export async function emailRoutes(app: FastifyInstance) {
         classifyByGroup: rawProfile?.classifyByGroup ?? false,
         groupCount: rawProfile ? (rawProfile.groups as any[]).length : 0,
         lastBriefingAt: rawProfile?.lastBriefingAt?.toISOString() || null,
-        message: isExpired ? 'Gmail 토큰 만료' : `Gmail ${allTokens.length}개 계정 연동됨`,
+        message: !hasRefreshToken && primaryToken.expiresAt && primaryToken.expiresAt < new Date() ? 'Gmail 토큰 만료' : `Gmail ${allTokens.length}개 계정 연동됨`,
       });
     } catch (error: any) {
       return reply.code(500).send({ error: 'Gmail 상태 확인 실패', details: error.message });
@@ -1259,52 +1261,127 @@ export async function emailRoutes(app: FastifyInstance) {
       let markdown: string;
 
       if (anthropic) {
-        const narrativePrompt = `당신은 대학 교수의 이메일을 분석하는 전문 AI 비서입니다.
-아래 이메일 ${emailDataForPrompt.length}건은 이미 AI(Gemini)가 1차 분류(카테고리, 우선순위, 기관)를 완료한 상태입니다.
-이 분류 결과를 참고하되, 맥락을 깊이 분석하여 서사형 마크다운 브리핑 문서를 작성하세요.
+        const todayStr = new Date().toLocaleDateString('ko-KR', {
+          timeZone: timezone, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short',
+        });
+        const timeStr = new Date().toLocaleTimeString('ko-KR', {
+          timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
+        });
+        const tzLabel = timezone.includes('New_York') ? 'EDT' : timezone.includes('Seoul') ? 'KST' : timezone;
 
-## 1차 분류 통계
-- ⚠️ 긴급: ${urgentCount}건
-- 📝 대응필요: ${actionCount}건
-- 📅 일정: ${scheduleCount}건
-- 📰 정보성: ${infoCount}건
-- 🛒 광고: ${adsCount}건
+        const narrativePrompt = `당신은 대학 교수의 이메일을 분석하여 고품질 서사형 브리핑 문서를 작성하는 전문 AI 비서입니다.
+Gemini가 1차 분류(카테고리, 우선순위, 기관)를 완료한 ${emailDataForPrompt.length}건의 이메일을 분석합니다.
 
-## 기관별 분류 정보
-${groupInfo}
+## 기관 분류: ${groupInfo}
+## 1차 분류 통계: ⚠️긴급 ${urgentCount} · 📝대응필요 ${actionCount} · 📅일정 ${scheduleCount} · 📰정보성 ${infoCount} · 🛒광고 ${adsCount}
 
-## 출력 형식 (반드시 마크다운으로)
+## 출력 형식 — 아래 구조를 정확히 따르세요
 
-### 1. 헤더
-# 📧 이메일 브리핑
-> {날짜} 기준 · {총 N건} 분석 완료
+---
 
-### 2. 🚨 즉시 대응 필요 (urgent/action-needed만, 없으면 생략)
-각 이메일에 대해:
-- 발신자 + 제목
-- **맥락 분석**: 이 이메일이 왜 중요한지, 어떤 액션이 필요한지 줄글로 (단순 제목 반복 NO)
-- 📌 **액션 아이템**: 구체적 행동 + 마감일(있으면)
+📧 **이메일 브리핑** — ${todayStr} ${timeStr} ${tzLabel}
 
-### 3. 기관별 섹션
-각 기관에 대해 (예: 🏫 연세대 · N건):
-- 카테고리 이모지 + 발신자 + 제목 + **맥락 분석 한두 줄** (줄글)
-- 같은 스레드/주제는 묶어서 분석
-- 📝 대응필요 / 📅 일정 / 📰 정보성 구분
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-### 4. 📊 요약
-- **즉시 대응**: N건 (구체적 리스트)
-- **이번 주 일정**: 일정 관련 이메일에서 추출한 날짜/시간
-- **진행 상황 업데이트**: 보고/공유 성격 이메일 요약
+총 ~{N}건 신규 ({마지막 브리핑 이후}) | ⚠️ 긴급 {N}건 · 대응필요 {N}건 · 정보성 {N}건+ · 광고 ~{N}건
 
-### 5. 광고/프로모션 (있으면)
-한 줄로 압축: [Foot Locker] · [PUMA] · [Amazon] ... (N건)
+---
 
-## 분석 규칙
-- 1차 분류의 카테고리/기관을 존중하되, 맥락상 부정확하면 수정
-- 단순 subject 반복 절대 금지. 반드시 맥락을 분석해서 줄글로 작성
-- 이메일 간 관련성이 있으면 연결해서 분석 (같은 프로젝트, 같은 회의 등)
-- 한국어로 작성 (영어 이메일도 한국어로 분석)
-- 마크다운 문법 정확히 사용`;
+각 기관별 섹션 (예시):
+
+**🏫 연세대학교 ({N}건)**
+
+──────────────
+
+⚠️ **{발신자}** — {제목} ({시각 ${tzLabel}})
+
+— {맥락 분석 줄글: 이 이메일이 왜 중요한지, 구체적으로 무슨 내용인지. 단순 제목 반복 절대 금지.}
+
+→ {필요한 액션 1}
+
+→ {필요한 액션 2}
+
+📝 **{발신자}** — {제목} ({시각 ${tzLabel}})
+
+— {맥락 분석 줄글}
+
+📰 **{발신자}** — {제목}: {핵심 내용 한 줄 요약}
+
+📰 **{발신자}** — {제목}
+
+---
+
+**🏢 링크솔루텍 ({N}건)**
+
+──────────────
+
+(같은 형식)
+
+---
+
+**👤 개인 ({N}건)**
+
+──────────────
+
+(같은 형식)
+
+---
+
+**🛒 광고/프로모션 (~{N}건)**
+
+[Foot Locker] ×2 · [PUMA] · [New Balance] · ...
+
+[학술지초대] · [MDPI] · ...
+
+[기타] · ...
+
+---
+
+**📊 요약**
+
+━━━━━━
+
+(있으면) ⚠️ {진행 중인 중요 건의 타임라인}:
+
+{날짜} — {이벤트}
+
+{날짜} — {이벤트}
+
+현재: {상태}
+
+**즉시 대응:**
+
+⚠️ {구체적 액션 — 누구에게 무엇을}
+
+📝 {구체적 액션}
+
+📝 {구체적 액션}
+
+**진행 상황 업데이트:**
+
+✅ {완료된 것}
+
+✅ {진행 중인 것}
+
+**이번 주 일정:**
+
+오늘 {날짜} — {일정1} / {일정2}
+
+{날짜} — {일정}
+
+---
+
+## 핵심 규칙
+1. 모든 이메일 항목 사이에 빈 줄을 넣어 가독성 확보 (밀집 금지)
+2. 긴급/대응필요 이메일은 반드시 맥락 분석 줄글 + 구체적 액션 아이템(→) 포함
+3. 정보성 이메일은 발신자 + 제목 + 핵심 한 줄 요약 (짧게)
+4. 같은 스레드/프로젝트 이메일은 타임라인으로 묶어서 분석
+5. 광고는 [발신자] · [발신자] 형태로 한 줄 압축
+6. 한국어로 작성 (영어 이메일도 한국어로)
+7. 제목 구분선(──, ━━)을 활용하여 섹션 구분
+8. 카테고리 이모지(⚠️📝📅📰🛒) 반드시 사용
+9. 시각 표기 시 ${tzLabel} 포함
+10. 마크다운 문법: **굵게**, 빈 줄, 목록 활용. HTML 금지.`;
 
         try {
           const response = await anthropic.messages.create({

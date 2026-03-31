@@ -30,7 +30,8 @@ export default function EmailPage() {
         setConnected(status.connected);
         if (status.connected) {
           try { await initEmailProfile(); } catch {}
-          await loadBriefing();
+          // 페이지 로드 시 히스토리만 가져옴 (브리핑은 새로고침 시에만 생성)
+          await loadHistory();
         }
       } catch (err: any) {
         setError(err.message);
@@ -41,17 +42,32 @@ export default function EmailPage() {
     load();
   }, []);
 
-  async function loadBriefing() {
+  async function loadHistory() {
+    try {
+      const historyRes = await getEmailBriefingHistory(30, 20);
+      setHistory(historyRes.data);
+      // 최신 히스토리에서 서사형 브리핑(narrative 태그)이 있으면 캐시로 표시
+      const latestNarrative = historyRes.data?.find((h: any) =>
+        h.title?.includes('서사형') || h.title?.includes('브리핑')
+      );
+      if (latestNarrative?.briefings?.[0]?.summary) {
+        // 히스토리의 content가 마크다운이면 그대로 표시 (Memo content)
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function generateBriefing() {
     setBriefingLoading(true);
     setError(null);
     try {
-      const [briefingRes, historyRes] = await Promise.all([
-        getNarrativeBriefing(30),
-        getEmailBriefingHistory(30, 20),
-      ]);
+      const briefingRes = await getNarrativeBriefing(50);
       setMarkdown(briefingRes.markdown);
       setEmailCount(briefingRes.emailCount);
       setGeneratedAt(briefingRes.generatedAt);
+      // 히스토리도 새로고침
+      const historyRes = await getEmailBriefingHistory(30, 20);
       setHistory(historyRes.data);
     } catch (err: any) {
       setError(err.message);
@@ -130,11 +146,11 @@ export default function EmailPage() {
             Gmail 연동됨
           </span>
           <button
-            onClick={loadBriefing}
+            onClick={generateBriefing}
             disabled={briefingLoading}
-            className="px-4 py-2 bg-bg-input/50 hover:bg-bg-input text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
           >
-            {briefingLoading ? '분석 중...' : '새로고침'}
+            {briefingLoading ? '분석 중...' : '📧 브리핑 생성'}
           </button>
         </div>
       </div>
@@ -149,6 +165,23 @@ export default function EmailPage() {
           <div className="animate-spin w-10 h-10 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
           <p className="text-white font-medium">AI가 이메일을 분석하고 있습니다...</p>
           <p className="text-xs text-text-muted mt-2">Claude Sonnet이 전체 이메일을 읽고 서사형 브리핑 문서를 작성 중 (30초~1분)</p>
+        </div>
+      ) : !markdown && !briefingLoading ? (
+        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-12 text-center">
+          <span className="text-5xl block mb-4">📧</span>
+          <h3 className="text-lg font-semibold text-white mb-2">이메일 브리핑</h3>
+          <p className="text-text-muted mb-6 max-w-md mx-auto text-sm">
+            "브리핑 생성" 버튼을 누르면 AI가 마지막 브리핑 이후 수신된 이메일을 분석하여
+            서사형 브리핑 문서를 작성합니다.
+          </p>
+          <button
+            onClick={generateBriefing}
+            disabled={briefingLoading}
+            className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-colors"
+          >
+            📧 브리핑 생성
+          </button>
+          <p className="text-xs text-text-muted mt-4">Gemini 분류 + Sonnet 서사형 분석 (30초~1분)</p>
         </div>
       ) : markdown ? (
         <div className="bg-bg-card rounded-xl border border-bg-input/50 p-6 md:p-8">
@@ -174,9 +207,7 @@ export default function EmailPage() {
             </ReactMarkdown>
           </article>
         </div>
-      ) : (
-        <div className="text-center py-12 text-text-muted">새 이메일이 없습니다.</div>
-      )}
+      ) : null}
 
       {/* Briefing History */}
       {history.length > 0 && (
