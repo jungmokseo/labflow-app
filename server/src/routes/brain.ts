@@ -1101,9 +1101,10 @@ export async function brainRoutes(app: FastifyInstance) {
       }
       channelId = toolChannel.id;
     } else if (!channelId) {
-      // general: 새 자유 대화 세션 생성
+      // general: 새 자유 대화 세션 생성 (첫 메시지로 이름 설정)
+      const sessionName = message.length > 30 ? message.slice(0, 27) + '...' : message;
       const newChannel = await prisma.channel.create({
-        data: { userId, type: 'BRAIN', tool: 'general', name: null },
+        data: { userId, type: 'BRAIN', tool: 'general', name: sessionName },
       });
       channelId = newChannel.id;
       isNewSession = true;

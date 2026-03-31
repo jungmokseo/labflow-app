@@ -110,9 +110,14 @@ export default function BrainPage() {
         setMessages([]);
       }
     } else {
-      // 자유 대화: 새 세션
-      setActiveChannelId(null);
-      setMessages([]);
+      // 자유 대화: 가장 최근 세션 로드 (없으면 빈 상태 → 첫 메시지에서 생성)
+      const recent = freeSessions[0];
+      if (recent) {
+        loadMessages(recent.id);
+      } else {
+        setActiveChannelId(null);
+        setMessages([]);
+      }
     }
   }
 
