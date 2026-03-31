@@ -1213,7 +1213,7 @@ export async function brainRoutes(app: FastifyInstance) {
       if (intent === 'multi_hop') {
         // 멀티홉 체이닝 실행
         dbResult = await executeMultiHopQuery(message, entities, hops, lab.id);
-      } else if (['query_project', 'query_publication', 'query_member', 'query_meeting', 'query_stale', 'fallback_search'].includes(intent)) {
+      } else if (['query_project', 'query_publication', 'query_member', 'query_meeting', 'query_stale', 'search_memory', 'fallback_search'].includes(intent)) {
         // 단일홉 조회 (메타기억 포함) + 범용 검색
         dbResult = await handleDbQuery(intent, entities, lab.id, userId, message);
       }
