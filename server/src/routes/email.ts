@@ -1151,12 +1151,17 @@ export async function emailRoutes(app: FastifyInstance) {
 
       // 이메일 데이터 추출
       interface ParsedEmail {
-        index: number; messageId: string; sender: string; senderName: string;
+        index: number; messageId: string; threadId: string;
+        sender: string; senderName: string;
         subject: string; snippet: string; body: string; dateStr: string;
-        toCC: string; groupLabel: string;
+        toCC: string; groupLabel: string; internalDate: number;
       }
       const parsedEmails: ParsedEmail[] = [];
       let emailCount = 0;
+
+      // 주간보고 제외 패턴
+      const isWeeklyReport = (subject: string, sender: string) =>
+        /weekly\s*report/i.test(subject) || subject.includes('주간 진행사항 보고');
 
       for (const msg of messages) {
         const headers = msg.data.payload?.headers || [];
@@ -1169,6 +1174,7 @@ export async function emailRoutes(app: FastifyInstance) {
         const subject = getHeader('subject') || '(제목 없음)';
 
         if (isExcluded(subject, sender, profile.excludePatterns)) continue;
+        if (isWeeklyReport(subject, sender)) continue; // 주간보고 제외
 
         const senderName = sender.split('<')[0].trim() || sender;
         const snippet = msg.data.snippet || '';
@@ -1176,13 +1182,25 @@ export async function emailRoutes(app: FastifyInstance) {
         const dateStr = formatDateWithTimezone(internalDate, timezone);
         const toCC = `${getHeader('to')} ${getHeader('cc')}`.trim();
 
-        const groupMatch = domainMatchGroup(sender, profile);
-        const groupLabel = groupMatch ? `${groupMatch.emoji}${groupMatch.name}` : '👤개인';
+        // 기관 분류: To/Cc 주소 기반 (발신자보다 수신 주소가 더 정확)
+        let groupLabel = '👤개인';
+        const toCcLower = toCC.toLowerCase();
+        if (toCcLower.includes('@yonsei.ac.kr') || toCcLower.includes('bliss.yonsei')) {
+          groupLabel = '🏫연세대학교';
+        } else if (toCcLower.includes('@lynksolutec.com')) {
+          groupLabel = '🏢링크솔루텍';
+        } else {
+          // fallback: 발신자 도메인으로 판별
+          const groupMatch = domainMatchGroup(sender, profile);
+          if (groupMatch) groupLabel = `${groupMatch.emoji}${groupMatch.name}`;
+        }
 
         parsedEmails.push({
           index: emailCount,
           messageId: msg.data.id || '',
+          threadId: msg.data.threadId || '',
           sender, senderName, subject, snippet, body, dateStr, toCC, groupLabel,
+          internalDate,
         });
         emailCount++;
       }
@@ -1227,30 +1245,60 @@ export async function emailRoutes(app: FastifyInstance) {
       const classificationMap = new Map(stage1Results.map(r => [r.index, r]));
 
       // ── Stage 2: Sonnet 서사형 마크다운 생성 ──
-      // Gemini 분류 결과를 포함하여 Sonnet에 전달
+
+      // 이전 브리핑 맥락 로드 (연속성: Medtronic 대기 중 등 추적)
+      let previousBriefing = '';
+      try {
+        const lastBriefingMemo = await prisma.memo.findFirst({
+          where: { userId: user.id, source: 'email-briefing', tags: { has: 'narrative' } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (lastBriefingMemo) {
+          previousBriefing = lastBriefingMemo.content.substring(0, 3000);
+        }
+      } catch {}
+
+      // 스레드 그룹핑: 같은 threadId의 이메일을 묶음
+      const threadGroups = new Map<string, ParsedEmail[]>();
+      for (const e of parsedEmails) {
+        const tid = e.threadId || e.messageId;
+        if (!threadGroups.has(tid)) threadGroups.set(tid, []);
+        threadGroups.get(tid)!.push(e);
+      }
+
+      // 이메일 데이터 구성 (본문 열람 규칙 적용)
       const emailDataForPrompt: string[] = parsedEmails.map(e => {
         const cls = classificationMap.get(e.index);
         const categoryLabel = cls ? `${CATEGORY_EMOJI[cls.category] || '📰'}${cls.category}` : '📰info';
         const priorityLabel = cls?.priority || 'medium';
-        const groupLabel = cls?.group ? `${cls.groupEmoji || ''}${cls.group}` : e.groupLabel;
 
-        let text = `[${e.index + 1}] [${groupLabel}] [${categoryLabel}] [${priorityLabel}]\n   From: ${e.senderName}\n   제목: ${e.subject}\n   날짜: ${e.dateStr}\n   미리보기: ${e.snippet}`;
-        // high priority나 needs_detail인 경우만 본문 포함
-        if (e.body && e.body.length > 10 && (cls?.priority === 'high' || cls?.needs_detail)) {
-          text += `\n   본문(일부): ${e.body.substring(0, 500)}`;
+        // 스레드 내 다른 메일 표시
+        const threadEmails = threadGroups.get(e.threadId || e.messageId) || [];
+        const isThread = threadEmails.length > 1;
+
+        let text = `[${e.index + 1}] [${e.groupLabel}] [${categoryLabel}] [${priorityLabel}]`;
+        text += `\n   From: ${e.senderName} <${e.sender.match(/<(.+)>/)?.[1] || e.sender}>`;
+        text += `\n   To/Cc: ${e.toCC.substring(0, 150)}`;
+        text += `\n   제목: ${e.subject}`;
+        text += `\n   날짜: ${e.dateStr}`;
+        text += `\n   미리보기: ${e.snippet}`;
+
+        // 본문 열람 규칙: ⚠️긴급/📝대응필요 → 전체 본문, @yonsei.ac.kr 학생 발송 → 본문
+        const isUrgentOrAction = cls?.category === 'urgent' || cls?.category === 'action-needed';
+        const isStudentEmail = e.sender.toLowerCase().includes('@yonsei.ac.kr');
+        const isDearJungmok = e.snippet?.toLowerCase().includes('dear jungmok');
+        if (e.body && e.body.length > 10 && (isUrgentOrAction || isStudentEmail || isDearJungmok || cls?.needs_detail)) {
+          text += `\n   본문:\n${e.body.substring(0, 1000)}`;
         }
-        if (cls?.reason) {
-          text += `\n   AI분류사유: ${cls.reason}`;
+
+        if (isThread) {
+          text += `\n   [스레드: ${threadEmails.length}건 — ${threadEmails.map(t => t.senderName).join(' → ')}]`;
         }
+
         return text;
       });
 
-      // 기관별 그룹 정보
-      const groupInfo = profile.classifyByGroup && profile.groups.length > 0
-        ? profile.groups.map(g => `- ${g.emoji} ${g.name}: ${g.domains.join(', ')}`).join('\n')
-        : '기관 분류 설정 없음';
-
-      // 분류 통계 (Sonnet 프롬프트에 포함)
+      // 분류 통계
       const urgentCount = stage1Results.filter(r => r.category === 'urgent').length;
       const actionCount = stage1Results.filter(r => r.category === 'action-needed').length;
       const scheduleCount = stage1Results.filter(r => r.category === 'schedule').length;
@@ -1268,130 +1316,93 @@ export async function emailRoutes(app: FastifyInstance) {
           timeZone: timezone, hour: '2-digit', minute: '2-digit', hour12: false,
         });
         const tzLabel = timezone.includes('New_York') ? 'EDT' : timezone.includes('Seoul') ? 'KST' : timezone;
+        const afterTimeStr = formatDateWithTimezone(afterDate.getTime(), timezone);
 
-        const narrativePrompt = `당신은 대학 교수의 이메일을 분석하여 고품질 서사형 브리핑 문서를 작성하는 전문 AI 비서입니다.
-Gemini가 1차 분류(카테고리, 우선순위, 기관)를 완료한 ${emailDataForPrompt.length}건의 이메일을 분석합니다.
+        const narrativePrompt = `당신은 서정목 교수(연세대 BLISS Lab / 링크솔루텍 CEO)의 이메일 브리핑 비서입니다.
+3개 Gmail 계정(연세대, 링크솔루텍, 개인)이 포워딩된 통합 이메일을 분석합니다.
+기준 시간대: ${tzLabel}.
 
-## 기관 분류: ${groupInfo}
-## 1차 분류 통계: ⚠️긴급 ${urgentCount} · 📝대응필요 ${actionCount} · 📅일정 ${scheduleCount} · 📰정보성 ${infoCount} · 🛒광고 ${adsCount}
+## 프로젝트 맥락 (이전 브리핑과의 연속성 유지에 활용)
+- Lab 구성원: 육근영(lab manager/BK방장), 천정화(BK coordinator), 박시연, 이유림, 손가영, 강민경, 장한빛, 김미도
+- BD: Armando Mitchell & Austin Chiang (Medtronic), Marc Meyer (Northeastern)
+- 협력: Prof. 신수련 (Harvard), Prof. David Gracias & Anne Kirstukas (JHU/JHMI)
+- 링크솔루텍: 코팅 기술(lubricious, anti-fogging) 상용화, Medtronic Endoscopy BD
 
-## 출력 형식 — 아래 구조를 정확히 따르세요
+## 기관별 3분류 (To/Cc 주소 기반)
+- 🏫 연세대학교: @yonsei.ac.kr 또는 bliss.yonsei
+- 🏢 링크솔루텍: @lynksolutec.com
+- 👤 개인: 위 두 가지에 해당하지 않는 모든 메일
 
----
+## 성격별 분류
+| 이모지 | 분류 | 설명 |
+|--------|------|------|
+| ⚠️ | 긴급 | 마감 24시간 이내 또는 즉각 조치 필요 |
+| 📝 | 대응필요 | 교수님 의견·결정·승인 요청, 저널 의사결정, 명시적 회신 요청 |
+| 📅 | 일정 | 날짜/시간 포함 이벤트, 마감일, 미팅 |
+| 📰 | 정보성 | 공지, 뉴스레터, 알림, CC |
+| 🛒 | 광고 | 프로모션, Call for Papers, 투고 초대 |
 
-📧 **이메일 브리핑** — ${todayStr} ${timeStr} ${tzLabel}
+## 중요도 조정
+- 연구 키워드(하이드로겔, 액체금속, 방오코팅, 웨어러블 바이오일렉트로닉스, 자가치유 PDMS) → 1단계 상향
+- Submission confirmation, Decision, Review results → ⚠️ 최우선 상향
+- Call for Papers, 투고 초대 → 📰 또는 🛒 강등
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## Gemini 1차 분류 통계
+⚠️긴급 ${urgentCount} · 📝대응필요 ${actionCount} · 📅일정 ${scheduleCount} · 📰정보성 ${infoCount} · 🛒광고 ${adsCount}
 
-총 ~{N}건 신규 ({마지막 브리핑 이후}) | ⚠️ 긴급 {N}건 · 대응필요 {N}건 · 정보성 {N}건+ · 광고 ~{N}건
+${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBriefing.substring(0, 2000)}\n\n위 이전 브리핑에서 추적 중인 건(Medtronic, 논문 수정, 과제 마감 등)의 상태가 업데이트되었는지 확인하고, 📊 요약에 진행 상황을 반영하세요.` : ''}
 
----
+## 출력 포맷 (정확히 따르세요)
 
-각 기관별 섹션 (예시):
+📧 이메일 브리핑 — ${todayStr} ${timeStr} ${tzLabel}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+총 ~N건 신규 (${afterTimeStr} 이후) | ⚠️ 긴급 N건 · 대응필요 N건 · 정보성 N건+ · 광고 ~N건
 
-**🏫 연세대학교 ({N}건)**
-
+🏫 연세대학교 (N건)
 ──────────────
+⚠️ 제목 (시간) — 요약. 마감/조치사항.
+→ 구체적 액션
+📝 제목 (시간) — 요약. 핵심 판단 포인트.
+📅 제목 (시간) — 이벤트 설명. 마감일.
+📰 발신자 (시간) — 한 줄 요약.
 
-⚠️ **{발신자}** — {제목} ({시각 ${tzLabel}})
-
-— {맥락 분석 줄글: 이 이메일이 왜 중요한지, 구체적으로 무슨 내용인지. 단순 제목 반복 절대 금지.}
-
-→ {필요한 액션 1}
-
-→ {필요한 액션 2}
-
-📝 **{발신자}** — {제목} ({시각 ${tzLabel}})
-
-— {맥락 분석 줄글}
-
-📰 **{발신자}** — {제목}: {핵심 내용 한 줄 요약}
-
-📰 **{발신자}** — {제목}
-
----
-
-**🏢 링크솔루텍 ({N}건)**
-
+🏢 링크솔루텍 (N건)
 ──────────────
+(동일 포맷)
 
-(같은 형식)
-
----
-
-**👤 개인 ({N}건)**
-
+👤 개인 (N건)
 ──────────────
+(동일 포맷)
 
-(같은 형식)
+🛒 광고/프로모션 (N건)
+[발신자] · [발신자] · ... (한 줄 압축)
 
----
-
-**🛒 광고/프로모션 (~{N}건)**
-
-[Foot Locker] ×2 · [PUMA] · [New Balance] · ...
-
-[학술지초대] · [MDPI] · ...
-
-[기타] · ...
-
----
-
-**📊 요약**
-
+📊 요약
 ━━━━━━
+오늘 완료된 것들: ✅ 항목
+즉시 대응: ⚠️/📝 구체적 액션
+진행 상황 업데이트: 이전 브리핑에서 추적 중인 건의 현재 상태
+이번 주 일정: 날짜별 정리
 
-(있으면) ⚠️ {진행 중인 중요 건의 타임라인}:
-
-{날짜} — {이벤트}
-
-{날짜} — {이벤트}
-
-현재: {상태}
-
-**즉시 대응:**
-
-⚠️ {구체적 액션 — 누구에게 무엇을}
-
-📝 {구체적 액션}
-
-📝 {구체적 액션}
-
-**진행 상황 업데이트:**
-
-✅ {완료된 것}
-
-✅ {진행 중인 것}
-
-**이번 주 일정:**
-
-오늘 {날짜} — {일정1} / {일정2}
-
-{날짜} — {일정}
-
----
-
-## 핵심 규칙
-1. 모든 이메일 항목 사이에 빈 줄을 넣어 가독성 확보 (밀집 금지)
-2. 긴급/대응필요 이메일은 반드시 맥락 분석 줄글 + 구체적 액션 아이템(→) 포함
-3. 정보성 이메일은 발신자 + 제목 + 핵심 한 줄 요약 (짧게)
-4. 같은 스레드/프로젝트 이메일은 타임라인으로 묶어서 분석
-5. 광고는 [발신자] · [발신자] 형태로 한 줄 압축
-6. 한국어로 작성 (영어 이메일도 한국어로)
-7. 제목 구분선(──, ━━)을 활용하여 섹션 구분
-8. 카테고리 이모지(⚠️📝📅📰🛒) 반드시 사용
-9. 시각 표기 시 ${tzLabel} 포함
-10. 마크다운 문법: **굵게**, 빈 줄, 목록 활용. HTML 금지.`;
+## 압축 규칙
+- ⚠️/📝: 핵심 내용 최대 2줄 + 조치사항(→) 1줄. 스레드 히스토리는 간결하게 합침.
+- 📰: "발신자 (시간) — 한 줄" 만.
+- 다건 동일 성격: "전자결재 수신참조 (3건): 항목1, 항목2, 항목3" 한 줄 묶음.
+- 🛒: [발신자] · [발신자] 형태로 압축. 학술지 초대도 여기 포함.
+- 조치 없는 항목에는 → 달지 않음.
+- 한국발 메일: KST → ${tzLabel} 병기. 예: 09:22 KST (전일 19:22 ${tzLabel})
+- 같은 스레드의 여러 메일은 타임라인으로 합쳐서 한 항목으로 정리 (답장 내용 포함)
+- 한국어로 작성. 마크다운 문법. HTML 금지.`;
 
         try {
           const response = await anthropic.messages.create({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 8192,
-            temperature: 0.3,
+            temperature: 0.2,
             system: narrativePrompt,
             messages: [{
               role: 'user',
-              content: `다음 이메일 ${emailDataForPrompt.length}건(Gemini 1차 분류 완료)을 분석하여 서사형 브리핑 문서를 작성해주세요:\n\n${emailDataForPrompt.join('\n\n')}`,
+              content: `다음 이메일 ${emailDataForPrompt.length}건을 분석하여 서사형 브리핑을 작성해주세요:\n\n${emailDataForPrompt.join('\n\n')}`,
             }],
           });
 
