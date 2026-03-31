@@ -162,6 +162,12 @@ export async function getEmailBriefingHistory(days = 30, limit = 20) {
   );
 }
 
+export async function getNarrativeBriefing(maxResults = 30) {
+  return apiFetch<{ success: boolean; markdown: string; emailCount: number; generatedAt: string }>(
+    `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true`
+  );
+}
+
 export async function initEmailProfile() {
   return apiFetch<{ success: boolean; initialized: boolean; data?: any }>('/api/email/profile/init', {
     method: 'POST',

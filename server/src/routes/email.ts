@@ -27,6 +27,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 
 // ── Zod 스키마 ──────────────────────────────────────
 const briefingQuerySchema = z.object({
@@ -271,6 +272,20 @@ function domainMatchGroup(sender: string, profile: UserProfile | null): { name: 
     }
   }
   return null;
+}
+
+/**
+ * Sonnet 없을 때 서사형 브리핑 fallback (텍스트 기반 정리)
+ */
+function generateFallbackNarrative(emailData: string[], timezone: string): string {
+  const today = new Date().toLocaleDateString('ko-KR', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  let md = `# 📧 이메일 브리핑\n\n> ${today} 기준 · 총 ${emailData.length}건\n\n`;
+  md += `## 📬 수신 이메일 목록\n\n`;
+  for (const email of emailData) {
+    md += email + '\n\n';
+  }
+  md += `\n---\n*AI 분석 비활성화 상태 — Anthropic API 키를 설정하면 서사형 분석이 제공됩니다.*\n`;
+  return md;
 }
 
 /**
@@ -1040,6 +1055,317 @@ export async function emailRoutes(app: FastifyInstance) {
         return reply.code(401).send({ error: 'Gmail 토큰 만료', authUrl: '/api/email/auth/url' });
       }
 
+      return reply.code(500).send({ error: '이메일 브리핑 실패', details: error.message });
+    }
+  });
+
+  // ── GET /api/email/narrative-briefing — 서사형 AI 브리핑 ──
+  app.get('/api/email/narrative-briefing', async (request, reply) => {
+    const query = briefingQuerySchema.parse(request.query);
+    const userId = request.userId!;
+
+    try {
+      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail 미연동', authUrl: '/api/email/auth/url' });
+
+      const rawProfile = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
+      const profile: UserProfile = rawProfile ? parseProfile(rawProfile) : {
+        classifyByGroup: false, groups: [], excludePatterns: [],
+        keywords: [], importanceRules: [], senderTimezones: [], timezone: 'America/New_York',
+      };
+      const timezone = profile.timezone;
+
+      // T_last 결정
+      let afterDate: Date;
+      if (query.since) {
+        afterDate = new Date(query.since);
+      } else if (rawProfile?.lastBriefingAt) {
+        afterDate = rawProfile.lastBriefingAt;
+      } else {
+        const now = new Date();
+        afterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+
+      const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
+      const excludeSpam = query.includeSpam === 'false' ? '-category:promotions -category:social' : '';
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: gmailToken.accessToken,
+        refresh_token: gmailToken.refreshToken || undefined,
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken!.id },
+            data: {
+              accessToken: tokens.access_token!,
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+            },
+          });
+        } catch {}
+      });
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      // 페이지네이션 수집 (최대 3페이지)
+      let allMessageIds: Array<{ id: string; threadId: string }> = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < 3; page++) {
+        const listResponse = await gmail.users.messages.list({
+          userId: 'me', maxResults: 50,
+          q: `after:${afterStr} -from:me ${excludeSpam}`,
+          pageToken,
+        });
+        const msgs = listResponse.data.messages || [];
+        allMessageIds.push(...msgs.map(m => ({ id: m.id!, threadId: m.threadId! })));
+        pageToken = listResponse.data.nextPageToken || undefined;
+        if (!pageToken) break;
+      }
+
+      if (allMessageIds.length === 0) {
+        return reply.send({
+          success: true,
+          markdown: '# 📧 이메일 브리핑\n\n새로운 이메일이 없습니다.',
+          emailCount: 0,
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      // 메시지 상세 조회
+      const batchSize = Math.min(allMessageIds.length, query.maxResults);
+      const detailPromises = allMessageIds.slice(0, batchSize).map(msg =>
+        gmail.users.messages.get({
+          userId: 'me', id: msg.id,
+          format: query.includeBody === 'true' ? 'full' : 'metadata',
+          metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date'],
+        }),
+      );
+      const messages = await Promise.all(detailPromises);
+
+      // 이메일 데이터 추출
+      interface ParsedEmail {
+        index: number; messageId: string; sender: string; senderName: string;
+        subject: string; snippet: string; body: string; dateStr: string;
+        toCC: string; groupLabel: string;
+      }
+      const parsedEmails: ParsedEmail[] = [];
+      let emailCount = 0;
+
+      for (const msg of messages) {
+        const headers = msg.data.payload?.headers || [];
+        const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+        const internalDate = Number(msg.data.internalDate) || Date.now();
+
+        if (internalDate < afterDate.getTime()) continue;
+
+        const sender = getHeader('from');
+        const subject = getHeader('subject') || '(제목 없음)';
+
+        if (isExcluded(subject, sender, profile.excludePatterns)) continue;
+
+        const senderName = sender.split('<')[0].trim() || sender;
+        const snippet = msg.data.snippet || '';
+        const body = query.includeBody === 'true' ? extractBody(msg.data.payload) : '';
+        const dateStr = formatDateWithTimezone(internalDate, timezone);
+        const toCC = `${getHeader('to')} ${getHeader('cc')}`.trim();
+
+        const groupMatch = domainMatchGroup(sender, profile);
+        const groupLabel = groupMatch ? `${groupMatch.emoji}${groupMatch.name}` : '👤개인';
+
+        parsedEmails.push({
+          index: emailCount,
+          messageId: msg.data.id || '',
+          sender, senderName, subject, snippet, body, dateStr, toCC, groupLabel,
+        });
+        emailCount++;
+      }
+
+      if (parsedEmails.length === 0) {
+        return reply.send({
+          success: true,
+          markdown: '# 📧 이메일 브리핑\n\n새로운 이메일이 없습니다.',
+          emailCount: 0,
+          generatedAt: new Date().toISOString(),
+        });
+      }
+
+      // ── Stage 1: Gemini Flash 배치 분류 ──
+      const stage1Inputs: Stage1Input[] = parsedEmails.map(e => ({
+        index: e.index,
+        subject: e.subject,
+        from: e.sender,
+        snippet: e.snippet.substring(0, 200),
+        toCC: e.toCC,
+      }));
+
+      const profileForClassification: UserProfileForClassification = {
+        classifyByGroup: profile.classifyByGroup,
+        groups: profile.groups,
+        keywords: profile.keywords,
+        importanceRules: profile.importanceRules,
+      };
+
+      let stage1Results: Stage1Result[];
+      try {
+        stage1Results = await classifyEmailBatchStage1(stage1Inputs, profileForClassification, null);
+      } catch (err) {
+        console.warn('Stage 1 (Gemini) 실패, 기본 분류 적용:', err);
+        stage1Results = stage1Inputs.map(e => ({
+          index: e.index, priority: 'medium' as const,
+          category: 'info' as const, needs_detail: false, reason: 'fallback',
+        }));
+      }
+
+      // Stage 1 결과를 이메일 데이터에 매핑
+      const classificationMap = new Map(stage1Results.map(r => [r.index, r]));
+
+      // ── Stage 2: Sonnet 서사형 마크다운 생성 ──
+      // Gemini 분류 결과를 포함하여 Sonnet에 전달
+      const emailDataForPrompt: string[] = parsedEmails.map(e => {
+        const cls = classificationMap.get(e.index);
+        const categoryLabel = cls ? `${CATEGORY_EMOJI[cls.category] || '📰'}${cls.category}` : '📰info';
+        const priorityLabel = cls?.priority || 'medium';
+        const groupLabel = cls?.group ? `${cls.groupEmoji || ''}${cls.group}` : e.groupLabel;
+
+        let text = `[${e.index + 1}] [${groupLabel}] [${categoryLabel}] [${priorityLabel}]\n   From: ${e.senderName}\n   제목: ${e.subject}\n   날짜: ${e.dateStr}\n   미리보기: ${e.snippet}`;
+        // high priority나 needs_detail인 경우만 본문 포함
+        if (e.body && e.body.length > 10 && (cls?.priority === 'high' || cls?.needs_detail)) {
+          text += `\n   본문(일부): ${e.body.substring(0, 500)}`;
+        }
+        if (cls?.reason) {
+          text += `\n   AI분류사유: ${cls.reason}`;
+        }
+        return text;
+      });
+
+      // 기관별 그룹 정보
+      const groupInfo = profile.classifyByGroup && profile.groups.length > 0
+        ? profile.groups.map(g => `- ${g.emoji} ${g.name}: ${g.domains.join(', ')}`).join('\n')
+        : '기관 분류 설정 없음';
+
+      // 분류 통계 (Sonnet 프롬프트에 포함)
+      const urgentCount = stage1Results.filter(r => r.category === 'urgent').length;
+      const actionCount = stage1Results.filter(r => r.category === 'action-needed').length;
+      const scheduleCount = stage1Results.filter(r => r.category === 'schedule').length;
+      const infoCount = stage1Results.filter(r => r.category === 'info').length;
+      const adsCount = stage1Results.filter(r => r.category === 'ads').length;
+
+      const anthropic = createAnthropicClient();
+      let markdown: string;
+
+      if (anthropic) {
+        const narrativePrompt = `당신은 대학 교수의 이메일을 분석하는 전문 AI 비서입니다.
+아래 이메일 ${emailDataForPrompt.length}건은 이미 AI(Gemini)가 1차 분류(카테고리, 우선순위, 기관)를 완료한 상태입니다.
+이 분류 결과를 참고하되, 맥락을 깊이 분석하여 서사형 마크다운 브리핑 문서를 작성하세요.
+
+## 1차 분류 통계
+- ⚠️ 긴급: ${urgentCount}건
+- 📝 대응필요: ${actionCount}건
+- 📅 일정: ${scheduleCount}건
+- 📰 정보성: ${infoCount}건
+- 🛒 광고: ${adsCount}건
+
+## 기관별 분류 정보
+${groupInfo}
+
+## 출력 형식 (반드시 마크다운으로)
+
+### 1. 헤더
+# 📧 이메일 브리핑
+> {날짜} 기준 · {총 N건} 분석 완료
+
+### 2. 🚨 즉시 대응 필요 (urgent/action-needed만, 없으면 생략)
+각 이메일에 대해:
+- 발신자 + 제목
+- **맥락 분석**: 이 이메일이 왜 중요한지, 어떤 액션이 필요한지 줄글로 (단순 제목 반복 NO)
+- 📌 **액션 아이템**: 구체적 행동 + 마감일(있으면)
+
+### 3. 기관별 섹션
+각 기관에 대해 (예: 🏫 연세대 · N건):
+- 카테고리 이모지 + 발신자 + 제목 + **맥락 분석 한두 줄** (줄글)
+- 같은 스레드/주제는 묶어서 분석
+- 📝 대응필요 / 📅 일정 / 📰 정보성 구분
+
+### 4. 📊 요약
+- **즉시 대응**: N건 (구체적 리스트)
+- **이번 주 일정**: 일정 관련 이메일에서 추출한 날짜/시간
+- **진행 상황 업데이트**: 보고/공유 성격 이메일 요약
+
+### 5. 광고/프로모션 (있으면)
+한 줄로 압축: [Foot Locker] · [PUMA] · [Amazon] ... (N건)
+
+## 분석 규칙
+- 1차 분류의 카테고리/기관을 존중하되, 맥락상 부정확하면 수정
+- 단순 subject 반복 절대 금지. 반드시 맥락을 분석해서 줄글로 작성
+- 이메일 간 관련성이 있으면 연결해서 분석 (같은 프로젝트, 같은 회의 등)
+- 한국어로 작성 (영어 이메일도 한국어로 분석)
+- 마크다운 문법 정확히 사용`;
+
+        try {
+          const response = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 8192,
+            temperature: 0.3,
+            system: narrativePrompt,
+            messages: [{
+              role: 'user',
+              content: `다음 이메일 ${emailDataForPrompt.length}건(Gemini 1차 분류 완료)을 분석하여 서사형 브리핑 문서를 작성해주세요:\n\n${emailDataForPrompt.join('\n\n')}`,
+            }],
+          });
+
+          const textBlock = response.content.find(b => b.type === 'text');
+          markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
+        } catch (err: any) {
+          console.error('서사형 브리핑 Sonnet 호출 실패:', err);
+          markdown = generateFallbackNarrative(emailDataForPrompt, timezone);
+        }
+      } else {
+        markdown = generateFallbackNarrative(emailDataForPrompt, timezone);
+      }
+
+      // T_last 업데이트
+      const now = new Date();
+      if (rawProfile) {
+        await prisma.emailProfile.update({
+          where: { userId: user.id },
+          data: { lastBriefingAt: now },
+        });
+      } else {
+        await prisma.emailProfile.create({
+          data: { userId: user.id, classifyByGroup: false, groups: [], lastBriefingAt: now },
+        });
+      }
+
+      // 히스토리 저장
+      try {
+        await prisma.memo.create({
+          data: {
+            userId: user.id,
+            labId: request.labId || undefined,
+            title: `📧 서사형 브리핑 ${now.toISOString().split('T')[0]}`,
+            content: markdown.substring(0, 10000),
+            tags: ['email-briefing', 'narrative', 'auto'],
+            source: 'email-briefing',
+          },
+        });
+      } catch {}
+
+      return reply.send({
+        success: true,
+        markdown,
+        emailCount,
+        generatedAt: now.toISOString(),
+      });
+    } catch (error: any) {
+      app.log.error('서사형 이메일 브리핑 실패:', error);
+      if (error.message?.includes('invalid_grant') || error.message?.includes('401')) {
+        return reply.code(401).send({ error: 'Gmail 토큰 만료', authUrl: '/api/email/auth/url' });
+      }
       return reply.code(500).send({ error: '이메일 브리핑 실패', details: error.message });
     }
   });
