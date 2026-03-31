@@ -1305,6 +1305,13 @@ export async function emailRoutes(app: FastifyInstance) {
       const infoCount = stage1Results.filter(r => r.category === 'info').length;
       const adsCount = stage1Results.filter(r => r.category === 'ads').length;
 
+      // 동적 프로필 데이터 로드 (프롬프트 생성 + 자동 학습 양쪽에서 사용)
+      const projectCtx = (rawProfile as any)?.projectContext || {};
+      const keyPeople = ((rawProfile as any)?.keyPeople || []) as Array<{name: string; role?: string; email?: string; org?: string; relationship?: string}>;
+      const activeThreads = ((rawProfile as any)?.activeThreads || []) as Array<{topic: string; status?: string; lastUpdate?: string; parties?: string[]}>;
+      const briefingStyle = (rawProfile as any)?.briefingStyle || {};
+      const learnedPatterns = (rawProfile as any)?.learnedPatterns || {};
+
       const anthropic = createAnthropicClient();
       let markdown: string;
 
@@ -1318,20 +1325,44 @@ export async function emailRoutes(app: FastifyInstance) {
         const tzLabel = timezone.includes('New_York') ? 'EDT' : timezone.includes('Seoul') ? 'KST' : timezone;
         const afterTimeStr = formatDateWithTimezone(afterDate.getTime(), timezone);
 
-        const narrativePrompt = `당신은 서정목 교수(연세대 BLISS Lab / 링크솔루텍 CEO)의 이메일 브리핑 비서입니다.
-3개 Gmail 계정(연세대, 링크솔루텍, 개인)이 포워딩된 통합 이메일을 분석합니다.
-기준 시간대: ${tzLabel}.
+        // 프로필에서 동적 맥락 생성
+        const userName = user.name || '사용자';
+        const userRole = projectCtx.role || '';
+        const userOrg = projectCtx.organization || '';
+        const userLocation = projectCtx.location || '';
+        const researchAreas = (projectCtx.researchAreas || []).join(', ');
 
-## 프로젝트 맥락 (이전 브리핑과의 연속성 유지에 활용)
-- Lab 구성원: 육근영(lab manager/BK방장), 천정화(BK coordinator), 박시연, 이유림, 손가영, 강민경, 장한빛, 김미도
-- BD: Armando Mitchell & Austin Chiang (Medtronic), Marc Meyer (Northeastern)
-- 협력: Prof. 신수련 (Harvard), Prof. David Gracias & Anne Kirstukas (JHU/JHMI)
-- 링크솔루텍: 코팅 기술(lubricious, anti-fogging) 상용화, Medtronic Endoscopy BD
+        let peopleSection = '';
+        if (keyPeople.length > 0) {
+          peopleSection = `## 핵심 인물 (이전 브리핑에서 축적된 정보)\n` +
+            keyPeople.map(p => `- ${p.name}${p.role ? ` (${p.role})` : ''}${p.org ? ` — ${p.org}` : ''}${p.relationship ? `: ${p.relationship}` : ''}`).join('\n');
+        }
 
-## 기관별 3분류 (To/Cc 주소 기반)
-- 🏫 연세대학교: @yonsei.ac.kr 또는 bliss.yonsei
-- 🏢 링크솔루텍: @lynksolutec.com
-- 👤 개인: 위 두 가지에 해당하지 않는 모든 메일
+        let threadsSection = '';
+        if (activeThreads.length > 0) {
+          threadsSection = `## 추적 중인 건 (이전 브리핑에서 업데이트 확인)\n` +
+            activeThreads.map(t => `- ${t.topic}: ${t.status || '진행 중'}${t.parties?.length ? ` (${t.parties.join(', ')})` : ''}`).join('\n');
+        }
+
+        // 기관별 그룹 동적 생성
+        const groupRules = profile.classifyByGroup && profile.groups.length > 0
+          ? profile.groups.map(g => `- ${g.emoji} ${g.name}: ${g.domains.join(', ')}`).join('\n')
+          : '- 🏫/🏢/👤 기관별 분류는 To/Cc 주소의 도메인으로 판별합니다.';
+
+        const customInstructions = briefingStyle.customInstructions || '';
+        const excludeWeeklyReport = briefingStyle.excludeWeeklyReport !== false;
+
+        const narrativePrompt = `당신은 ${userName}${userRole ? `(${userRole})` : ''}의 이메일 브리핑 비서입니다.
+${userOrg ? `소속: ${userOrg}. ` : ''}${userLocation ? `현재 위치: ${userLocation}. ` : ''}기준 시간대: ${tzLabel}.
+${researchAreas ? `연구/사업 분야: ${researchAreas}` : ''}
+
+${peopleSection}
+
+${threadsSection}
+
+## 기관별 분류
+${groupRules}
+- 분류 기준: To/Cc 주소의 도메인. 매칭되지 않으면 👤개인.
 
 ## 성격별 분류
 | 이모지 | 분류 | 설명 |
@@ -1427,6 +1458,80 @@ ${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBrief
         await prisma.emailProfile.create({
           data: { userId: user.id, classifyByGroup: false, groups: [], lastBriefingAt: now },
         });
+      }
+
+      // 자동 학습: 이메일에서 핵심 인물/발신자 패턴 축적
+      try {
+        const currentPeople = [...keyPeople];
+        const currentSenderMap = (learnedPatterns.senderMap || {}) as Record<string, {name: string; org: string; count: number}>;
+
+        for (const e of parsedEmails) {
+          const emailAddr = (e.sender.match(/<(.+)>/) || [])[1] || e.sender;
+          if (!emailAddr || emailAddr.includes('noreply') || emailAddr.includes('no-reply')) continue;
+
+          // 발신자 맵 업데이트 (빈도 카운트)
+          if (currentSenderMap[emailAddr]) {
+            currentSenderMap[emailAddr].count++;
+          } else {
+            currentSenderMap[emailAddr] = { name: e.senderName, org: e.groupLabel, count: 1 };
+          }
+
+          // 빈도 높은 발신자(5회 이상)를 keyPeople에 자동 추가
+          if (currentSenderMap[emailAddr].count >= 5) {
+            const alreadyExists = currentPeople.some(p =>
+              p.name === e.senderName || p.email === emailAddr
+            );
+            if (!alreadyExists) {
+              currentPeople.push({
+                name: e.senderName,
+                email: emailAddr,
+                org: e.groupLabel.replace(/[🏫🏢👤]/g, '').trim(),
+                relationship: 'frequent correspondent',
+              });
+            }
+          }
+        }
+
+        // 추적 중인 건 업데이트: 브리핑에서 ⚠️/📝 항목 추출
+        const currentThreads = [...activeThreads];
+        for (const e of parsedEmails) {
+          const cls = classificationMap.get(e.index);
+          if (cls?.category === 'urgent' || cls?.category === 'action-needed') {
+            const existingThread = currentThreads.find(t =>
+              e.subject.toLowerCase().includes(t.topic.toLowerCase()) ||
+              t.topic.toLowerCase().includes(e.subject.substring(0, 30).toLowerCase())
+            );
+            if (existingThread) {
+              existingThread.lastUpdate = now.toISOString();
+              existingThread.status = '진행 중';
+            } else if (e.subject.length > 5) {
+              currentThreads.push({
+                topic: e.subject.substring(0, 80),
+                status: '신규',
+                lastUpdate: now.toISOString(),
+                parties: [e.senderName],
+              });
+            }
+          }
+        }
+
+        // 오래된 추적 건 정리 (30일 초과)
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const activeThreadsFiltered = currentThreads
+          .filter(t => !t.lastUpdate || t.lastUpdate > thirtyDaysAgo)
+          .slice(0, 20); // 최대 20건
+
+        // Profile 업데이트
+        await prisma.emailProfile.update({
+          where: { userId: user.id },
+          data: {
+            keyPeople: currentPeople.slice(0, 50) as any,
+            activeThreads: activeThreadsFiltered as any,
+            learnedPatterns: { ...learnedPatterns, senderMap: currentSenderMap } as any,
+          },
+        });
+      } catch (err) {
+        console.warn('Auto-learn failed:', err);
       }
 
       // 히스토리 저장
@@ -1737,40 +1842,32 @@ ${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBrief
     const user = await ensureUser(userId);
 
     const existing = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
-    if (existing?.classifyByGroup) {
+    if (existing) {
       return reply.send({ success: true, message: '이미 설정된 프로필이 있습니다', initialized: false });
     }
 
+    // 새 유저: 빈 프로필로 시작. 사용하면서 자동 학습됨.
     const defaultProfile = {
-      classifyByGroup: true,
-      groups: [
-        { name: '연세대학교', emoji: '🏫', domains: ['yonsei.ac.kr'] },
-        { name: '링크솔루텍', emoji: '🏢', domains: ['lynksolutec.com'] },
-      ] as any,
+      classifyByGroup: false,
+      groups: [] as any,
       excludePatterns: [] as any,
-      keywords: [
-        '하이드로겔', '액체금속', '방오코팅', '이종소재접착제',
-        '웨어러블 바이오일렉트로닉스', '자가치유', 'PDMS', 'UV경화',
-        'hydrogel', 'liquid metal', 'antifouling', 'wearable bioelectronics',
-        'self-healing', 'heterogeneous adhesive',
-      ] as any,
+      keywords: [] as any,
       importanceRules: [
-        { condition: '저널/출판사 Decision, Review results, Revision 메일', action: 'urgent로 최우선 상향', description: '논문 의사결정' },
+        { condition: '저널 Decision, Review results, Revision 메일', action: 'urgent로 상향', description: '논문 의사결정' },
         { condition: 'Submission confirmation 메일', action: 'urgent로 상향', description: '투고 확인' },
-        { condition: 'Call for Papers, 투고 초대', action: 'info 또는 ads로 강등', description: 'CfP는 정보성' },
-        { condition: 'BCCI/바이오센테니얼 관련 + 기한 명시', action: 'urgent 또는 action-needed로 격상', description: 'BCCI 프로젝트' },
-        { condition: '학생 개인 발송 메일 (@yonsei.ac.kr)', action: 'action-needed 이상 유지', description: 'BLISS Lab 학생 메일 중요' },
+        { condition: 'Call for Papers, 투고 초대', action: 'ads로 강등', description: 'CfP는 광고 처리' },
       ] as any,
-      senderTimezones: [
-        { domains: ['.kr', 'naver.com', 'daum.net', 'kakao.com'], timezone: 'Asia/Seoul', label: 'KST' },
-      ] as any,
-      timezone: 'America/New_York',
+      senderTimezones: [] as any,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      projectContext: {} as any,
+      keyPeople: [] as any,
+      activeThreads: [] as any,
+      briefingStyle: {} as any,
+      learnedPatterns: {} as any,
     };
 
-    const rawProfile = await prisma.emailProfile.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id, ...defaultProfile },
-      update: defaultProfile,
+    const rawProfile = await prisma.emailProfile.create({
+      data: { userId: user.id, ...defaultProfile },
     });
 
     const profile = parseProfile(rawProfile);

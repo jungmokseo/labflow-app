@@ -16,25 +16,33 @@ import { basePrismaClient as prisma } from '../config/prisma.js';
 import { embedBatch, type EmbeddableRecord } from '../services/rag-engine.js';
 
 async function main() {
-  console.log('🔧 Step 1: Running SQL migration...');
-  const sql = readFileSync(join(__dirname, '..', 'migrations', 'memo_embeddings.sql'), 'utf-8');
-  // Execute statements one by one (multi-statement may fail)
-  const statements = sql
-    .split(/;\s*\n/)
-    .map(s => s.trim())
-    .filter(s => s.length > 10);
+  console.log('🔧 Step 1: Checking table exists...');
+  // Table creation DDL (no functions — those must be run in Supabase SQL editor)
+  const ddlStatements = [
+    `CREATE EXTENSION IF NOT EXISTS vector`,
+    `CREATE TABLE IF NOT EXISTS memo_embeddings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_type TEXT NOT NULL, source_id TEXT NOT NULL, lab_id TEXT, user_id TEXT,
+      title TEXT, chunk_index INTEGER NOT NULL DEFAULT 0, chunk_text TEXT NOT NULL,
+      content_hash TEXT NOT NULL, embedding vector(1536) NOT NULL,
+      metadata JSONB DEFAULT '{}', created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_memo_emb_lab ON memo_embeddings (lab_id, source_type)`,
+    `CREATE INDEX IF NOT EXISTS idx_memo_emb_user ON memo_embeddings (user_id)`,
+  ];
 
-  for (const stmt of statements) {
-    try {
-      await prisma.$executeRawUnsafe(stmt + ';');
-    } catch (err: any) {
-      // Ignore "already exists" errors
-      if (!err.message?.includes('already exists')) {
-        console.warn('SQL warning:', err.message?.slice(0, 100));
-      }
+  for (const stmt of ddlStatements) {
+    try { await prisma.$executeRawUnsafe(stmt); } catch (err: any) {
+      if (!err.message?.includes('already exists')) console.warn('SQL:', err.message?.slice(0, 80));
     }
   }
-  console.log('✅ SQL migration complete');
+
+  // Unique index (may fail if duplicates exist)
+  try {
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS idx_memo_emb_source ON memo_embeddings (source_id, source_type, chunk_index)`);
+  } catch { /* ignore */ }
+
+  console.log('✅ Table ready');
 
   console.log('\n📦 Step 2: Loading existing data...');
   const [memos, members, projects, pubs] = await Promise.all([

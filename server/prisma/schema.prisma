@@ -142,6 +142,23 @@ model EmailProfile {
   importanceRules  Json      @default("[]") @map("importance_rules") // [{ condition, action, description }]
   senderTimezones  Json      @default("[]") @map("sender_timezones") // [{ domains[], timezone, label }]
   timezone         String    @default("America/New_York") // 기본 시간대
+
+  // ── 동적 브리핑 컨텍스트 (자동 학습 + 사용자 입력) ──
+  projectContext   Json      @default("{}") @map("project_context")
+  // { role, organization, location, researchAreas[] }
+
+  keyPeople        Json      @default("[]") @map("key_people")
+  // [{ name, role, email?, org, relationship }] — 핵심 인물 (자동 축적 + 수동 입력)
+
+  activeThreads    Json      @default("[]") @map("active_threads")
+  // [{ topic, status, lastUpdate, parties[] }] — 추적 중인 건
+
+  briefingStyle    Json      @default("{}") @map("briefing_style")
+  // { excludePatterns: string[], customInstructions: string }
+
+  learnedPatterns  Json      @default("{}") @map("learned_patterns")
+  // AI가 브리핑 반복 중 학습: { senderMap: {email→{name,org}}, frequentTopics[] }
+
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
