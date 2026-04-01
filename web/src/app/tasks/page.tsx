@@ -54,32 +54,49 @@ export default function TasksPage() {
   async function handleAdd() {
     if (!newInput.trim()) return;
     setAdding(true);
+    const inputText = newInput.trim();
+    setNewInput('');
     try {
-      await createCapture(newInput.trim());
-      setNewInput('');
-      await loadCaptures();
+      const res = await createCapture(inputText);
+      // 서버 응답으로 목록에 추가 (전체 재조회 없이)
+      if (res.data) setCaptures(prev => [res.data, ...prev]);
+      else await loadCaptures();
     } catch (err: any) { setError(err.message); }
     finally { setAdding(false); }
   }
 
   async function handleToggleComplete(c: Capture) {
-    await updateCapture(c.id, { completed: !c.completed });
-    await loadCaptures();
+    // 낙관적 업데이트: UI 먼저 반영
+    const newCompleted = !c.completed;
+    setCaptures(prev => prev.map(cap =>
+      cap.id === c.id ? { ...cap, completed: newCompleted } : cap
+    ));
+    try {
+      await updateCapture(c.id, { completed: newCompleted });
+    } catch { loadCaptures(); } // 실패 시 원복
   }
 
   async function handleReview(c: Capture) {
-    await updateCapture(c.id, { reviewed: true });
-    await loadCaptures();
+    setCaptures(prev => prev.map(cap =>
+      cap.id === c.id ? { ...cap, reviewed: true } : cap
+    ));
+    try {
+      await updateCapture(c.id, { reviewed: true });
+    } catch { loadCaptures(); }
   }
 
   async function handleDelete(id: string) {
-    await deleteCapture(id);
-    await loadCaptures();
+    setCaptures(prev => prev.filter(cap => cap.id !== id));
+    try {
+      await deleteCapture(id);
+    } catch { loadCaptures(); }
   }
 
   async function handleClearCompleted() {
-    await deleteCompletedCaptures();
-    await loadCaptures();
+    setCaptures(prev => prev.filter(cap => !cap.completed));
+    try {
+      await deleteCompletedCaptures();
+    } catch { loadCaptures(); }
   }
 
   // Client-side search filter
