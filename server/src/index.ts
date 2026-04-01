@@ -42,6 +42,8 @@ async function buildApp() {
   await app.register(cors, {
         origin: corsOrigins === '*' ? true : corsOrigins.split(',').map(s => s.trim()),
         credentials: corsOrigins !== '*',
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Dev-User-Id'],
   });
     await app.register(multipart, {
           limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 오디오 제한
