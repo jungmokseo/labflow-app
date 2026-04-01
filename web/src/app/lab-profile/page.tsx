@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getLabProfile, createLab, addLabMember, addLabProject, addDictEntry,
+  getLabProfile, createLab, updateLab, addLabMember, removeLabMember, addLabProject, addDictEntry,
   analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl,
   type Lab,
 } from '@/lib/api';
@@ -35,6 +35,13 @@ export default function LabProfilePage() {
 
   // 기존 관리 탭
   const [tab, setTab] = useState<'info' | 'members' | 'projects' | 'dict'>('info');
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editInstitution, setEditInstitution] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editPiName, setEditPiName] = useState('');
+  const [editPiEmail, setEditPiEmail] = useState('');
+  const [saving, setSaving] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('학생');
   const [newMemberEmail, setNewMemberEmail] = useState('');
@@ -107,6 +114,41 @@ export default function LabProfilePage() {
       setCrawlResult(result);
     } catch (err: any) { setError(err.message); }
     finally { setCrawling(false); }
+  }
+
+  // ── 기본 정보 수정 ──
+  function startEditing() {
+    if (!lab) return;
+    setEditName(lab.name || '');
+    setEditInstitution(lab.institution || '');
+    setEditDepartment(lab.department || '');
+    setEditPiName(lab.piName || '');
+    setEditPiEmail(lab.piEmail || '');
+    setEditingInfo(true);
+  }
+  async function handleSaveInfo() {
+    setSaving(true);
+    try {
+      await updateLab({
+        name: editName,
+        institution: editInstitution,
+        department: editDepartment,
+        piName: editPiName,
+        piEmail: editPiEmail || undefined,
+      });
+      setEditingInfo(false);
+      await loadProfile();
+    } catch (err: any) { setError(err.message); }
+    finally { setSaving(false); }
+  }
+
+  // ── 멤버 삭제 ──
+  async function handleDeleteMember(id: string, name: string) {
+    if (!confirm(`${name}을(를) 삭제하시겠습니까?`)) return;
+    try {
+      await removeLabMember(id);
+      await loadProfile();
+    } catch (err: any) { setError(err.message); }
   }
 
   // ── 기존 CRUD ──
@@ -334,19 +376,61 @@ export default function LabProfilePage() {
 
       <div className="bg-bg-card rounded-xl p-6">
         {tab === 'info' && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-4">
-              <div><span className="text-text-muted text-xs">PI</span><p className="text-white text-sm">{lab.piName || '미등록'}</p></div>
-              <div><span className="text-text-muted text-xs">온보딩</span><p className="text-sm">{lab.onboardingDone ? <span className="text-green-400">✅ 완료</span> : <span className="text-yellow-400">⏳ 진행 중</span>}</p></div>
-            </div>
-            <div>
-              <span className="text-text-muted text-xs">연구 분야</span>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {(lab.researchFields || []).length > 0 ? (lab.researchFields || []).map((f: string) => (
-                  <span key={f} className="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs">{f}</span>
-                )) : <span className="text-text-muted text-xs">미등록 — 대표 논문 DOI를 입력하면 자동 추출됩니다</span>}
+          <div className="space-y-4">
+            {editingInfo ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-text-muted text-xs block mb-1">연구실 이름</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-text-muted text-xs block mb-1">소속 기관</label>
+                    <input value={editInstitution} onChange={e => setEditInstitution(e.target.value)} className="w-full bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-text-muted text-xs block mb-1">학과/학부</label>
+                    <input value={editDepartment} onChange={e => setEditDepartment(e.target.value)} className="w-full bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-text-muted text-xs block mb-1">PI 이름</label>
+                    <input value={editPiName} onChange={e => setEditPiName(e.target.value)} className="w-full bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="text-text-muted text-xs block mb-1">PI 이메일</label>
+                    <input value={editPiEmail} onChange={e => setEditPiEmail(e.target.value)} className="w-full bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveInfo} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
+                    {saving ? '저장 중...' : '저장'}
+                  </button>
+                  <button onClick={() => setEditingInfo(false)} className="px-4 py-2 bg-bg-input text-text-muted rounded-lg text-sm">취소</button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex justify-between items-start">
+                  <div className="grid grid-cols-2 gap-4 flex-1">
+                    <div><span className="text-text-muted text-xs">PI</span><p className="text-white text-sm">{lab.piName || '미등록'}</p></div>
+                    <div><span className="text-text-muted text-xs">학과</span><p className="text-white text-sm">{lab.department || '미등록'}</p></div>
+                    <div><span className="text-text-muted text-xs">소속</span><p className="text-white text-sm">{lab.institution || '미등록'}</p></div>
+                    <div><span className="text-text-muted text-xs">PI 이메일</span><p className="text-white text-sm">{lab.piEmail || '미등록'}</p></div>
+                  </div>
+                  <button onClick={startEditing} className="text-xs text-primary hover:text-primary/80 px-3 py-1.5 rounded-lg hover:bg-primary/10">수정</button>
+                </div>
+                <div>
+                  <span className="text-text-muted text-xs">연구 분야</span>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {(lab.researchFields || []).length > 0 ? (lab.researchFields || []).map((f: string) => (
+                      <span key={f} className="bg-primary/20 text-primary px-3 py-1 rounded-full text-xs">{f}</span>
+                    )) : <span className="text-text-muted text-xs">미등록 — 대표 논문 DOI를 입력하면 자동 추출됩니다</span>}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -367,6 +451,7 @@ export default function LabProfilePage() {
                   <p className="text-white text-sm font-medium">{m.name}</p>
                   <p className="text-text-muted text-xs">{m.role} · {m.email || '이메일 미등록'}</p>
                 </div>
+                <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10">✕</button>
               </div>
             ))}
             {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. 미니브레인 대화로도 가능해요: "김태영 박사과정 추가해줘"</p>}
