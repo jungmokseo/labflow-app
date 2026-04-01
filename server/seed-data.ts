@@ -44,7 +44,7 @@ async function seed() {
       ownerId: user.id,
       name: 'BLISS Lab (Bio-integrated Lab for Intelligent Soft Systems)',
       institution: '연세대학교',
-      department: '화공생명공학과',
+      department: 'School of Electrical and Electronic Engineering',
       piName: '서정목',
       piEmail: 'jungmok.seo@yonsei.ac.kr',
       researchFields: ['flexible electronics', 'hydrogel', 'liquid metal', 'wearable devices', 'soft robotics', 'biosensor', 'stretchable electronics'],

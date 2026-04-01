@@ -22,7 +22,7 @@ export async function setupLabAndUser(prisma: PrismaClient) {
       ownerId: user.id,
       name: 'BLISS Lab',
       institution: 'Yonsei University',
-      department: 'Department of Chemical and Biomolecular Engineering',
+      department: 'School of Electrical and Electronic Engineering',
       piName: '서정목',
       piEmail: 'jungmok.seo@gmail.com',
       researchFields: ['flexible electronics', 'biosensors', 'hydrogel', 'packaging', 'wearable devices'],
