@@ -169,8 +169,9 @@ const JOURNAL_BY_NAME = new Map(BUILT_IN_JOURNALS.map(j => [j.name, j]));
 const ALL_FIELDS = [...new Set(BUILT_IN_JOURNALS.flatMap(j => j.fields))].sort();
 
 // ── Schemas ─────────────────────────────────────────
+// keywords: 빈 배열 허용 — Lab researchThemes 키워드가 서버에서 자동 채워짐
 const alertSettingSchema = z.object({
-  keywords: z.array(z.string()).default([]),  // 빈 배열 허용 — Lab 테마 키워드 자동 적용
+  keywords: z.array(z.string()).optional().default([]),
   journals: z.array(z.string()).optional(),
   customFeeds: z.array(z.object({
     name: z.string(),
