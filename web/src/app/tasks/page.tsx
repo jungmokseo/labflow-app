@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
 import {
   getCaptures, createCapture, updateCapture, deleteCapture, deleteCompletedCaptures,
   type Capture,
@@ -25,9 +23,6 @@ const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
 };
 
 export default function TasksPage() {
-  const { isSignedIn, isLoaded } = useUser();
-  const router = useRouter();
-
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabFilter>('all');
@@ -38,10 +33,6 @@ export default function TasksPage() {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [meta, setMeta] = useState<any>(null);
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) router.push('/sign-in');
-  }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => { loadCaptures(); }, [tab, statusFilter, sortBy]);
 
@@ -103,7 +94,7 @@ export default function TasksPage() {
   const unreviewed = captures.filter(c => !c.reviewed && !c.completed).length;
   const pendingTasks = meta?.taskStats?.pending || 0;
 
-  if (!isLoaded) return null;
+  if (loading && captures.length === 0) return null;
 
   return (
     <div className="min-h-screen bg-bg p-6 max-w-4xl mx-auto">

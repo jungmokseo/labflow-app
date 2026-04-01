@@ -1,26 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useUser } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
 import { getMeetings, checkHealth, Meeting } from '@/lib/api';
 
 export default function DashboardPage() {
-  const { isLoaded, isSignedIn } = useUser();
-  const router = useRouter();
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 로그인 안 된 상태면 sign-in으로 리다이렉트
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push('/sign-in');
-    }
-  }, [isLoaded, isSignedIn, router]);
-
-  useEffect(() => {
-    if (!isSignedIn) return;
     async function load() {
       try {
         const [health, meetingRes] = await Promise.allSettled([
@@ -37,7 +25,7 @@ export default function DashboardPage() {
       }
     }
     load();
-  }, [isSignedIn]);
+  }, []);
 
   if (loading) {
     return (
