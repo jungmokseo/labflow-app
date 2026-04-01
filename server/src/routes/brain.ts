@@ -136,6 +136,7 @@ type Intent =
   | 'weekly_review'  // /weekly — 주간 리뷰
   | 'email_briefing' // 이메일 브리핑 요청
   | 'email_query'    // 이메일 관련 후속 질문
+  | 'email_preference' // 이메일 분류 설정 변경 (중요도, 키워드, 제외 패턴 등)
   | 'calendar_query' // 캘린더/일정 관련 질문
   | 'fallback_search'; // Intent 분류 실패 시 DB 범용 검색
 
@@ -181,6 +182,7 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 - weekly_review: 주간 리뷰/정리 요청. 예: "이번 주 정리", "주간 리뷰", "이번주 뭐 했지?", "weekly"
 - email_briefing: 이메일 브리핑 요청. 예: "이메일 확인해줘", "이메일 브리핑 해줘", "메일 뭐 왔어?", "오늘 이메일"
 - email_query: 이메일 관련 후속 질문. 예: "그 이메일 자세히", "OO교수 이메일", "답장 초안 써줘"
+- email_preference: 이메일 분류 설정 변경 요청. 예: "학술지 리뷰 중요도 올려줘", "광고 메일 제외해줘", "OO 키워드 중요하게 처리해", "이메일 분류 규칙 바꿔줘", "뉴스레터 안 보여줘"
 - calendar_query: 캘린더/일정 관련. 예: "오늘 일정", "이번주 스케줄", "다음 미팅 언제", "일정 잡아줘"
 - general_chat: 일반 대화
 
@@ -900,7 +902,7 @@ type ShadowType = 'email' | 'calendar' | 'knowledge';
  * Shadow에 저장할 도구 관련 intent만 매핑, 나머지는 null
  */
 function determineShadowType(intent: string, message: string): ShadowType | null {
-  if (['email_briefing', 'email_query'].includes(intent)) return 'email';
+  if (['email_briefing', 'email_query', 'email_preference'].includes(intent)) return 'email';
   if (intent === 'calendar_query') return 'calendar';
   // 키워드 fallback (intent 분류 실패 대비)
   const lower = message.toLowerCase();
@@ -1368,6 +1370,70 @@ export async function brainRoutes(app: FastifyInstance) {
       const shadowChannelId = await getOrCreateShadow(userId, 'email');
       saveShadowMessage(shadowChannelId, message, toolResult.response).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
       shadowResult = toolResult.response;
+    } else if (intent === 'email_preference') {
+      // ── 이메일 분류 설정 변경 (중요도, 키워드, 제외 패턴 등) ──
+      try {
+        const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+        const profile = user ? await prisma.emailProfile.findUnique({ where: { userId: user.id } }) : null;
+
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+        const currentRules = profile ? JSON.stringify({
+          keywords: profile.keywords,
+          excludePatterns: profile.excludePatterns,
+          importanceRules: profile.importanceRules,
+        }) : '{}';
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: `사용자가 이메일 브리핑 설정을 변경하고 싶어합니다.
+
+사용자 요청: "${message}"
+
+현재 설정:
+${currentRules}
+
+다음 JSON으로 응답하세요:
+{
+  "action": "add_keyword" | "remove_keyword" | "add_exclude" | "remove_exclude" | "add_importance_rule" | "remove_importance_rule",
+  "field": "keywords" | "excludePatterns" | "importanceRules",
+  "value": (추가/제거할 값 — keyword는 문자열, excludePattern은 {field, pattern}, importanceRule은 {condition, action, description}),
+  "explanation": "사용자에게 보여줄 설명 (한국어)"
+}` }] }],
+          generationConfig: { temperature: 0.1, maxOutputTokens: 512, responseMimeType: 'application/json' },
+        });
+
+        const parsed = JSON.parse(result.response.text().trim());
+
+        if (user && profile && parsed.field && parsed.value) {
+          const current = (profile as any)[parsed.field] || [];
+          const currentArr = Array.isArray(current) ? current : JSON.parse(current as string);
+          let updated;
+
+          if (parsed.action?.startsWith('add')) {
+            updated = [...currentArr, parsed.value];
+          } else if (parsed.action?.startsWith('remove')) {
+            updated = currentArr.filter((item: any) =>
+              typeof item === 'string' ? item !== parsed.value : JSON.stringify(item) !== JSON.stringify(parsed.value)
+            );
+          } else {
+            updated = [...currentArr, parsed.value];
+          }
+
+          await prisma.emailProfile.update({
+            where: { userId: user.id },
+            data: { [parsed.field]: updated },
+          });
+
+          shadowResult = parsed.explanation || `이메일 설정이 업데이트되었습니다: ${parsed.action}`;
+        } else {
+          shadowResult = parsed.explanation || '이메일 설정 변경 요청을 처리했습니다.';
+        }
+      } catch (err: any) {
+        console.error('[brain] email_preference error:', err.message);
+        shadowResult = '이메일 설정 변경 중 오류가 발생했습니다. 설정 페이지에서 직접 변경해주세요.';
+      }
     } else if (shadowType === 'calendar') {
       const toolResult = await handleToolMessage('calendar', message + fileContext, userId, lab, request.labId);
       const shadowChannelId = await getOrCreateShadow(userId, 'calendar');

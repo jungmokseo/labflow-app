@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
@@ -13,6 +13,18 @@ export default function SignInPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // OAuth 콜백 후 세션이 이미 있으면 자동 리다이렉트
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace(redirectUrl);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') router.replace(redirectUrl);
+    });
+    return () => subscription.unsubscribe();
+  }, [router, redirectUrl]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
