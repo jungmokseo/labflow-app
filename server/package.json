@@ -23,12 +23,15 @@
     "@google/generative-ai": "^0.21.0",
     "@notionhq/client": "^2.3.0",
     "@prisma/client": "^6.4.1",
+    "@supabase/supabase-js": "^2.101.1",
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "googleapis": "^171.4.0",
+    "jsonwebtoken": "^9.0.3",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.13.10",
     "pino-pretty": "^13.0.0",
     "prisma": "^6.4.1",

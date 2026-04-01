@@ -1,13 +1,15 @@
 /**
- * 인증 미들웨어 — Clerk JWT + Dev Mode 병행 지원
+ * 인증 미들웨어 — Supabase JWT (우선) + Clerk JWT (레거시) + Dev Mode
  *
  * 인증 우선순위:
- * 1. Clerk JWT (Bearer 토큰) — Clerk Secret Key가 있으면 검증
- * 2. X-Dev-User-Id 헤더 — development 환경에서만 허용
- * 3. 401 반환
+ * 1. Supabase JWT (Bearer 토큰) — SUPABASE_JWT_SECRET이 있으면 검증
+ * 2. Clerk JWT (Bearer 토큰) — CLERK_SECRET_KEY가 있으면 검증 (레거시 호환)
+ * 3. X-Dev-User-Id 헤더 — development 환경에서만 허용
+ * 4. 401 반환
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
+import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { requestContext } from './prisma-filter.js';
 import { basePrismaClient } from '../config/prisma.js';
@@ -22,75 +24,106 @@ declare module 'fastify' {
   }
 }
 
+/**
+ * Supabase JWT에서 사용자 ID 추출 및 DB 매핑
+ */
+async function resolveSupabaseUser(token: string): Promise<string | null> {
+  if (!env.SUPABASE_JWT_SECRET) return null;
+  try {
+    const payload = jwt.verify(token, env.SUPABASE_JWT_SECRET) as jwt.JwtPayload;
+    const supabaseId = payload.sub;
+    if (!supabaseId) return null;
+
+    // Supabase UUID로 DB User 조회 (clerkId 필드를 authProviderId로 재사용)
+    const user = await basePrismaClient.user.findFirst({
+      where: { clerkId: supabaseId },
+      select: { id: true },
+    });
+    if (user) return user.id;
+
+    // DB에 없으면 자동 생성
+    const email = payload.email || `${supabaseId}@supabase.user`;
+    const newUser = await basePrismaClient.user.create({
+      data: { clerkId: supabaseId, email, name: (payload as any).user_metadata?.name || null },
+    });
+    return newUser.id;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clerk JWT에서 사용자 ID 추출 (레거시 호환)
+ */
+async function resolveClerkUser(token: string): Promise<string | null> {
+  if (!env.CLERK_SECRET_KEY) return null;
+  try {
+    const { verifyToken } = await import('@clerk/backend' as string);
+    const payload = await verifyToken(token, { secretKey: env.CLERK_SECRET_KEY });
+    const clerkId = payload.sub;
+
+    const user = await basePrismaClient.user.findFirst({
+      where: { clerkId },
+      select: { id: true },
+    });
+    if (user) return user.id;
+
+    const email = (payload as any).email || `${clerkId}@clerk.user`;
+    const newUser = await basePrismaClient.user.create({
+      data: { clerkId, email, name: (payload as any).name || null },
+    });
+    return newUser.id;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Dev 모드에서 사용자 ID 해석
+ */
+async function resolveDevUser(devUserId?: string): Promise<string> {
+  const lookupId = devUserId || 'dev-user-seo';
+  try {
+    const user = await basePrismaClient.user.findFirst({
+      where: { clerkId: lookupId },
+      select: { id: true },
+    });
+    return user?.id || lookupId;
+  } catch {
+    return lookupId;
+  }
+}
+
 export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  // ── 1. Bearer 토큰 (Clerk JWT) ───────────────────
+  // ── 1. Bearer 토큰 (Supabase JWT → Clerk JWT) ───────
   const authHeader = request.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
 
-    if (env.CLERK_SECRET_KEY) {
-      try {
-        const { verifyToken } = await import('@clerk/backend' as string);
-        const payload = await verifyToken(token, {
-          secretKey: env.CLERK_SECRET_KEY,
-        });
-        // Clerk ID(payload.sub)로 실제 DB User를 조회하여 cuid를 사용
-        const clerkId = payload.sub;
-        try {
-          const user = await basePrismaClient.user.findFirst({
-            where: { clerkId },
-            select: { id: true },
-          });
-          if (user) {
-            request.userId = user.id;
-          } else {
-            // DB에 없는 Clerk 유저 → 자동 생성
-            const email = (payload as any).email || `${clerkId}@clerk.user`;
-            const newUser = await basePrismaClient.user.create({
-              data: { clerkId, email, name: (payload as any).name || null },
-            });
-            request.userId = newUser.id;
-          }
-        } catch {
-          request.userId = clerkId; // DB 조회 실패 시 fallback
-        }
-        return;
-      } catch (err: any) {
-        request.log.warn({ err: err.message }, 'Clerk JWT verification failed');
-      }
+    // Supabase JWT 우선
+    const supabaseUserId = await resolveSupabaseUser(token);
+    if (supabaseUserId) {
+      request.userId = supabaseUserId;
+      return;
     }
-    // Clerk 미설정 시 Bearer 토큰 무시 — dev mode로 fallback
+
+    // Clerk JWT fallback (레거시)
+    const clerkUserId = await resolveClerkUser(token);
+    if (clerkUserId) {
+      request.userId = clerkUserId;
+      return;
+    }
+
+    request.log.warn('JWT verification failed for both Supabase and Clerk');
   }
 
   // ── 2. X-Dev-User-Id — development 환경에서만 허용 ──
   if (isDev) {
     const devUserId = request.headers['x-dev-user-id'] as string;
-    if (devUserId) {
-      try {
-        const user = await basePrismaClient.user.findFirst({
-          where: { clerkId: devUserId },
-          select: { id: true },
-        });
-        request.userId = user?.id || devUserId;
-      } catch {
-        request.userId = devUserId;
-      }
-      return;
-    }
-
-    // 기본 개발 사용자
-    try {
-      const user = await basePrismaClient.user.findFirst({
-        where: { clerkId: 'dev-user-seo' },
-        select: { id: true },
-      });
-      request.userId = user?.id || 'dev-user-seo';
-    } catch {
-      request.userId = 'dev-user-seo';
-    }
+    request.userId = await resolveDevUser(devUserId);
     return;
   }
 
@@ -109,34 +142,16 @@ export async function optionalAuth(
   _reply: FastifyReply,
 ) {
   const authHeader = request.headers.authorization;
-  if (authHeader?.startsWith('Bearer ') && env.CLERK_SECRET_KEY) {
-    try {
-      const { verifyToken } = await import('@clerk/backend' as string);
-      const payload = await verifyToken(authHeader.slice(7), {
-        secretKey: env.CLERK_SECRET_KEY,
-      });
-      const user = await basePrismaClient.user.findFirst({
-        where: { clerkId: payload.sub },
-        select: { id: true },
-      });
-      request.userId = user?.id || payload.sub;
-    } catch {
-      // Optional auth — verification failure is OK
-    }
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const userId = await resolveSupabaseUser(token) || await resolveClerkUser(token);
+    if (userId) request.userId = userId;
     return;
   }
   if (isDev) {
     const devUserId = request.headers['x-dev-user-id'] as string;
     if (devUserId) {
-      try {
-        const user = await basePrismaClient.user.findFirst({
-          where: { clerkId: devUserId },
-          select: { id: true },
-        });
-        request.userId = user?.id || devUserId;
-      } catch {
-        request.userId = devUserId;
-      }
+      request.userId = await resolveDevUser(devUserId);
     }
   }
 }
