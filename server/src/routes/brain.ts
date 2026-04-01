@@ -1327,13 +1327,18 @@ export async function brainRoutes(app: FastifyInstance) {
     if (shadowType === 'email' && intent === 'email_briefing') {
       // 실제 Gmail에서 이메일을 가져와 서사형 브리핑 생성
       try {
-        const API_BASE = `http://localhost:${env.PORT || 3001}`;
-        // 내부 API 호출로 narrative-briefing 실행 (실제 Gmail 조회 + AI 분석)
-        const briefingRes = await fetch(`${API_BASE}/api/email/narrative-briefing?maxResults=30&includeBody=true`, {
-          headers: { 'Authorization': request.headers.authorization || '', 'Content-Type': 'application/json' },
+        // app.inject()로 내부 라우트 직접 호출 (localhost 네트워크 불필요)
+        const briefingRes = await app.inject({
+          method: 'GET',
+          url: '/api/email/narrative-briefing?maxResults=30&includeBody=true',
+          headers: {
+            authorization: request.headers.authorization || '',
+            'content-type': 'application/json',
+            'x-dev-user-id': request.headers['x-dev-user-id'] as string || '',
+          },
         });
-        if (briefingRes.ok) {
-          const briefingData = await briefingRes.json() as any;
+        if (briefingRes.statusCode === 200) {
+          const briefingData = JSON.parse(briefingRes.body) as any;
           if (briefingData.success && briefingData.markdown) {
             shadowResult = briefingData.markdown;
             // Shadow에 주요 메일만 압축 저장
