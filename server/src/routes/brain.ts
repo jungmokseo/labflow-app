@@ -784,100 +784,120 @@ async function handleDbQuery(intent: Intent, entities: Record<string, string>, l
 //  3-LAYER CONTEXT BUILDER
 // ══════════════════════════════════════════════════════
 
+// ── Lab Profile 캐시 (5분 TTL) ──────────────────────
+const labProfileCache = new Map<string, { data: string; expiry: number }>();
+const LAB_CACHE_TTL = 5 * 60 * 1000; // 5분
+
+async function getCachedLabContext(labId: string): Promise<string> {
+  const cached = labProfileCache.get(labId);
+  if (cached && Date.now() < cached.expiry) return cached.data;
+
+  let context = '';
+  const lab = await prisma.lab.findUnique({
+    where: { id: labId },
+    include: {
+      members: { where: { active: true }, take: 20 },
+      projects: { where: { status: 'active' }, take: 10 },
+      domainDict: { take: 50 },
+    },
+  });
+
+  if (lab) {
+    context += `연구실: ${lab.name}\n`;
+    context += `소속: ${lab.institution || '미등록'} ${lab.department || ''}\n`;
+    context += `연구 분야: ${lab.researchFields.join(', ') || '미등록'}\n`;
+    if (lab.members.length > 0) {
+      context += `구성원 (${lab.members.length}명): ${lab.members.map(m => `${m.name}(${m.role})`).join(', ')}\n`;
+    }
+    if (lab.projects.length > 0) {
+      context += `진행 과제: ${lab.projects.map(p => `${p.name}[PM:${p.pm || '미지정'}]`).join(', ')}\n`;
+    }
+    if (lab.domainDict.length > 0) {
+      context += `전문용어 사전: ${lab.domainDict.slice(0, 20).map(d => `${d.wrongForm}→${d.correctForm}`).join(', ')}\n`;
+    }
+
+    // Shared Memos (FAQ/규정) — 캐시에 포함
+    const sharedMemos = await prisma.memo.findMany({
+      where: { labId, shared: true, source: { in: ['faq', 'regulation'] } },
+      take: 30,
+      orderBy: { accessCount: 'desc' },
+    });
+    if (sharedMemos.length > 0) {
+      const faqMemos = sharedMemos.filter(m => m.source === 'faq');
+      const regMemos = sharedMemos.filter(m => m.source === 'regulation');
+      if (faqMemos.length > 0) {
+        context += `FAQ (${faqMemos.length}건): ${faqMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
+      }
+      if (regMemos.length > 0) {
+        context += `규정/매뉴얼 (${regMemos.length}건): ${regMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
+      }
+    }
+  }
+
+  labProfileCache.set(labId, { data: context, expiry: Date.now() + LAB_CACHE_TTL });
+  return context;
+}
+
 async function build4LayerContext(channelId: string, userId: string, labId: string | null): Promise<string> {
+  // 병렬 실행: L1(요약) + L2+L3(Lab 캐시) + L4(Shadow) 동시 조회
+  const [summaries, labContext, shadows] = await Promise.all([
+    // L1: 이전 대화 요약
+    prisma.channelSummary.findMany({
+      where: { channelId },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    }),
+    // L2+L3: Lab Profile (5분 캐시)
+    labId ? getCachedLabContext(labId) : Promise.resolve(''),
+    // L4: Shadow 채널 목록
+    prisma.channel.findMany({
+      where: { userId, shadow: true, archived: false },
+    }),
+  ]);
+
   let context = '';
 
-  // Layer 1: 이전 대화 요약
-  const summaries = await prisma.channelSummary.findMany({
-    where: { channelId },
-    orderBy: { createdAt: 'desc' },
-    take: 3,
-  });
+  // L1
   if (summaries.length > 0) {
     context += '## 이전 대화 요약\n';
     context += summaries.map(s => s.summaryText).join('\n---\n');
     context += '\n\n';
   }
 
-  // Layer 2: Lab Profile
-  if (labId) {
-    const lab = await prisma.lab.findUnique({
-      where: { id: labId },
-      include: {
-        members: { where: { active: true }, take: 20 },
-        projects: { where: { status: 'active' }, take: 10 },
-        domainDict: { take: 50 },
-      },
-    });
-
-    if (lab) {
-      context += '## Lab Profile (영구 기억)\n';
-      context += `연구실: ${lab.name}\n`;
-      context += `소속: ${lab.institution || '미등록'} ${lab.department || ''}\n`;
-      context += `연구 분야: ${lab.researchFields.join(', ') || '미등록'}\n`;
-      if (lab.members.length > 0) {
-        context += `구성원 (${lab.members.length}명): ${lab.members.map(m => `${m.name}(${m.role})`).join(', ')}\n`;
-      }
-      if (lab.projects.length > 0) {
-        context += `진행 과제: ${lab.projects.map(p => `${p.name}[PM:${p.pm || '미지정'}]`).join(', ')}\n`;
-      }
-      if (lab.domainDict.length > 0) {
-        context += `전문용어 사전: ${lab.domainDict.slice(0, 20).map(d => `${d.wrongForm}→${d.correctForm}`).join(', ')}\n`;
-      }
-
-      // Layer 3: Shared Memos (FAQ/규정)
-      const sharedMemos = await prisma.memo.findMany({
-        where: { labId, shared: true, source: { in: ['faq', 'regulation'] } },
-        take: 30,
-        orderBy: { accessCount: 'desc' },
-      });
-      if (sharedMemos.length > 0) {
-        const faqMemos = sharedMemos.filter(m => m.source === 'faq');
-        const regMemos = sharedMemos.filter(m => m.source === 'regulation');
-        if (faqMemos.length > 0) {
-          context += `FAQ (${faqMemos.length}건): ${faqMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
-        }
-        if (regMemos.length > 0) {
-          context += `규정/매뉴얼 (${regMemos.length}건): ${regMemos.slice(0, 10).map(m => m.title || m.content.slice(0, 30)).join(', ')}\n`;
-        }
-      }
-      context += '\n';
-    }
+  // L2+L3
+  if (labContext) {
+    context += '## Lab Profile (영구 기억)\n' + labContext + '\n';
   }
 
-  // Layer 4: Shadow Memory (도구별 기억)
-  const shadows = await prisma.channel.findMany({
-    where: { userId, shadow: true, archived: false },
-  });
-  for (const shadow of shadows) {
-    // 최신 요약 1개
-    const shadowSummary = await prisma.channelSummary.findFirst({
-      where: { channelId: shadow.id },
-      orderBy: { createdAt: 'desc' },
-    });
-    // 요약 이후 최근 메시지 (또는 전체에서 최근 10개)
-    const recentShadowMsgs = await prisma.message.findMany({
-      where: {
-        channelId: shadow.id,
-        ...(shadowSummary ? { createdAt: { gt: shadowSummary.createdAt } } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
+  // L4: Shadow 조회도 병렬화
+  if (shadows.length > 0) {
+    const shadowResults = await Promise.all(shadows.map(async (shadow) => {
+      const [shadowSummary, recentShadowMsgs] = await Promise.all([
+        prisma.channelSummary.findFirst({
+          where: { channelId: shadow.id },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.message.findMany({
+          where: { channelId: shadow.id },
+          orderBy: { createdAt: 'desc' },
+          take: 5, // 10 → 5로 줄여서 토큰 절약
+        }),
+      ]);
 
-    if (shadowSummary || recentShadowMsgs.length > 0) {
+      if (!shadowSummary && recentShadowMsgs.length === 0) return '';
+
       const label = shadow.shadowType === 'email' ? '이메일' : shadow.shadowType === 'calendar' ? '캘린더' : '지식';
-      context += `## ${label} 기억 (Shadow)\n`;
-      if (shadowSummary) {
-        context += shadowSummary.summaryText + '\n';
-      }
+      let text = `## ${label} 기억 (Shadow)\n`;
+      if (shadowSummary) text += shadowSummary.summaryText + '\n';
       if (recentShadowMsgs.length > 0) {
-        context += recentShadowMsgs.reverse().map(m =>
-          `${m.role === 'user' ? '질문' : '답변'}: ${m.content.slice(0, 300)}`
+        text += recentShadowMsgs.reverse().map(m =>
+          `${m.role === 'user' ? '질문' : '답변'}: ${m.content.slice(0, 200)}`
         ).join('\n') + '\n';
       }
-      context += '\n';
-    }
+      return text + '\n';
+    }));
+
+    context += shadowResults.filter(Boolean).join('');
   }
 
   return context;
