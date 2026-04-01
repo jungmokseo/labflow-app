@@ -221,10 +221,10 @@ async function syncLabToDomainDict(labId: string) {
 
   const existingTerms = new Set(lab.domainDict.map(d => d.wrongForm.toLowerCase()));
   const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
-  const allKeywords = [
+  const allKeywords = [...new Set([
     ...lab.researchFields,
     ...themes.flatMap(t => t.keywords),
-  ].filter(Boolean);
+  ].filter(Boolean))].slice(0, 15); // 키워드 너무 많으면 토큰 낭비
 
   if (allKeywords.length === 0) return;
 
@@ -234,7 +234,7 @@ async function syncLabToDomainDict(labId: string) {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `다음 연구 키워드를 보고, 이 분야에서 자주 사용되는 기술 약어와 전문용어를 30개 생성하세요.
+    const prompt = `다음 연구 키워드를 보고, 이 분야에서 자주 사용되는 기술 약어와 전문용어를 20개 생성하세요.
 각 용어에 대해 "흔히 틀리는 소문자 표기"와 "정확한 표기"를 짝지어주세요.
 
 연구 키워드: ${allKeywords.join(', ')}
@@ -251,14 +251,18 @@ JSON 배열로만 응답:
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json' },
     });
 
     const text = result.response.text().trim();
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return;
-
-    const terms = JSON.parse(match[0]) as Array<{ wrong: string; correct: string; category: string }>;
+    let terms: Array<{ wrong: string; correct: string; category: string }>;
+    try {
+      terms = JSON.parse(text);
+    } catch {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) return;
+      terms = JSON.parse(match[0]);
+    }
     let added = 0;
 
     for (const t of terms) {

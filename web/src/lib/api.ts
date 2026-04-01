@@ -24,12 +24,9 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     const token = await tokenGetter();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      return headers;
     }
   }
 
-  // Fallback: dev mode
-  headers['X-Dev-User-Id'] = 'dev-user-seo';
   return headers;
 }
 
@@ -251,7 +248,7 @@ export async function uploadMeetingAudio(
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+  // Production: Clerk token only (no dev fallback)
 
   const res = await fetch(`${API_BASE}/api/meetings`, {
     method: 'POST',
@@ -348,7 +345,7 @@ export async function brainUpload(file: File): Promise<UploadResult> {
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+  // Production: Clerk token only (no dev fallback)
 
   const res = await fetch(`${API_BASE}/api/brain/upload`, {
     method: 'POST',
@@ -597,7 +594,7 @@ export async function uploadPaperPdf(file: File): Promise<{ success: boolean; me
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  if (!headers['Authorization']) headers['X-Dev-User-Id'] = 'dev-user-seo';
+  // Production: Clerk token only (no dev fallback)
 
   const res = await fetch(`${API_BASE}/api/papers/upload`, {
     method: 'POST',
