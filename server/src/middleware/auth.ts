@@ -149,17 +149,26 @@ export function setupRequestContextHook(app: import('fastify').FastifyInstance) 
   app.addHook('onRequest', async (request) => {
     if (request.userId) {
       // Lab을 조회하여 labId를 자동 설정 (prisma-filter에서 사용)
+      // 1) owner인 Lab 먼저 확인, 2) 소속 멤버인 Lab 확인
       let labId = request.labId;
       if (!labId) {
         try {
-          const lab = await basePrismaClient.lab.findFirst({
+          // owner 우선
+          const ownedLab = await basePrismaClient.lab.findFirst({
             where: { ownerId: request.userId },
             select: { id: true },
           });
-          if (lab) {
-            labId = lab.id;
-            request.labId = lab.id;
+          if (ownedLab) {
+            labId = ownedLab.id;
+          } else {
+            // 멤버로 소속된 Lab 탐색
+            const membership = await basePrismaClient.labMember.findFirst({
+              where: { userId: request.userId, active: true },
+              select: { labId: true },
+            });
+            if (membership) labId = membership.labId;
           }
+          if (labId) request.labId = labId;
         } catch {
           // Lab 조회 실패는 무시 — labId 없이 진행
         }

@@ -149,6 +149,7 @@ export async function upsertEdge(
   relation: string,
   source: string,
   evidence?: string,
+  userId?: string,
 ) {
   const existing = await prisma.knowledgeEdge.findUnique({
     where: { fromNodeId_toNodeId_relation: { fromNodeId, toNodeId, relation } },
@@ -166,8 +167,8 @@ export async function upsertEdge(
     });
   }
 
-  return prisma.knowledgeEdge.create({
-    data: { fromNodeId, toNodeId, relation, source, evidence, weight: 1 },
+  return (prisma.knowledgeEdge.create as any)({
+    data: { fromNodeId, toNodeId, relation, source, evidence, weight: 1, ...(userId ? { userId } : {}) },
   });
 }
 
@@ -185,7 +186,7 @@ export async function buildGraphFromText(
       try {
         const fromNode = await upsertNode(userId, rel.fromEntity.type, rel.fromEntity.name, rel.fromEntity.metadata);
         const toNode = await upsertNode(userId, rel.toEntity.type, rel.toEntity.name, rel.toEntity.metadata);
-        await upsertEdge(fromNode.id, toNode.id, rel.relation, source, rel.evidence);
+        await upsertEdge(fromNode.id, toNode.id, rel.relation, source, rel.evidence, userId);
       } catch (err) {
         // 개별 관계 저장 실패는 무시 (unique constraint 등)
         console.warn('⚠️ 관계 저장 스킵:', err);
@@ -789,7 +790,7 @@ export async function seedGraphFromExistingData(userId: string): Promise<{ nodes
         if (agenda.length > 2) {
           const topicNode = await upsertNode(userId, 'topic', agenda);
           nodesCreated++;
-          await upsertEdge(meetingNode.id, topicNode.id, 'discussed_in', 'seed');
+          await upsertEdge(meetingNode.id, topicNode.id, 'discussed_in', 'seed', undefined, userId);
           edgesCreated++;
         }
       }

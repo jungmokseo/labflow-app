@@ -215,6 +215,7 @@ model KnowledgeNode {
 // ── 지식 그래프: 엣지 (관계) ──────────────────────────────
 model KnowledgeEdge {
   id          String   @id @default(cuid())
+  userId      String   @map("user_id")        // 데이터 격리 (multi-tenant)
   fromNodeId  String   @map("from_node_id")
   toNodeId    String   @map("to_node_id")
   relation    String   // participates_in, authored, uses_term, published_in, supervises, collaborates_with, cited_by, related_to, discussed_in, mentioned_in
@@ -228,6 +229,7 @@ model KnowledgeEdge {
   toNode      KnowledgeNode @relation("toNode", fields: [toNodeId], references: [id], onDelete: Cascade)
 
   @@unique([fromNodeId, toNodeId, relation])
+  @@index([userId])
   @@index([fromNodeId])
   @@index([toNodeId])
   @@index([source])
@@ -486,6 +488,7 @@ model Channel {
 // ── 대화 메시지 ──────────────────────────────────────────
 model Message {
   id          String   @id @default(cuid())
+  userId      String   @map("user_id")        // 데이터 격리 (multi-tenant)
   channelId   String   @map("channel_id")
   role        String   // user, assistant
   content     String
@@ -494,6 +497,7 @@ model Message {
 
   channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@index([channelId, createdAt(sort: Desc)])
   @@map("messages")
 }
@@ -501,6 +505,7 @@ model Message {
 // ── 채널 요약 ────────────────────────────────────────────
 model ChannelSummary {
   id            String   @id @default(cuid())
+  userId        String   @map("user_id")       // 데이터 격리 (multi-tenant)
   channelId     String   @map("channel_id")
   summaryText   String   @map("summary_text")
   messageRange  String?  @map("message_range")
@@ -509,6 +514,7 @@ model ChannelSummary {
 
   channel       Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@index([channelId, createdAt(sort: Desc)])
   @@map("channel_summaries")
 }

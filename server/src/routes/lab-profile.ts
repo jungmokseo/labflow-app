@@ -28,6 +28,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { env } from '../config/env.js';
 import { analyzeSeedPaper, analyzeSeedPapers, type SeedPaperResult } from '../services/seed-paper.js';
 import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
@@ -161,7 +162,7 @@ export async function labProfileRoutes(app: FastifyInstance) {
     return reply.code(201).send(lab);
   });
 
-  app.put('/api/lab', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.put('/api/lab', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = updateLabSchema.parse(request.body);
@@ -433,7 +434,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     });
   });
 
-  app.post('/api/lab/members', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/lab/members', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = memberSchema.parse(request.body);
@@ -443,7 +444,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     return reply.code(201).send(member);
   });
 
-  app.delete('/api/lab/members/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.delete<{ Params: { id: string } }>('/api/lab/members/:id', { preHandler: requirePermission('ADMIN') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     await prisma.labMember.updateMany({
@@ -454,7 +455,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
   });
 
   // ── PUT /api/lab/members/:id — 멤버 정보 수정 ──────
-  app.put('/api/lab/members/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.put<{ Params: { id: string } }>('/api/lab/members/:id', { preHandler: requirePermission('ADMIN') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = memberSchema.partial().parse(request.body);
@@ -516,7 +517,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     });
   });
 
-  app.post('/api/lab/projects', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/lab/projects', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = projectSchema.parse(request.body);
@@ -526,7 +527,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     return reply.code(201).send(project);
   });
 
-  app.put('/api/lab/projects/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.put<{ Params: { id: string } }>('/api/lab/projects/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = projectSchema.partial().parse(request.body);
@@ -537,7 +538,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     return project;
   });
 
-  app.delete('/api/lab/projects/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.delete<{ Params: { id: string } }>('/api/lab/projects/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     await prisma.project.deleteMany({
@@ -556,7 +557,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     });
   });
 
-  app.post('/api/lab/publications', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/lab/publications', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = publicationSchema.parse(request.body);
@@ -566,7 +567,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     return reply.code(201).send(pub);
   });
 
-  app.delete('/api/lab/publications/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.delete<{ Params: { id: string } }>('/api/lab/publications/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     await prisma.publication.deleteMany({
@@ -585,7 +586,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     });
   });
 
-  app.post('/api/lab/dictionary', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/lab/dictionary', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = dictSchema.parse(request.body);
@@ -597,7 +598,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     return reply.code(201).send(entry);
   });
 
-  app.delete('/api/lab/dictionary/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.delete<{ Params: { id: string } }>('/api/lab/dictionary/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     await prisma.domainDict.deleteMany({
