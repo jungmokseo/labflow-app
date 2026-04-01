@@ -3,7 +3,7 @@
  *
  * 인증 우선순위:
  * 1. Clerk JWT (Bearer 토큰) — Clerk Secret Key가 있으면 검증
- * 2. X-Dev-User-Id 헤더 — MVP/개발 중 간이 인증
+ * 2. X-Dev-User-Id 헤더 — development 환경에서만 허용
  * 3. 401 반환
  */
 
@@ -11,6 +11,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { env } from '../config/env.js';
 import { requestContext } from './prisma-filter.js';
 import { basePrismaClient } from '../config/prisma.js';
+
+const isDev = env.NODE_ENV === 'development';
 
 // 인증된 요청에 userId와 labId를 추가
 declare module 'fastify' {
@@ -60,27 +62,26 @@ export async function authMiddleware(
         request.log.warn({ err: err.message }, 'Clerk JWT verification failed');
       }
     }
-    // Clerk 미설정 시 Bearer 토큰 무시 — dev header나 dev mode로 fallback
+    // Clerk 미설정 시 Bearer 토큰 무시 — dev mode로 fallback
   }
 
-  // ── 2. X-Dev-User-Id (MVP 개발 모드) ──────────────
-  const devUserId = request.headers['x-dev-user-id'] as string;
-  if (devUserId) {
-    // clerkId로 실제 User를 조회하여 DB의 UUID를 사용
-    try {
-      const user = await basePrismaClient.user.findFirst({
-        where: { clerkId: devUserId },
-        select: { id: true },
-      });
-      request.userId = user?.id || devUserId;
-    } catch {
-      request.userId = devUserId;
+  // ── 2. X-Dev-User-Id — development 환경에서만 허용 ──
+  if (isDev) {
+    const devUserId = request.headers['x-dev-user-id'] as string;
+    if (devUserId) {
+      try {
+        const user = await basePrismaClient.user.findFirst({
+          where: { clerkId: devUserId },
+          select: { id: true },
+        });
+        request.userId = user?.id || devUserId;
+      } catch {
+        request.userId = devUserId;
+      }
+      return;
     }
-    return;
-  }
 
-  // ── 3. Development: 기본 사용자 ────────────────────
-  if (env.NODE_ENV === 'development') {
+    // 기본 개발 사용자
     try {
       const user = await basePrismaClient.user.findFirst({
         where: { clerkId: 'dev-user-seo' },
@@ -93,10 +94,10 @@ export async function authMiddleware(
     return;
   }
 
-  // ── 4. 인증 없음 → 401 ────────────────────────────
+  // ── 3. 인증 없음 → 401 ────────────────────────────
   return reply.code(401).send({
     error: '인증이 필요합니다',
-    hint: 'Authorization: Bearer <token> 또는 X-Dev-User-Id 헤더를 포함해주세요.',
+    hint: 'Authorization: Bearer <token> 헤더를 포함해주세요.',
   });
 }
 
@@ -124,16 +125,18 @@ export async function optionalAuth(
     }
     return;
   }
-  const devUserId = request.headers['x-dev-user-id'] as string;
-  if (devUserId) {
-    try {
-      const user = await basePrismaClient.user.findFirst({
-        where: { clerkId: devUserId },
-        select: { id: true },
-      });
-      request.userId = user?.id || devUserId;
-    } catch {
-      request.userId = devUserId;
+  if (isDev) {
+    const devUserId = request.headers['x-dev-user-id'] as string;
+    if (devUserId) {
+      try {
+        const user = await basePrismaClient.user.findFirst({
+          where: { clerkId: devUserId },
+          select: { id: true },
+        });
+        request.userId = user?.id || devUserId;
+      } catch {
+        request.userId = devUserId;
+      }
     }
   }
 }
