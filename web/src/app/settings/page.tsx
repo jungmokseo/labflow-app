@@ -225,9 +225,25 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
         )}
       </section>
 
-      {/* Research Themes */}
+      {/* Research Themes — 독립 편집 */}
       <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-white text-sm">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
+          {!editing && (
+            <button onClick={() => setEditing(true)} className="text-xs text-primary hover:text-primary-hover">
+              편집
+            </button>
+          )}
+        </div>
+        {themes.length === 0 && !editing && (
+          <div className="text-center py-6">
+            <p className="text-text-muted text-sm mb-3">연구 테마가 등록되지 않았습니다</p>
+            <button onClick={() => { setEditing(true); setThemes([{ name: '', keywords: '', journals: '' }]); }}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
+              + 연구 테마 추가
+            </button>
+          </div>
+        )}
         {(editing ? themes : (lab.researchThemes || []).map(t => ({
           name: t.name, keywords: t.keywords.join(', '), journals: (t.journals || []).join(', ')
         }))).map((theme, i) => (
@@ -235,8 +251,9 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             {editing ? (
               <>
                 <SInput label={`테마 ${i+1}`} value={theme.name} onChange={v => { const n = [...themes]; n[i].name = v; setThemes(n); }} />
-                <SInput label="키워드" value={theme.keywords} onChange={v => { const n = [...themes]; n[i].keywords = v; setThemes(n); }} />
-                <SInput label="저널" value={theme.journals} onChange={v => { const n = [...themes]; n[i].journals = v; setThemes(n); }} />
+                <SInput label="키워드 (쉼표 구분)" value={theme.keywords} onChange={v => { const n = [...themes]; n[i].keywords = v; setThemes(n); }} placeholder="hydrogel, self-healing, tough hydrogel" />
+                <SInput label="관련 저널 (선택)" value={theme.journals} onChange={v => { const n = [...themes]; n[i].journals = v; setThemes(n); }} placeholder="Adv. Mater., Nat. Mater." />
+                <button onClick={() => setThemes(themes.filter((_, j) => j !== i))} className="text-xs text-red-400 hover:text-red-300">삭제</button>
               </>
             ) : (
               <>
@@ -248,7 +265,12 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           </div>
         ))}
         {editing && (
-          <button onClick={() => setThemes([...themes, { name: '', keywords: '', journals: '' }])} className="text-xs text-primary">+ 테마 추가</button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setThemes([...themes, { name: '', keywords: '', journals: '' }])} className="text-xs text-primary">+ 테마 추가</button>
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium disabled:opacity-50 ml-auto">
+              {saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
         )}
       </section>
 
@@ -452,12 +474,12 @@ function StatusItem({ label, status, detail }: { label: string; status: string; 
   );
 }
 
-function SInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function SInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
       <label className="block text-xs text-text-muted mb-1">{label}</label>
-      <input value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-1.5 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50 focus:border-primary outline-none" />
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full px-3 py-1.5 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50 focus:border-primary outline-none placeholder:text-text-muted/50" />
     </div>
   );
 }
