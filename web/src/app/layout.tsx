@@ -22,9 +22,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="flex h-screen">
               <Sidebar />
               <main className="flex-1 overflow-auto">
-                <header className="md:hidden flex items-center justify-between p-4 bg-bg-card border-b border-bg-input/50">
-                  <h1 className="text-lg font-bold text-white">🧪 LabFlow</h1>
-                </header>
                 {children}
               </main>
             </div>

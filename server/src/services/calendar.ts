@@ -8,6 +8,12 @@
 import { google } from 'googleapis';
 import { basePrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+
+function safeDecrypt(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  try { return isEncrypted(value) ? decryptToken(value) : value; } catch { return value; }
+}
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
@@ -26,8 +32,8 @@ async function getCalendarClient(userId: string) {
 
   const oauth2Client = createOAuth2Client();
   oauth2Client.setCredentials({
-    access_token: token.accessToken,
-    refresh_token: token.refreshToken || undefined,
+    access_token: safeDecrypt(token.accessToken),
+    refresh_token: safeDecrypt(token.refreshToken),
     expiry_date: token.expiresAt?.getTime(),
   });
 
@@ -36,9 +42,9 @@ async function getCalendarClient(userId: string) {
       await basePrismaClient.gmailToken.update({
         where: { id: token.id },
         data: {
-          accessToken: tokens.access_token!,
+          accessToken: encryptToken(tokens.access_token!),
           expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-          ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+          ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
         },
       });
     } catch { /* ignore */ }

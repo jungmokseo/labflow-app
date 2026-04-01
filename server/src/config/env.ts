@@ -9,6 +9,7 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().optional(), // Claude Sonnet (이메일 분류 + 회의 요약)
   OPENAI_API_KEY: z.string().optional(), // OpenAI Realtime API (Voice Chatbot)
+  TOKEN_ENCRYPTION_KEY: z.string().optional(), // AES-256 for OAuth token encryption (fallback: CLERK_SECRET_KEY)
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),

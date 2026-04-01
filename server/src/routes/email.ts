@@ -29,6 +29,17 @@ import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
+import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+
+// Safely decrypt a token — handles both encrypted and legacy plaintext values
+function safeDecrypt(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return isEncrypted(value) ? decryptToken(value) : value;
+  } catch {
+    return value; // fallback to raw value if decryption fails
+  }
+}
 
 // ── OAuth state HMAC 서명 ────────────────────────────
 const STATE_SECRET = env.CLERK_SECRET_KEY || 'labflow-oauth-state-secret';
@@ -555,12 +566,16 @@ export async function emailCallbackRoute(app: FastifyInstance) {
       });
       const existingCount = await prisma.gmailToken.count({ where: { userId: user.id } });
 
+      // Encrypt tokens before storing
+      const encAccessToken = encryptToken(tokens.access_token!);
+      const encRefreshToken = tokens.refresh_token ? encryptToken(tokens.refresh_token) : null;
+
       if (existingToken) {
         await prisma.gmailToken.update({
           where: { id: existingToken.id },
           data: {
-            accessToken: tokens.access_token!,
-            refreshToken: tokens.refresh_token || existingToken.refreshToken,
+            accessToken: encAccessToken,
+            refreshToken: encRefreshToken || existingToken.refreshToken,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
           },
         });
@@ -569,8 +584,8 @@ export async function emailCallbackRoute(app: FastifyInstance) {
           data: {
             userId: user.id,
             email: gmailAddress,
-            accessToken: tokens.access_token!,
-            refreshToken: tokens.refresh_token || null,
+            accessToken: encAccessToken,
+            refreshToken: encRefreshToken,
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
             primary: existingCount === 0, // 첫 번째 계정이면 primary
           },
@@ -759,19 +774,19 @@ export async function emailRoutes(app: FastifyInstance) {
 
       const oauth2Client = createOAuth2Client();
       oauth2Client.setCredentials({
-        access_token: gmailToken.accessToken,
-        refresh_token: gmailToken.refreshToken || undefined,
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
         expiry_date: gmailToken.expiresAt?.getTime(),
       });
-      // 토큰 자동 갱신 시 DB 업데이트
+      // 토큰 자동 갱신 시 DB 업데이트 (암호화 저장)
       oauth2Client.on('tokens', async (tokens) => {
         try {
           await prisma.gmailToken.update({
             where: { id: gmailToken!.id },
             data: {
-              accessToken: tokens.access_token!,
+              accessToken: encryptToken(tokens.access_token!),
               expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-              ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
             },
           });
         } catch (e) {
@@ -1114,8 +1129,8 @@ export async function emailRoutes(app: FastifyInstance) {
 
       const oauth2Client = createOAuth2Client();
       oauth2Client.setCredentials({
-        access_token: gmailToken.accessToken,
-        refresh_token: gmailToken.refreshToken || undefined,
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
         expiry_date: gmailToken.expiresAt?.getTime(),
       });
       oauth2Client.on('tokens', async (tokens) => {
@@ -1123,9 +1138,9 @@ export async function emailRoutes(app: FastifyInstance) {
           await prisma.gmailToken.update({
             where: { id: gmailToken!.id },
             data: {
-              accessToken: tokens.access_token!,
+              accessToken: encryptToken(tokens.access_token!),
               expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-              ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
             },
           });
         } catch {}
@@ -1597,8 +1612,8 @@ ${profile.groups.length > 0
 
       const oauth2Client = createOAuth2Client();
       oauth2Client.setCredentials({
-        access_token: gmailToken.accessToken,
-        refresh_token: gmailToken.refreshToken,
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
       });
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
@@ -1761,8 +1776,8 @@ ${profile.groups.length > 0
 
       const oauth2Client = createOAuth2Client();
       oauth2Client.setCredentials({
-        access_token: gmailToken.accessToken,
-        refresh_token: gmailToken.refreshToken,
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
       });
 
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
