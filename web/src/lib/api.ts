@@ -1,9 +1,7 @@
 /**
  * LabFlow Web API 클라이언트
  *
- * Clerk 인증 토큰을 자동으로 첨부합니다.
- * 서버 컴포넌트에서는 auth()로 토큰을 가져오고,
- * 클라이언트 컴포넌트에서는 useAuth().getToken()을 사용합니다.
+ * Supabase Auth 토큰을 자동으로 첨부합니다.
  */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
@@ -20,11 +18,25 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     'Content-Type': 'application/json',
   };
 
+  // tokenGetter가 설정되어 있으면 사용
   if (tokenGetter) {
     const token = await tokenGetter();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+      return headers;
     }
+  }
+
+  // fallback: Supabase 클라이언트에서 직접 토큰 가져오기
+  if (typeof window !== 'undefined') {
+    try {
+      const { createClient } = await import('./supabase');
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch { /* ignore */ }
   }
 
   return headers;
