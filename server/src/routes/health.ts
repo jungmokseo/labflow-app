@@ -18,21 +18,24 @@ export async function healthRoutes(app: FastifyInstance) {
   // ── GET /health/auth — 인증 설정 상태 확인 ─────────
   app.get('/health/auth', async (request) => {
     const result: any = {
-      supabaseConfigured: !!env.SUPABASE_JWT_SECRET,
+      supabaseConfigured: !!(env.SUPABASE_URL && env.SUPABASE_ANON_KEY),
       clerkConfigured: !!env.CLERK_SECRET_KEY,
       hasAuthHeader: !!request.headers.authorization,
       userId: request.userId || null,
     };
 
-    // Bearer 토큰이 있으면 검증 시도하여 에러 메시지 반환
+    // Bearer 토큰이 있으면 Supabase getUser로 검증
     const authHeader = request.headers.authorization;
-    if (authHeader?.startsWith('Bearer ') && env.SUPABASE_JWT_SECRET) {
+    if (authHeader?.startsWith('Bearer ') && env.SUPABASE_URL && env.SUPABASE_ANON_KEY) {
       const token = authHeader.slice(7);
       try {
-        const jwt = await import('jsonwebtoken');
-        const payload = jwt.default.verify(token, env.SUPABASE_JWT_SECRET, { algorithms: ['HS256'] });
-        result.jwtValid = true;
-        result.jwtSub = (payload as any).sub;
+        const { createClient } = await import('@supabase/supabase-js');
+        const sb = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+        const { data, error } = await sb.auth.getUser(token);
+        result.jwtValid = !error;
+        result.jwtSub = data.user?.id || null;
+        result.jwtEmail = data.user?.email || null;
+        if (error) result.jwtError = error.message;
       } catch (err: any) {
         result.jwtValid = false;
         result.jwtError = err.message;

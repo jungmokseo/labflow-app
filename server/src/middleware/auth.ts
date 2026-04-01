@@ -9,10 +9,15 @@
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
 import { env } from '../config/env.js';
 import { requestContext } from './prisma-filter.js';
 import { basePrismaClient } from '../config/prisma.js';
+
+// Supabase 서버 클라이언트 (토큰 검증용)
+const supabaseAdmin = env.SUPABASE_URL && env.SUPABASE_ANON_KEY
+  ? createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY)
+  : null;
 
 const isDev = env.NODE_ENV === 'development';
 
@@ -26,29 +31,35 @@ declare module 'fastify' {
 
 /**
  * Supabase JWT에서 사용자 ID 추출 및 DB 매핑
+ * ES256 (새 JWT Signing Keys) + HS256 (Legacy) 모두 지원
  */
 async function resolveSupabaseUser(token: string): Promise<string | null> {
-  if (!env.SUPABASE_JWT_SECRET) { console.log('[auth] No SUPABASE_JWT_SECRET'); return null; }
+  if (!supabaseAdmin) return null;
   try {
-    const payload = jwt.verify(token, env.SUPABASE_JWT_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
-    const supabaseId = payload.sub;
-    if (!supabaseId) return null;
+    // Supabase의 getUser()는 토큰을 서버 사이드에서 검증 (알고리즘 무관)
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !user) {
+      console.error('[auth] Supabase getUser error:', error?.message);
+      return null;
+    }
 
-    // Supabase UUID로 DB User 조회 (clerkId 필드를 authProviderId로 재사용)
-    const user = await basePrismaClient.user.findFirst({
+    const supabaseId = user.id;
+
+    // Supabase UUID로 DB User 조회
+    const dbUser = await basePrismaClient.user.findFirst({
       where: { clerkId: supabaseId },
       select: { id: true },
     });
-    if (user) return user.id;
+    if (dbUser) return dbUser.id;
 
     // DB에 없으면 자동 생성
-    const email = payload.email || `${supabaseId}@supabase.user`;
+    const email = user.email || `${supabaseId}@supabase.user`;
     const newUser = await basePrismaClient.user.create({
-      data: { clerkId: supabaseId, email, name: (payload as any).user_metadata?.name || null },
+      data: { clerkId: supabaseId, email, name: user.user_metadata?.name || user.user_metadata?.full_name || null },
     });
     return newUser.id;
   } catch (err: any) {
-    console.error('[auth] Supabase JWT error:', err.message);
+    console.error('[auth] Supabase auth error:', err.message);
     return null;
   }
 }
