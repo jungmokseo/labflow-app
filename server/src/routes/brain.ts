@@ -152,14 +152,102 @@ interface ClassifiedIntent {
   }>;
 }
 
-async function classifyIntent(message: string): Promise<ClassifiedIntent> {
+interface ConversationTurn {
+  role: string;
+  content: string;
+}
+
+interface IntentCorrection {
+  originalMessage: string;
+  wrongIntent: string;
+  correctIntent: string;
+}
+
+// ── 학습된 보정 기록 로드/저장 ─────────────────────────
+async function loadIntentCorrections(userId: string): Promise<IntentCorrection[]> {
+  try {
+    const pref = await basePrismaClient.userPreference.findUnique({
+      where: { userId_featureType: { userId, featureType: 'intent_corrections' } },
+    });
+    if (pref?.rules) {
+      const rules = pref.rules as any;
+      return Array.isArray(rules.corrections) ? rules.corrections.slice(-20) : [];
+    }
+  } catch { /* ignore */ }
+  return [];
+}
+
+async function saveIntentCorrection(userId: string, correction: IntentCorrection): Promise<void> {
+  try {
+    const existing = await loadIntentCorrections(userId);
+    // 중복 제거 후 최근 30개만 유지
+    const updated = [...existing.filter(c => c.originalMessage !== correction.originalMessage), correction].slice(-30);
+    const rulesJson = JSON.parse(JSON.stringify({ corrections: updated }));
+    await basePrismaClient.userPreference.upsert({
+      where: { userId_featureType: { userId, featureType: 'intent_corrections' } },
+      update: { rules: rulesJson },
+      create: { userId, featureType: 'intent_corrections', rules: rulesJson },
+    });
+  } catch (err: any) {
+    console.error('[intent] Failed to save correction:', err.message);
+  }
+}
+
+// ── 정정 감지 ─────────────────────────────────────────
+const CORRECTION_PATTERNS = [
+  /^(아니|아닌데|그거\s*말고|그게\s*아니라|아니야|아뇨|틀렸어)/,
+  /말고\s*(.*해줘|.*해)/,
+  /(할일|태스크|캡처|메모|아이디어)로\s*(추가|저장|변경)/,
+  /이메일\s*(아니|말고)/,
+  /다시\s*(해줘|분류|처리)/,
+];
+
+function detectCorrection(message: string, recentMessages: ConversationTurn[]): { isCorrection: boolean; previousUserMessage?: string; previousAssistantMessage?: string } {
+  if (recentMessages.length < 2) return { isCorrection: false };
+
+  for (const pattern of CORRECTION_PATTERNS) {
+    if (pattern.test(message)) {
+      // 직전 user/assistant 메시지 찾기
+      const lastAssistant = [...recentMessages].reverse().find(m => m.role === 'assistant');
+      const lastUser = [...recentMessages].reverse().filter(m => m.role === 'user')[1]; // 현재 메시지 직전의 user 메시지
+      return {
+        isCorrection: true,
+        previousUserMessage: lastUser?.content,
+        previousAssistantMessage: lastAssistant?.content,
+      };
+    }
+  }
+  return { isCorrection: false };
+}
+
+async function classifyIntent(
+  message: string,
+  recentContext?: ConversationTurn[],
+  learnedCorrections?: IntentCorrection[],
+): Promise<ClassifiedIntent> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `사용자 메시지의 의도를 분류하세요. JSON으로만 응답하세요.
+    // 최근 대화 컨텍스트 (최대 3턴)
+    let contextBlock = '';
+    if (recentContext && recentContext.length > 0) {
+      const recent = recentContext.slice(-6); // 최근 3턴 (user+assistant)
+      contextBlock = `\n\n**최근 대화 (맥락 참조용):**\n${recent.map(m => `${m.role === 'user' ? '사용자' : 'AI'}: ${m.content.substring(0, 100)}`).join('\n')}\n`;
+    }
 
+    // 학습된 보정 기록
+    let correctionBlock = '';
+    if (learnedCorrections && learnedCorrections.length > 0) {
+      const examples = learnedCorrections.slice(-5).map(c =>
+        `- "${c.originalMessage}" → ${c.correctIntent} (${c.wrongIntent}은 잘못됨)`
+      ).join('\n');
+      correctionBlock = `\n\n**이 사용자의 과거 정정 기록 (반드시 반영):**\n${examples}\n`;
+    }
+
+    const prompt = `사용자 메시지의 의도를 분류하세요. JSON으로만 응답하세요.
+${contextBlock}${correctionBlock}
 의도 목록:
 - query_project: 단순 과제 질문 (과제 목록, 특정 과제 정보)
 - query_publication: 단순 논문 질문 (논문 수, 저널 등)
@@ -1324,10 +1412,31 @@ export async function brainRoutes(app: FastifyInstance) {
     });
     const contextMessages = recentCtx.reverse();
 
-    // ── 의도 분류 + RAG 병렬 검색 ──
-    const classified = await classifyIntent(message);
-    const { intent, hops } = classified;
+    // ── 의도 분류 (대화 맥락 + 학습된 보정 포함) ──
+    const recentTurns: ConversationTurn[] = contextMessages.map(m => ({
+      role: m.role, content: m.content,
+    }));
+
+    // 정정 감지: "아니 그거 말고" 같은 패턴
+    const correctionCheck = detectCorrection(message, recentTurns);
+    const corrections = await loadIntentCorrections(userId);
+
+    const classified = await classifyIntent(message, recentTurns, corrections);
+    let { intent, hops } = classified;
     const entities = classified.entities || {};
+
+    // 정정이 감지되면 학습 저장
+    if (correctionCheck.isCorrection && correctionCheck.previousUserMessage) {
+      // 이전 메시지의 잘못된 intent를 역추적
+      const prevClassified = await classifyIntent(correctionCheck.previousUserMessage);
+      if (prevClassified.intent !== intent) {
+        saveIntentCorrection(userId, {
+          originalMessage: correctionCheck.previousUserMessage,
+          wrongIntent: prevClassified.intent,
+          correctIntent: intent,
+        }).catch((err: any) => console.error('[background] saveIntentCorrection:', err.message || err));
+      }
+    }
 
     // 2. RAG: 데이터 중심 병렬 검색 (intent와 무관하게 항상 실행)
     //    Intent는 액션 커맨드(save_memo, capture_*)에만 사용
