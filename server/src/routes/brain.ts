@@ -1324,12 +1324,37 @@ export async function brainRoutes(app: FastifyInstance) {
     const shadowType = determineShadowType(intent, message);
     let shadowResult: string | null = null;
 
-    if (shadowType === 'email' && (intent === 'email_briefing' || intent === 'email_query')) {
+    if (shadowType === 'email' && intent === 'email_briefing') {
+      // 실제 Gmail에서 이메일을 가져와 서사형 브리핑 생성
+      try {
+        const API_BASE = `http://localhost:${env.PORT || 3001}`;
+        // 내부 API 호출로 narrative-briefing 실행 (실제 Gmail 조회 + AI 분석)
+        const briefingRes = await fetch(`${API_BASE}/api/email/narrative-briefing?maxResults=30&includeBody=true`, {
+          headers: { 'Authorization': request.headers.authorization || '', 'Content-Type': 'application/json' },
+        });
+        if (briefingRes.ok) {
+          const briefingData = await briefingRes.json() as any;
+          if (briefingData.success && briefingData.markdown) {
+            shadowResult = briefingData.markdown;
+            // Shadow에 주요 메일만 압축 저장
+            const shadowChannelId = await getOrCreateShadow(userId, 'email');
+            const shadowContent = await compressForShadow(briefingData.markdown, 'email');
+            saveShadowMessage(shadowChannelId, message, shadowContent).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn('Email briefing internal call failed, falling back:', err);
+      }
+      // 실패 시 기존 메모 기반 fallback
+      if (!shadowResult) {
+        const toolResult = await handleToolMessage('email', message + fileContext, userId, lab, request.labId);
+        shadowResult = toolResult.response;
+      }
+    } else if (shadowType === 'email' && intent === 'email_query') {
+      // 후속 질문은 기존 메모 + Shadow 컨텍스트로 답변
       const toolResult = await handleToolMessage('email', message + fileContext, userId, lab, request.labId);
       const shadowChannelId = await getOrCreateShadow(userId, 'email');
-      // Shadow에는 주요 메일 핵심만 압축 저장 (긴급/대응필요 중심)
-      const shadowContent = await compressForShadow(toolResult.response, 'email');
-      saveShadowMessage(shadowChannelId, message, shadowContent).catch(() => {});
+      saveShadowMessage(shadowChannelId, message, toolResult.response).catch(() => {});
       shadowResult = toolResult.response;
     } else if (shadowType === 'calendar') {
       const toolResult = await handleToolMessage('calendar', message + fileContext, userId, lab, request.labId);
