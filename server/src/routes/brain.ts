@@ -174,7 +174,7 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 - search_memory: 과거 정보 검색
 - add_dict: 용어 교정 등록
 - query_stale: 오래된 정보, 업데이트 필요한 정보, 신뢰도 낮은 정보 질문 (예: "오래된 정보 보여줘", "업데이트 필요한 거 있어?", "확인이 필요한 정보", "신뢰도 낮은 정보")
-- capture_create: 빠른 캡처 생성 (메모/태스크/아이디어 기록 요청). 예: "이거 메모해줘", "할 일 추가", "아이디어 저장"
+- capture_create: 빠른 캡처 생성 (메모/태스크/아이디어 기록 요청). 예: "이거 메모해줘", "할 일 추가", "아이디어 저장", "정리하기", "준비해야 해"
 - capture_list: 캡처 목록 조회 요청. 예: "캡처 보여줘", "할 일 목록", "아이디어 뭐 있어?"
 - capture_complete: 캡처 완료 처리. 예: "이거 완료", "다 했어", "태스크 끝"
 - daily_brief: 오늘 브리핑/우선순위 요청. 예: "오늘 할 일", "today", "오늘 브리핑", "오늘 뭐해야 해?"
@@ -185,6 +185,17 @@ async function classifyIntent(message: string): Promise<ClassifiedIntent> {
 - email_preference: 이메일 분류 설정 변경 요청. 예: "학술지 리뷰 중요도 올려줘", "광고 메일 제외해줘", "OO 키워드 중요하게 처리해", "이메일 분류 규칙 바꿔줘", "뉴스레터 안 보여줘"
 - calendar_query: 캘린더/일정 관련. 예: "오늘 일정", "이번주 스케줄", "다음 미팅 언제", "일정 잡아줘"
 - general_chat: 일반 대화
+
+**분류 규칙:**
+1. "~해야함", "~하기", "~준비", "~정리" 같은 할일/행동 표현은 capture_create 또는 general_chat이지, email_briefing이 아닙니다.
+2. email_briefing은 **반드시 이메일/메일/email/Gmail/브리핑을 명시적으로 언급**한 경우에만 선택하세요.
+3. 애매하면 general_chat으로 분류하세요.
+
+**잘못 분류되기 쉬운 예시:**
+- "미팅 아젠다 정리하기" → capture_create (할일), email_briefing이 아님!
+- "오늘 브리핑" → daily_brief (오늘 할일), email_briefing이 아님!
+- "이메일 확인해줘" → email_briefing (이메일 명시 언급)
+- "리뷰 중요도 올려줘" → email_preference (이메일 설정)
 
 multi_hop인 경우 "hops" 배열을 추가하세요:
 - step: 순서 (1, 2, 3)
