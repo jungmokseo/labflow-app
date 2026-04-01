@@ -16,7 +16,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),
-  FRONTEND_URL: z.string().default('https://labflow-web.vercel.app'),
+  FRONTEND_URL: z.string().default('https://labflow-web.vercel.app'), // Vercel 프로젝트: labflow-web
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
