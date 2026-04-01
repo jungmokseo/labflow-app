@@ -5,10 +5,8 @@ import { usePathname } from 'next/navigation';
 import { UserButton, useUser } from '@clerk/nextjs';
 
 const NAV_ITEMS = [
-  { href: '/brain', icon: '🧠', label: 'Mini Brain' },
-  { href: '/email', icon: '📧', label: '이메일 브리핑' },
+  { href: '/brain', icon: '🧠', label: 'Brain' },
   { href: '/papers', icon: '📚', label: '연구동향' },
-  { href: '/captures', icon: '📝', label: '캡처' },
   { href: '/meetings', icon: '🎙️', label: '회의 노트' },
   { href: '/settings', icon: '⚙️', label: '설정' },
 ];

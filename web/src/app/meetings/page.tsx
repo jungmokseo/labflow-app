@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const ACCEPTED_AUDIO_TYPES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/m4a', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
 const ACCEPTED_EXTENSIONS = ['.webm', '.mp3', '.m4a', '.wav'];
@@ -401,10 +403,24 @@ export default function MeetingsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider">
-              회의 기록 ({meetings.length})
-            </h3>
-            {meetings.map((m) => {
+            {/* 월별 그룹핑 */}
+            {(() => {
+              const monthGroups = new Map<string, Meeting[]>();
+              for (const m of meetings) {
+                const d = new Date(m.createdAt);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                if (!monthGroups.has(key)) monthGroups.set(key, []);
+                monthGroups.get(key)!.push(m);
+              }
+              return Array.from(monthGroups.entries()).map(([monthKey, monthMeetings]) => {
+                const [y, mo] = monthKey.split('-');
+                return (
+                  <div key={monthKey}>
+                    <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-3">
+                      {y}년 {parseInt(mo)}월 ({monthMeetings.length}건)
+                    </h3>
+                    <div className="space-y-3">
+            {monthMeetings.map((m) => {
               const expanded = expandedId === m.id;
               return (
                 <div
@@ -420,9 +436,14 @@ export default function MeetingsPage() {
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-xs text-text-muted">
                           {new Date(m.createdAt).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
                             month: 'short',
                             day: 'numeric',
+                            weekday: 'short',
+                          })}
+                          {' '}
+                          {new Date(m.createdAt).toLocaleTimeString('ko-KR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
                           })}
                         </span>
                         {m.actionItems.length > 0 && (
@@ -437,62 +458,49 @@ export default function MeetingsPage() {
                   </div>
 
                   {expanded && (
-                    <div className="px-4 pb-4 space-y-4 border-t border-bg-input/50 pt-4">
+                    <div className="px-4 pb-4 border-t border-bg-input/50 pt-4">
+                      {/* Notion 스타일 회의록 렌더링 */}
                       {m.summary && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-                            요약
-                          </h4>
-                          <p className="text-sm text-white bg-bg/50 rounded-lg p-3">{m.summary}</p>
+                        <div className="notion-note">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.summary}</ReactMarkdown>
                         </div>
                       )}
 
-                      {m.agenda.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-                            안건
-                          </h4>
-                          <ul className="space-y-1">
-                            {m.agenda.map((a, i) => (
-                              <li key={i} className="text-sm text-text-main flex items-start gap-2">
-                                <span className="text-text-muted">•</span> {a}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {m.actionItems.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-yellow-400 uppercase tracking-wider mb-2">
-                            📋 액션 아이템
-                          </h4>
-                          <ul className="space-y-1">
-                            {m.actionItems.map((a, i) => (
-                              <li key={i} className="text-sm text-white flex items-start gap-2">
-                                <span className="text-yellow-400">☐</span> {a}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {m.nextSteps.length > 0 && (
-                        <div>
-                          <h4 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">
-                            → 다음 단계
-                          </h4>
-                          <ul className="space-y-1">
-                            {m.nextSteps.map((s, i) => (
-                              <li key={i} className="text-sm text-text-main flex items-start gap-2">
-                                <span className="text-blue-400">→</span> {s}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      <div className="pt-2 border-t border-bg-input/30">
+                      {/* 공유/액션 버튼 */}
+                      <div className="pt-4 mt-4 border-t border-bg-input/30 flex items-center gap-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (m.summary) {
+                              navigator.clipboard.writeText(m.summary);
+                              alert('마크다운이 클립보드에 복사되었습니다');
+                            }
+                          }}
+                          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                        >
+                          📋 마크다운 복사
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+                              const res = await fetch(`${API_BASE}/api/meetings/${m.id}/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                              const data = await res.json();
+                              if (data.success && data.docUrl) {
+                                window.open(data.docUrl, '_blank');
+                              } else {
+                                alert(data.error || 'Google Docs 내보내기 실패');
+                              }
+                            } catch {
+                              alert('Google Docs 내보내기에 실패했습니다');
+                            }
+                          }}
+                          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+                        >
+                          📄 Google Docs 내보내기
+                        </button>
+                        <div className="flex-1" />
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -500,7 +508,7 @@ export default function MeetingsPage() {
                           }}
                           className="text-xs text-red-400 hover:text-red-300"
                         >
-                          이 회의 삭제
+                          삭제
                         </button>
                       </div>
                     </div>
@@ -508,6 +516,11 @@ export default function MeetingsPage() {
                 </div>
               );
             })}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
       </div>

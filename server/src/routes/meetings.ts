@@ -230,8 +230,11 @@ async function transcribeAudio(
 // ── Step 2: Sonnet 구조화 요약 ──────────────────────────
 interface MeetingSummaryResult {
   title: string;
+  date: string;
+  participants: string[];
+  team: string;
   agenda: string[];
-  discussions: Array<{ topic: string; content: string }>;
+  discussions: Array<{ topic: string; bullets: string[] }>;
   actionItems: string[];
   nextSteps: string[];
   correctedTranscription: string;
@@ -250,29 +253,46 @@ async function summarizeWithSonnet(
   // 동적 교정 사전 로드 (Lab DomainDict 포함)
   const correctionDict = userId ? await buildCorrectionDict(userId) : BASE_CORRECTION_DICT;
 
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = today.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+
   const systemPrompt = `당신은 연구 미팅 전사록을 분석하여 구조화된 회의록을 작성하는 전문 에디터입니다.
 
 ## 작업 순서
 1. **오탈자 교정**: 전사 과정에서 발생한 오인식을 교정 사전을 참고하여 수정
-2. **개인명 제거**: 특정 인물의 이름이 언급된 경우, 직함/역할로 대체 (예: "교수님", "팀원", "박사과정생")
-   - 이름을 직접 언급하지 마세요. "김OO가 발표했다" → "팀원이 발표했다"
-   - 액션 아이템에서도 "담당: 역할" 형태로만 기술
-3. **구조화 요약**: 아래 형식으로 정리
+2. **개인명 유지**: 참석자 이름은 그대로 유지합니다. (교수, 대표 등 직함 포함)
+3. **구조화 요약**: 아래 형식으로 정리. 논의 내용은 각 소주제별로 **상세한 bullet points**로 작성해야 합니다. 2-3문장이 아니라, 핵심 결정사항/논의점/근거를 bullet으로 풍부하게 기록하세요.
 
 ${correctionDict}
 
 ## 출력 형식 (반드시 JSON으로만 응답)
 {
-  "title": "회의 제목 (20자 이내, 핵심 주제 반영)",
-  "agenda": ["안건1", "안건2"],
+  "title": "회의 제목 (간결하게, 핵심 주제 반영)",
+  "date": "${dateStr} ${timeStr}",
+  "participants": ["참석자1 직함", "참석자2 직함"],
+  "team": "해당 팀명 (전체, 연구팀 등)",
+  "agenda": ["안건1", "안건2", "안건3"],
   "discussions": [
-    { "topic": "소주제1", "content": "논의 내용 요약 (2-3문장)" },
-    { "topic": "소주제2", "content": "논의 내용 요약" }
+    {
+      "topic": "소주제 제목",
+      "bullets": [
+        "**핵심 키워드/결정사항**: 상세 설명",
+        "근거나 추가 논의 포인트",
+        "관련 데이터나 수치가 있으면 포함"
+      ]
+    }
   ],
-  "actionItems": ["담당자/역할: 구체적인 할 일 + 기한(있으면)"],
-  "nextSteps": ["다음에 해야 할 일 1", "다음에 해야 할 일 2"],
+  "actionItems": [
+    "구체적인 할 일 내용 (담당자/기한 있으면 포함)"
+  ],
+  "nextSteps": [
+    "다음 미팅까지 해야 할 일"
+  ],
   "correctedTranscription": "교정된 전사 텍스트 전문"
-}`;
+}
+
+## 중요: discussions의 bullets는 최소 3개 이상, 가능하면 5개 이상 작성하세요. 단순 요약이 아니라 회의에서 나온 구체적인 내용(기술 결정, 수치, 근거, 이슈)을 모두 포함해야 합니다.`;
 
   try {
     const response = await anthropic.messages.create({
@@ -298,11 +318,14 @@ ${correctionDict}
 
     return {
       title: String(parsed.title || '제목 없음').substring(0, 200),
+      date: String(parsed.date || ''),
+      participants: Array.isArray(parsed.participants) ? parsed.participants.map(String) : [],
+      team: String(parsed.team || ''),
       agenda: Array.isArray(parsed.agenda) ? parsed.agenda.map(String) : [],
       discussions: Array.isArray(parsed.discussions)
         ? parsed.discussions.map((d: any) => ({
             topic: String(d.topic || ''),
-            content: String(d.content || ''),
+            bullets: Array.isArray(d.bullets) ? d.bullets.map(String) : [String(d.content || '')],
           }))
         : [],
       actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems.map(String) : [],
@@ -344,9 +367,12 @@ ${transcription}`;
 
     return {
       title: String(parsed.title || '제목 없음').substring(0, 200),
+      date: '',
+      participants: [],
+      team: '',
       agenda: Array.isArray(parsed.agenda) ? parsed.agenda.map(String) : [],
       discussions: Array.isArray(parsed.discussions)
-        ? parsed.discussions.map((d: any) => ({ topic: String(d.topic || ''), content: String(d.content || '') }))
+        ? parsed.discussions.map((d: any) => ({ topic: String(d.topic || ''), bullets: Array.isArray(d.bullets) ? d.bullets.map(String) : [String(d.content || '')] }))
         : [],
       actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems.map(String) : [],
       nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.map(String) : [],
@@ -355,6 +381,9 @@ ${transcription}`;
   } catch {
     return {
       title: '회의 기록',
+      date: '',
+      participants: [],
+      team: '',
       agenda: [],
       discussions: [],
       actionItems: [],
@@ -368,11 +397,13 @@ ${transcription}`;
 interface MeetingPipelineResult {
   transcription: string;  // 교정된 전사
   title: string;
-  summary: string;        // 구조화 요약 (JSON 문자열)
+  summary: string;        // 구조화 요약 (마크다운)
   agenda: string[];
-  discussions: Array<{ topic: string; content: string }>;
+  discussions: Array<{ topic: string; bullets: string[] }>;
   actionItems: string[];
   nextSteps: string[];
+  participants: string[];
+  team: string;
   modelUsed: string;
 }
 
@@ -391,15 +422,8 @@ async function processMeetingAudio(
   // Step 2: Sonnet 교정 + 구조화 요약 (동적 교정 사전 사용)
   const summary = await summarizeWithSonnet(rawTranscription, userId);
 
-  // Step 3: 이름 제거 후처리 (LabMember 기반)
-  if (userId) {
-    summary.correctedTranscription = await removeNames(summary.correctedTranscription, userId);
-    summary.actionItems = await Promise.all(summary.actionItems.map(a => removeNames(a, userId)));
-    summary.nextSteps = await Promise.all(summary.nextSteps.map(n => removeNames(n, userId)));
-    for (const d of summary.discussions) {
-      d.content = await removeNames(d.content, userId);
-    }
-  }
+  // Step 3: 이름 제거 없음 — 교수님 양식에서는 참석자 이름을 유지
+  // (이전에는 removeNames로 이름을 역할로 대체했으나, 양식 변경으로 불필요)
 
   const summaryText = formatSummaryText(summary);
 
@@ -411,35 +435,69 @@ async function processMeetingAudio(
     discussions: summary.discussions,
     actionItems: summary.actionItems,
     nextSteps: summary.nextSteps,
+    participants: summary.participants,
+    team: summary.team,
     modelUsed: env.ANTHROPIC_API_KEY ? 'gemini-stt+sonnet-summary' : 'gemini-stt+gemini-summary',
   };
 }
 
-/** 구조화 요약을 읽기 좋은 마크다운 텍스트로 변환 */
-function formatSummaryText(
-  s: MeetingSummaryResult,
-): string {
+/** 구조화 요약을 교수님 양식 마크다운으로 변환 */
+function formatSummaryText(s: MeetingSummaryResult): string {
   const parts: string[] = [];
 
+  // 헤더 메타데이터
+  parts.push(`# ${s.title}`);
+  parts.push('');
+  if (s.date) parts.push(`날짜: ${s.date}`);
+  if (s.actionItems.length > 0) parts.push(`액션 아이템: ${s.actionItems.map(a => a.split(':').pop()?.trim() || a).slice(0, 5).join(' / ')}`);
+  if (s.participants.length > 0) parts.push(`참석자: ${s.participants.join(', ')}`);
+  if (s.team) parts.push(`팀: ${s.team}`);
+
+  // 안건
   if (s.agenda.length > 0) {
-    parts.push(`📋 안건\n${s.agenda.map((a, i) => `${i + 1}. ${a}`).join('\n')}`);
+    parts.push('');
+    parts.push('## 📋 안건');
+    parts.push('');
+    for (const a of s.agenda) {
+      parts.push(`- ${a}`);
+    }
   }
 
+  // 논의 내용 (상세 bullet points)
   if (s.discussions.length > 0) {
-    parts.push(
-      `📝 논의 내용\n${s.discussions.map(d => `▸ ${d.topic}\n  ${d.content}`).join('\n\n')}`,
-    );
+    parts.push('');
+    parts.push('## 📝 논의 내용');
+    for (const d of s.discussions) {
+      parts.push('');
+      parts.push(`### ${d.topic}`);
+      parts.push('');
+      for (const b of d.bullets) {
+        parts.push(`- ${b}`);
+      }
+    }
   }
 
+  // 액션 아이템 (체크박스 형태)
   if (s.actionItems.length > 0) {
-    parts.push(`✅ 액션 아이템\n${s.actionItems.map(a => `• ${a}`).join('\n')}`);
+    parts.push('');
+    parts.push('## ✅ 액션 아이템');
+    parts.push('');
+    for (const a of s.actionItems) {
+      parts.push(`- [ ] ${a}`);
+    }
   }
 
+  // 다음 미팅까지 할 일
   if (s.nextSteps.length > 0) {
-    parts.push(`📌 다음 할 일\n${s.nextSteps.map(n => `• ${n}`).join('\n')}`);
+    parts.push('');
+    parts.push('## 📌 다음 미팅까지 할 일');
+    parts.push('');
+    for (const n of s.nextSteps) {
+      parts.push(`- ${n}`);
+    }
   }
 
-  return parts.join('\n\n');
+  return parts.join('\n');
 }
 
 // ── 라우트 등록 ──────────────────────────────────────
@@ -506,7 +564,7 @@ export async function meetingRoutes(app: FastifyInstance) {
       const graphText = [
         result.title,
         ...result.agenda,
-        ...(result.discussions?.map((d: { topic: string; content: string }) => `${d.topic}: ${d.content}`) || []),
+        ...(result.discussions?.map((d: { topic: string; bullets: string[] }) => `${d.topic}: ${d.bullets.join('; ')}`) || []),
         ...result.actionItems,
       ].join('\n');
       buildGraphFromText(userId, graphText, 'meeting').catch(() => {});
@@ -648,13 +706,19 @@ export async function meetingRoutes(app: FastifyInstance) {
 
     try {
       const { createMeetingDoc } = await import('../services/google-docs.js');
-      let discussions: Array<{ topic: string; content: string }> = [];
+      let discussions: Array<{ topic: string; bullets?: string[]; content?: string }> = [];
       try { discussions = typeof meeting.discussions === 'string' ? JSON.parse(meeting.discussions) : meeting.discussions as any || []; } catch { discussions = []; }
+
+      // discussions를 Google Docs 호환 형태로 변환
+      const docsDiscussions = discussions.map(d => ({
+        topic: d.topic,
+        content: d.bullets ? d.bullets.join('\n') : (d.content || ''),
+      }));
 
       const result = await createMeetingDoc(user.id, {
         title: meeting.title,
         agenda: meeting.agenda,
-        discussions,
+        discussions: docsDiscussions,
         actionItems: meeting.actionItems,
         nextSteps: meeting.nextSteps,
         transcription: meeting.transcription || undefined,
@@ -696,7 +760,7 @@ export async function meetingRoutes(app: FastifyInstance) {
 // ── 응답 포매터 ──────────────────────────────────────
 function formatMeeting(meeting: any) {
   // discussions는 JSON 문자열로 저장됨 → 파싱
-  let discussions: Array<{ topic: string; content: string }> = [];
+  let discussions: Array<{ topic: string; bullets?: string[]; content?: string }> = [];
   try {
     if (meeting.discussions) {
       discussions = typeof meeting.discussions === 'string'

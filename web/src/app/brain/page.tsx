@@ -1,15 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, getAutoBrief, type BrainChannel, type BrainMessage, type BrainTool, type UploadResult } from '@/lib/api';
-
-const TOOLS: Array<{ key: BrainTool; icon: string; label: string; persistent: boolean }> = [
-  { key: 'general', icon: '🧠', label: '자유 대화', persistent: false },
-  { key: 'email', icon: '📧', label: '이메일', persistent: true },
-  { key: 'papers', icon: '📚', label: '논문', persistent: true },
-  { key: 'meeting', icon: '🎙️', label: '미팅', persistent: true },
-  { key: 'calendar', icon: '📅', label: '캘린더', persistent: true },
-];
+import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainMessage, type UploadResult } from '@/lib/api';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -32,59 +24,32 @@ function isThisWeek(dateStr: string): boolean {
 }
 
 export default function BrainPage() {
-  const [toolSessions, setToolSessions] = useState<any[]>([]);
-  const [freeSessions, setFreeSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [messages, setMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTool, setActiveTool] = useState<BrainTool>('general');
+  const [tab, setTab] = useState<'chat' | 'search'>('chat');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any>(null);
-  const [tab, setTab] = useState<'chat' | 'search'>('chat');
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [autoBrief, setAutoBrief] = useState<string | null>(null);
-  const [briefLoading, setBriefLoading] = useState(false);
-  const [briefDismissed, setBriefDismissed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
 
-  useEffect(() => { loadChannels(); loadAutoBrief(); }, []);
-
-  async function loadAutoBrief() {
-    // 오늘 이미 닫았으면 스킵
-    const dismissedToday = sessionStorage.getItem('brief-dismissed');
-    if (dismissedToday === new Date().toISOString().split('T')[0]) {
-      setBriefDismissed(true);
-      return;
-    }
-    setBriefLoading(true);
-    try {
-      const res = await getAutoBrief();
-      if (res.success && res.briefing) setAutoBrief(res.briefing);
-    } catch { /* ignore */ }
-    finally { setBriefLoading(false); }
-  }
-
-  function dismissBrief() {
-    setBriefDismissed(true);
-    sessionStorage.setItem('brief-dismissed', new Date().toISOString().split('T')[0]);
-  }
+  useEffect(() => { loadChannels(); }, []);
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const loadChannels = useCallback(async () => {
     try {
       const res = await getBrainChannels();
-      const data = res.data || res;
-      if (Array.isArray(data)) {
-        setToolSessions(data.filter((c: any) => c.tool && c.tool !== 'general'));
-        setFreeSessions(data.filter((c: any) => !c.tool || c.tool === 'general'));
-      } else {
-        setToolSessions((data as any).toolSessions || []);
-        setFreeSessions((data as any).freeSessions || []);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setSessions(data);
+      // 첫 로드 시 가장 최근 세션 자동 선택
+      if (data.length > 0 && !activeChannelId) {
+        loadMessages(data[0].id);
       }
     } catch {}
   }, []);
@@ -95,54 +60,17 @@ export default function BrainPage() {
       setMessages(res.data || res || []);
       setActiveChannelId(channelId);
     } catch (err) {
-      console.error('Failed to load messages for channel', channelId, err);
+      console.error('Failed to load messages', err);
     }
   }
 
-  async function handleSelectTool(tool: BrainTool) {
-    setActiveTool(tool);
-    // 항상 서버에서 최신 채널 목록을 가져온 후 세션 선택
-    try {
-      const res = await getBrainChannels();
-      const data = res.data || res;
-      let tools: any[] = [];
-      let frees: any[] = [];
-      if (Array.isArray(data)) {
-        tools = data.filter((c: any) => c.tool && c.tool !== 'general');
-        frees = data.filter((c: any) => !c.tool || c.tool === 'general');
-      } else {
-        tools = (data as any).toolSessions || [];
-        frees = (data as any).freeSessions || [];
-      }
-      setToolSessions(tools);
-      setFreeSessions(frees);
-
-      if (tool !== 'general') {
-        const existing = tools.find((c: any) => c.tool === tool);
-        if (existing) {
-          loadMessages(existing.id);
-        } else {
-          setActiveChannelId(null);
-          setMessages([]);
-        }
-      } else {
-        const recent = frees[0];
-        if (recent) {
-          loadMessages(recent.id);
-        } else {
-          setActiveChannelId(null);
-          setMessages([]);
-        }
-      }
-    } catch {
-      setActiveChannelId(null);
-      setMessages([]);
-    }
-  }
-
-  function handleSelectFreeSession(ch: any) {
-    setActiveTool('general');
+  function handleSelectSession(ch: any) {
     loadMessages(ch.id);
+  }
+
+  function handleNewSession() {
+    setActiveChannelId(null);
+    setMessages([]);
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -152,7 +80,6 @@ export default function BrainPage() {
     try {
       const result = await brainUpload(file);
       setUploadedFile(result);
-      // 파일 처리 결과를 메시지로 표시
       setMessages(prev => [...prev, {
         id: `file-${Date.now()}`,
         role: 'assistant',
@@ -176,12 +103,14 @@ export default function BrainPage() {
     if (!input.trim() || loading) return;
     const msg = input;
     const currentFileId = uploadedFile?.fileId;
+    const isNewSession = !activeChannelId;
     setInput('');
+    setUploadedFile(null);
     setMessages(prev => [...prev, { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() }]);
     setLoading(true);
 
     try {
-      const result = await brainChat(msg, activeChannelId || undefined, activeTool, currentFileId);
+      const result = await brainChat(msg, activeChannelId || undefined, currentFileId, isNewSession ? true : undefined);
       setMessages(prev => [...prev, {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -190,8 +119,7 @@ export default function BrainPage() {
       }]);
       if (result.channelId && result.channelId !== activeChannelId) {
         setActiveChannelId(result.channelId);
-        loadChannels(); // 사이드바 새로고침
-        // 새 채널의 메시지를 서버에서 로드하여 동기화
+        loadChannels();
         try {
           const res = await getChannelMessages(result.channelId);
           const serverMsgs = res.data || res || [];
@@ -222,73 +150,44 @@ export default function BrainPage() {
     }
   }
 
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); }
   function handleDragEnter(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     dragCounter.current++;
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsDragging(true);
-    }
+    if (e.dataTransfer.types.includes('Files')) setIsDragging(true);
   }
-
   function handleDragLeave(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     dragCounter.current--;
-    if (dragCounter.current === 0) {
-      setIsDragging(false);
-    }
+    if (dragCounter.current === 0) setIsDragging(false);
   }
-
   async function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     dragCounter.current = 0;
     setIsDragging(false);
-
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-
     setUploading(true);
     try {
       const result = await brainUpload(file);
       setUploadedFile(result);
-      setMessages(prev => [...prev, {
-        id: `file-${Date.now()}`,
-        role: 'assistant',
-        content: result.message,
-        createdAt: new Date().toISOString(),
-      }]);
+      setMessages(prev => [...prev, { id: `file-${Date.now()}`, role: 'assistant', content: result.message, createdAt: new Date().toISOString() }]);
     } catch (err: any) {
-      setMessages(prev => [...prev, {
-        id: `err-${Date.now()}`,
-        role: 'assistant',
-        content: `파일 처리 실패: ${err.message}`,
-        createdAt: new Date().toISOString(),
-      }]);
-    } finally {
-      setUploading(false);
-    }
+      setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: `파일 처리 실패: ${err.message}`, createdAt: new Date().toISOString() }]);
+    } finally { setUploading(false); }
   }
 
-  // 자유 대화 세션을 날짜별 그룹
-  const todaySessions = freeSessions.filter((c: any) => isToday(c.lastMessageAt || c.createdAt));
-  const weekSessions = freeSessions.filter((c: any) => !isToday(c.lastMessageAt || c.createdAt) && isThisWeek(c.lastMessageAt || c.createdAt));
-  const olderSessions = freeSessions.filter((c: any) => !isThisWeek(c.lastMessageAt || c.createdAt));
-
-  const activeToolInfo = TOOLS.find(t => t.key === activeTool);
+  // 세션을 날짜별 그룹
+  const todaySessions = sessions.filter((c: any) => isToday(c.lastMessageAt || c.createdAt));
+  const weekSessions = sessions.filter((c: any) => !isToday(c.lastMessageAt || c.createdAt) && isThisWeek(c.lastMessageAt || c.createdAt));
+  const olderSessions = sessions.filter((c: any) => !isThisWeek(c.lastMessageAt || c.createdAt));
 
   return (
     <div className="flex h-[calc(100vh-2rem)] gap-4">
       {/* ── 사이드바 ── */}
       <div className="w-60 bg-bg-card rounded-xl flex flex-col overflow-hidden">
         <div className="p-4 pb-2">
-          <h2 className="text-lg font-bold text-white">🧠 미니브레인</h2>
+          <h2 className="text-lg font-bold text-white">🧠 Brain</h2>
           <div className="flex gap-1 mt-3">
             <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>채팅</button>
             <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>검색</button>
@@ -296,45 +195,30 @@ export default function BrainPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-          {/* 영구 세션 도구 */}
-          <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">도구 세션</p>
-          {TOOLS.filter(t => t.persistent).map(t => {
-            const session = toolSessions.find((c: any) => c.tool === t.key);
-            const isActive = activeTool === t.key && activeChannelId === session?.id;
-            return (
-              <button
-                key={t.key}
-                onClick={() => handleSelectTool(t.key)}
-                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
-                }`}
-              >
-                <span>{t.icon}</span>
-                <span className="flex-1 text-left truncate">{t.label}</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-                {session?.messageCount ? (
-                  <span className="text-[10px] text-text-muted">{session.messageCount}</span>
-                ) : null}
-              </button>
-            );
-          })}
-
           {/* 새 대화 버튼 */}
-          <div className="pt-3">
+          <div className="pt-3 pb-2">
             <button
-              onClick={() => handleSelectTool('general')}
-              className="w-full px-3 py-2 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30"
+              onClick={handleNewSession}
+              className="w-full px-3 py-2 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 font-medium"
             >
-              + 새 자유 대화
+              + 새 대화
             </button>
           </div>
 
-          {/* 자유 대화 세션 목록 */}
+          {/* 현재 활성 (activeChannelId 없으면 새 대화 중) */}
+          {!activeChannelId && (
+            <div className="px-3 py-2 rounded-lg text-sm bg-primary/10 text-primary flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-xs font-medium">새 대화</span>
+            </div>
+          )}
+
+          {/* 대화 히스토리 (날짜별) */}
           {todaySessions.length > 0 && (
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
               {todaySessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectFreeSession(ch)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
               ))}
             </>
           )}
@@ -342,15 +226,15 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
               {weekSessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectFreeSession(ch)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
               ))}
             </>
           )}
           {olderSessions.length > 0 && (
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
-              {olderSessions.slice(0, 10).map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectFreeSession(ch)} />
+              {olderSessions.slice(0, 15).map((ch: any) => (
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
               ))}
             </>
           )}
@@ -380,19 +264,11 @@ export default function BrainPage() {
             {/* 헤더 */}
             <div className="p-4 border-b border-bg-input/50">
               <div className="flex items-center gap-2">
-                {activeToolInfo && (
-                  <span className="text-lg">{activeToolInfo.icon}</span>
-                )}
+                <span className="text-lg">🧠</span>
                 <div>
-                  <h3 className="text-white font-medium text-sm">
-                    {activeToolInfo?.persistent
-                      ? `${activeToolInfo.label} 세션`
-                      : activeChannelId ? '자유 대화' : '새 대화'}
-                  </h3>
+                  <h3 className="text-white font-medium text-sm">Brain</h3>
                   <p className="text-[11px] text-text-muted">
-                    {activeToolInfo?.persistent
-                      ? '대화가 쌓일수록 이 분야에서 AI가 더 정확해집니다'
-                      : '연구실 정보를 물어보세요. 메모/구성원/과제 질문은 자동 처리됩니다'}
+                    이메일, 일정, 메모, 연구실 정보 — 무엇이든 물어보세요
                   </p>
                 </div>
               </div>
@@ -400,49 +276,18 @@ export default function BrainPage() {
 
             {/* 메시지 영역 */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* 자동 브리핑 배너 */}
-              {!briefDismissed && autoBrief && activeTool === 'general' && messages.length === 0 && (
-                <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-xl p-4 relative">
-                  <button onClick={dismissBrief} className="absolute top-2 right-3 text-text-muted hover:text-white text-sm">✕</button>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">📋</span>
-                    <span className="text-sm font-semibold text-white">오늘의 브리핑</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400">자동 생성</span>
-                  </div>
-                  <div className="text-sm text-text-main whitespace-pre-wrap leading-relaxed">{autoBrief}</div>
-                </div>
-              )}
-              {briefLoading && activeTool === 'general' && messages.length === 0 && (
-                <div className="bg-bg-input/30 rounded-xl p-4 flex items-center gap-3">
-                  <div className="animate-spin w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full" />
-                  <span className="text-sm text-text-muted">오늘의 브리핑을 준비하고 있습니다...</span>
-                </div>
-              )}
-
               {messages.length === 0 && (
                 <div className="text-center text-text-muted py-12">
-                  <p className="text-4xl mb-4">{activeToolInfo?.icon || '🧠'}</p>
-                  <p className="text-lg font-medium">
-                    {activeToolInfo?.persistent
-                      ? `${activeToolInfo.label} 비서`
-                      : 'Lab Memory 미니브레인'}
-                  </p>
-                  <p className="text-sm mt-2">
-                    {activeTool === 'email' && '이메일 브리핑, 중요 메일 확인, 분류 관련 질문을 하세요'}
-                    {activeTool === 'papers' && '최신 논문, 연구 동향, 관련 논문 검색을 질문하세요'}
-                    {activeTool === 'meeting' && '미팅 기록 조회, 액션 아이템 추적, 후속 미팅 관련 질문을 하세요'}
-                    {activeTool === 'calendar' && '오늘/이번주 일정, 대기 중 일정, 스케줄 관련 질문을 하세요'}
-                    {activeTool === 'general' && '무엇이든 물어보세요. 메모, 구성원, 과제 질문은 자동 처리됩니다'}
-                  </p>
-                  {activeTool === 'general' && (
-                    <div className="mt-6 grid grid-cols-2 gap-3 max-w-md mx-auto">
-                      {['NRF 과제 사사 문구 알려줘', '학생 명단 보여줘', '이거 메모해줘: 내일 장비 예약', 'PDMS 관련 정보 있어?'].map(q => (
-                        <button key={q} onClick={() => setInput(q)} className="px-3 py-2 bg-bg-input rounded-lg text-xs text-text-muted hover:text-white hover:bg-bg-input/80 transition-colors">
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <p className="text-4xl mb-4">🧠</p>
+                  <p className="text-lg font-medium">연구실 AI 비서</p>
+                  <p className="text-sm mt-2">무엇이든 물어보세요. 이메일, 일정, 논문, 메모 — 자연어로 요청하면 됩니다.</p>
+                  <div className="mt-6 grid grid-cols-2 gap-3 max-w-md mx-auto">
+                    {['이메일 브리핑 해줘', '오늘 일정 뭐야?', '이거 메모해줘: 내일 장비 예약', '학생 명단 보여줘'].map(q => (
+                      <button key={q} onClick={() => setInput(q)} className="px-3 py-2 bg-bg-input rounded-lg text-xs text-text-muted hover:text-white hover:bg-bg-input/80 transition-colors">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               {messages.map(msg => (
@@ -468,35 +313,16 @@ export default function BrainPage() {
 
             {/* 입력 영역 */}
             <div className="border-t border-bg-input/50">
-              {/* 도구 선택 바 */}
-              <div className="px-4 pt-3 pb-1 flex gap-1 overflow-x-auto">
-                {TOOLS.map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => handleSelectTool(t.key)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
-                      activeTool === t.key
-                        ? 'bg-primary text-white'
-                        : 'bg-bg-input/50 text-text-muted hover:text-white hover:bg-bg-input'
-                    }`}
-                  >
-                    <span>{t.icon}</span>
-                    <span>{t.label}</span>
-                    {t.persistent && <span className="w-1.5 h-1.5 rounded-full bg-green-400 ml-0.5" />}
-                  </button>
-                ))}
-              </div>
               {/* 업로드된 파일 표시 */}
               {uploadedFile && (
-                <div className="px-4 pt-2 flex items-center gap-2">
+                <div className="px-4 pt-3 flex items-center gap-2">
                   <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
                     📎 {uploadedFile.filename}
                     <button onClick={() => setUploadedFile(null)} className="ml-1 text-blue-400/50 hover:text-blue-400">✕</button>
                   </span>
                 </div>
               )}
-              {/* 입력 */}
-              <div className="px-4 pb-4 pt-2 flex gap-2">
+              <div className="px-4 pb-4 pt-3 flex gap-2">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden"
                   accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
                 <button
@@ -511,9 +337,7 @@ export default function BrainPage() {
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                  placeholder={activeTool === 'general'
-                    ? '메시지를 입력하세요...'
-                    : `${activeToolInfo?.icon} ${activeToolInfo?.label} — 질문하세요...`}
+                  placeholder="메시지를 입력하세요..."
                   className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <button
@@ -576,6 +400,7 @@ function SessionButton({ ch, isActive, onClick }: { ch: any; isActive: boolean; 
         isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
       }`}
     >
+      {isActive && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
       <span className="flex-1 text-left truncate text-xs">
         {ch.name || `대화 #${ch.id.slice(-4)}`}
       </span>

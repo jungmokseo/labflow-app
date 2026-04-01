@@ -459,10 +459,12 @@ model Channel {
   id          String    @id @default(cuid())
   userId      String    @map("user_id")
   type        String    // BRAIN, MEETING, PAPER, EMAIL
-  tool        String?   // 사용된 도구 (general, email, papers, etc.)
+  tool        String?   // 사용된 도구 (general, email, papers, etc.) — 레거시, shadow로 대체
   name        String?
   pinned      Boolean   @default(false)
   archived    Boolean   @default(false)
+  shadow      Boolean   @default(false)           // Shadow 세션 여부 (사용자에게 안 보임)
+  shadowType  String?   @map("shadow_type")       // "email" | "calendar" | "knowledge"
   messageCount Int      @default(0) @map("message_count")
   lastMessageAt DateTime? @map("last_message_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -472,7 +474,9 @@ model Channel {
   messages    Message[]
   summaries   ChannelSummary[]
 
+  @@unique([userId, shadowType])
   @@index([userId, archived, lastMessageAt(sort: Desc)])
+  @@index([userId, shadow])
   @@map("channels")
 }
 

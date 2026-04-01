@@ -6,3 +6,121 @@ body {
   background-color: #0a0a0f;
   color: #e0e0e0;
 }
+
+/* ── Notion-style Meeting Notes ── */
+.notion-note {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+  line-height: 1.7;
+  color: #e0e0e0;
+}
+
+.notion-note h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.notion-note h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.notion-note h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #d0d0e0;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.notion-note p {
+  margin: 0.3rem 0;
+  font-size: 0.875rem;
+  color: #a0a0b8;
+}
+
+.notion-note ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.25rem 0;
+}
+
+.notion-note ul li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.notion-note ul li::before {
+  content: '';
+  position: absolute;
+  left: 0.25rem;
+  top: 0.55rem;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6C63FF;
+}
+
+/* Checkbox items (- [ ]) */
+.notion-note ul li:has(input[type="checkbox"]) {
+  padding-left: 0;
+}
+.notion-note ul li:has(input[type="checkbox"])::before {
+  display: none;
+}
+
+.notion-note input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #4a4a6a;
+  border-radius: 3px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+  cursor: pointer;
+}
+
+.notion-note input[type="checkbox"]:checked {
+  background: #6C63FF;
+  border-color: #6C63FF;
+}
+
+.notion-note strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.notion-note a {
+  color: #6C63FF;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Metadata block (first few lines after h1) */
+.notion-note > p:first-of-type,
+.notion-note > p:nth-of-type(2),
+.notion-note > p:nth-of-type(3),
+.notion-note > p:nth-of-type(4) {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0.15rem 0;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .notion-note h1 { font-size: 1.25rem; }
+  .notion-note h2 { font-size: 1rem; }
+  .notion-note h3 { font-size: 0.875rem; }
+  .notion-note ul li { font-size: 0.8rem; }
+}

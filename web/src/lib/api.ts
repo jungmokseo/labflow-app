@@ -290,12 +290,10 @@ export async function seedKnowledgeGraph() {
 }
 
 // ── 미니브레인 (Brain Chat) ─────────────────────────
-export type BrainTool = 'general' | 'email' | 'papers' | 'meeting' | 'calendar';
-
-export async function brainChat(message: string, channelId?: string, tool?: BrainTool, fileId?: string) {
-  return apiFetch<{ response: string; channelId: string; intent: string; tool?: string; metadata?: any }>('/api/brain/chat', {
+export async function brainChat(message: string, channelId?: string, fileId?: string, newSession?: boolean) {
+  return apiFetch<{ response: string; channelId: string; intent: string; metadata?: any }>('/api/brain/chat', {
     method: 'POST',
-    body: JSON.stringify({ message, channelId, tool: tool || 'general', fileId }),
+    body: JSON.stringify({ message, channelId, fileId, newSession }),
   });
 }
 
@@ -335,10 +333,6 @@ export async function brainUpload(file: File): Promise<UploadResult> {
   }
 
   return res.json();
-}
-
-export async function getAutoBrief() {
-  return apiFetch<{ success: boolean; briefing: string | null; cached: boolean; generatedAt: string }>('/api/brain/auto-brief');
 }
 
 export async function getBrainChannels() {

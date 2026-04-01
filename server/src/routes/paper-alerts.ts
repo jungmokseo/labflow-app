@@ -185,15 +185,17 @@ let cronInterval: ReturnType<typeof setInterval> | null = null;
 
 export function startPaperAlertCron() {
   if (cronInterval) return;
-  // 매 1시간마다 체크 (실제 실행은 스케줄에 따라 결정)
+  // 1일 1회 체크 (주간 스케줄이므로 하루 한번이면 충분)
   cronInterval = setInterval(async () => {
     try {
       await checkAndRunScheduledAlerts();
     } catch (err) {
       console.error('Paper alert cron error:', err);
     }
-  }, 60 * 60 * 1000); // 1시간
-  console.log('📚 Paper alert cron started (hourly check)');
+  }, 24 * 60 * 60 * 1000); // 24시간
+  // 서버 시작 시 즉시 1회 체크 (밀린 스케줄 처리)
+  checkAndRunScheduledAlerts().catch(() => {});
+  console.log('📚 Paper alert cron started (daily check)');
 }
 
 export function stopPaperAlertCron() {
