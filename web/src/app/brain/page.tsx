@@ -197,9 +197,9 @@ export default function BrainPage() {
   const olderSessions = sessions.filter((c: any) => !isThisWeek(c.lastMessageAt || c.createdAt));
 
   return (
-    <div className="flex h-[calc(100vh-2rem)] gap-4">
-      {/* ── 사이드바 ── */}
-      <div className="w-60 bg-bg-card rounded-xl flex flex-col overflow-hidden">
+    <div className="flex h-screen md:h-[calc(100vh-2rem)] md:gap-4 p-0 md:p-4">
+      {/* ── 사이드바 (모바일: 숨김) ── */}
+      <div className="hidden md:flex w-60 bg-bg-card rounded-xl flex-col overflow-hidden">
         <div className="p-4 pb-2">
           <h2 className="text-lg font-bold text-white">🧠 Brain</h2>
           <div className="flex gap-1 mt-3">
