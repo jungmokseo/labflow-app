@@ -62,7 +62,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const userId = request.userId!;
 
     // 사용자 확인/생성 (첫 요청 시 자동 생성)
-    let user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    let user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -117,7 +117,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const query = listQuerySchema.parse(request.query);
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) {
       return reply.send({ success: true, data: [], meta: { total: 0, page: 1, limit: query.limit } });
     }
@@ -197,7 +197,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const capture = await prisma.capture.findFirst({
@@ -217,7 +217,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const body = updateCaptureSchema.parse(request.body);
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     // 소유권 확인
@@ -252,7 +252,7 @@ export async function captureRoutes(app: FastifyInstance) {
   // ── DELETE /api/captures/completed — 완료 일괄 삭제 ─
   app.delete('/api/captures/completed', async (request, reply) => {
     const userId = request.userId!;
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const result = await prisma.capture.deleteMany({
@@ -267,7 +267,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const existing = await prisma.capture.findFirst({ where: { id, userId: user.id } });
@@ -291,7 +291,7 @@ export async function captureRoutes(app: FastifyInstance) {
     const userId = request.userId!;
 
     // 사용자 찾기/생성
-    let user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    let user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) {
       user = await prisma.user.create({
         data: { clerkId: userId, email: `${userId}@dev.labflow.ai` },

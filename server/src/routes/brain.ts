@@ -1494,7 +1494,7 @@ export async function brainRoutes(app: FastifyInstance) {
     } else if (intent === 'email_preference') {
       // ── 이메일 분류 설정 변경 (중요도, 키워드, 제외 패턴 등) ──
       try {
-        const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+        const user = await prisma.user.findFirst({ where: { id: userId } });
         const profile = user ? await prisma.emailProfile.findUnique({ where: { userId: user.id } }) : null;
 
         const { GoogleGenerativeAI } = await import('@google/generative-ai');

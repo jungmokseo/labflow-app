@@ -775,7 +775,7 @@ export async function seedGraphFromExistingData(userId: string): Promise<{ nodes
 
   // 1. 기존 미팅에서 주제 노드 생성
   const meetings = await prisma.meeting.findMany({
-    where: { user: { clerkId: userId } },
+    where: { userId },
     select: { id: true, title: true, agenda: true, actionItems: true },
     take: 50,
   });
@@ -799,7 +799,7 @@ export async function seedGraphFromExistingData(userId: string): Promise<{ nodes
 
   // 2. 기존 캡처에서 태그 기반 노드
   const captures = await prisma.capture.findMany({
-    where: { user: { clerkId: userId } },
+    where: { userId },
     select: { id: true, tags: true, summary: true, category: true },
     take: 100,
   });

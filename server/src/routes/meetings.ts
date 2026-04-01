@@ -594,7 +594,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   app.post('/api/meetings', async (request, reply) => {
     const userId = request.userId!;
 
-    let user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    let user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) {
       user = await prisma.user.create({
         data: { clerkId: userId, email: `${userId}@dev.labflow.app` },
@@ -687,7 +687,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     const query = listQuerySchema.parse(request.query);
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) {
       return reply.send({ success: true, data: [], meta: { total: 0, page: 1, limit: query.limit } });
     }
@@ -719,7 +719,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const meeting = await prisma.meeting.findFirst({
@@ -739,7 +739,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     const body = updateMeetingSchema.parse(request.body);
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const existing = await prisma.meeting.findFirst({ where: { id, userId: user.id } });
@@ -765,7 +765,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const existing = await prisma.meeting.findFirst({ where: { id, userId: user.id } });
@@ -782,7 +782,7 @@ export async function meetingRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const userId = request.userId!;
 
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const meeting = await prisma.meeting.findFirst({

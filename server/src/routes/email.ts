@@ -633,7 +633,7 @@ export async function emailRoutes(app: FastifyInstance) {
   app.get('/api/email/status', async (request, reply) => {
     const userId = request.userId!;
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.send({ success: true, connected: false });
 
       const allTokens = await prisma.gmailToken.findMany({
@@ -673,7 +673,7 @@ export async function emailRoutes(app: FastifyInstance) {
   // ── GET /api/email/profile ──────────────────────
   app.get('/api/email/profile', async (request, reply) => {
     const userId = request.userId!;
-    const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+    const user = await prisma.user.findFirst({ where: { id: userId } });
     if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
     const rawProfile = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
@@ -736,7 +736,7 @@ export async function emailRoutes(app: FastifyInstance) {
     const userId = request.userId!;
 
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
       const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
@@ -1103,7 +1103,7 @@ export async function emailRoutes(app: FastifyInstance) {
     const userId = request.userId!;
 
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
       const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
@@ -1608,7 +1608,7 @@ ${profile.groups.length > 0
     const userId = request.userId!;
 
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
       const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
@@ -1724,7 +1724,7 @@ ${profile.groups.length > 0
       const captures: any[] = [];
 
       // 할일 → Capture 생성
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       const lab = user ? await prisma.lab.findUnique({ where: { ownerId: user.id } }) : null;
 
       for (const task of (extracted.tasks || [])) {
@@ -1774,7 +1774,7 @@ ${profile.groups.length > 0
     const userId = request.userId!;
 
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
       const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
@@ -1836,7 +1836,7 @@ ${profile.groups.length > 0
     }).parse(request.query);
 
     try {
-      const user = await prisma.user.findFirst({ where: { clerkId: userId } });
+      const user = await prisma.user.findFirst({ where: { id: userId } });
       if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
 
       const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
