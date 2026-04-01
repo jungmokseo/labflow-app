@@ -67,6 +67,11 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate?: (
             </p>
           </div>
         </div>
+        <div className="mt-3 flex gap-2 text-[10px] text-text-muted/60">
+          <a href="/legal/terms.html" className="hover:text-text-muted transition-colors">이용약관</a>
+          <span>·</span>
+          <a href="/legal/privacy.html" className="hover:text-text-muted transition-colors">개인정보처리방침</a>
+        </div>
       </div>
     </>
   );

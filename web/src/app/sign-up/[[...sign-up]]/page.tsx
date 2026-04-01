@@ -28,6 +28,11 @@ export default function SignUpPage() {
         afterSignUpUrl="/"
         signInUrl="/sign-in"
       />
+      <div className="mt-6 text-center text-xs text-text-muted space-x-3">
+        <a href="/legal/terms.html" className="hover:text-white transition-colors">이용약관</a>
+        <span>|</span>
+        <a href="/legal/privacy.html" className="hover:text-white transition-colors">개인정보처리방침</a>
+      </div>
     </div>
   );
 }
