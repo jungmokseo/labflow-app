@@ -128,9 +128,11 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       journals: (t.journals || []).join(', '),
     }))
   );
+  const [instructions, setInstructions] = useState((lab as any)?.instructions || '');
   const [members, setMembers] = useState<Array<{ id: string; name: string; email: string; role: string }>>([]);
   const [newMember, setNewMember] = useState({ name: '', email: '', role: '학생' });
   const [saving, setSaving] = useState(false);
+  const [savingInstructions, setSavingInstructions] = useState(false);
   const [memberLoaded, setMemberLoaded] = useState(false);
 
   const loadMembers = useCallback(async () => {
@@ -272,6 +274,37 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             </button>
           </div>
         )}
+      </section>
+
+      {/* Instructions (claude.md 스타일) */}
+      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-white text-sm">AI 지침</h3>
+            <p className="text-xs text-text-muted mt-0.5">Brain 응답 시 항상 참조되는 사용자 지침 (claude.md 방식)</p>
+          </div>
+          <button
+            onClick={async () => {
+              setSavingInstructions(true);
+              try {
+                const updated = await updateLab({ instructions } as any);
+                onUpdate(updated as any);
+              } catch (err) { console.error('Save instructions failed:', err); }
+              finally { setSavingInstructions(false); }
+            }}
+            disabled={savingInstructions}
+            className="text-xs px-3 py-1.5 bg-primary text-white rounded-lg disabled:opacity-50"
+          >
+            {savingInstructions ? '저장 중...' : '저장'}
+          </button>
+        </div>
+        <textarea
+          value={instructions}
+          onChange={e => setInstructions(e.target.value)}
+          rows={8}
+          placeholder={`예시:\n- 한국어로 답변해줘\n- 논문 요약은 3문장 이내로\n- 학생 이름은 존칭 없이\n- 과제 정보 물어보면 사사 문구도 같이 알려줘\n- 이메일 브리핑은 긴급한 것만 먼저`}
+          className="w-full px-4 py-3 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50 focus:border-primary outline-none placeholder:text-text-muted/50 resize-none font-mono"
+        />
       </section>
 
       {/* Members */}

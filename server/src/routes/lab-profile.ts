@@ -52,6 +52,7 @@ const researchThemeSchema = z.object({
 const updateLabSchema = createLabSchema.partial().extend({
   acknowledgment: z.string().optional(),
   responseStyle: z.string().optional(),
+  instructions: z.string().nullable().optional(),
   researchThemes: z.array(researchThemeSchema).optional(),
 });
 
