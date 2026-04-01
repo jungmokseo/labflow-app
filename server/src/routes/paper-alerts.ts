@@ -178,7 +178,7 @@ const alertSettingSchema = z.object({
     rssUrl: z.string().url(),
     publisher: z.string().optional(),
   })).optional(),
-  schedule: z.enum(['daily', 'weekly', 'manual']).default('weekly'),
+  schedule: z.enum(['daily', 'weekly', 'manual']).default('daily'),
 });
 
 // ── Cron 스케줄러 (서버 시작 시 실행) ────────────────
@@ -375,8 +375,8 @@ export async function runPaperCrawl(
   const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
   const flatKeywords = alert.keywords as string[];
 
-  // T_last: lastRunAt 이후 논문만 수집 (없으면 7일 전)
-  const tLast = alert.lastRunAt || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // T_last: lastRunAt 이후 논문만 수집 (첫 실행이면 최근 2주)
+  const tLast = alert.lastRunAt || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
   // 크롤링 대상
   const feeds: Array<{ name: string; rssUrl: string }> = [];
