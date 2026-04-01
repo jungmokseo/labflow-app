@@ -71,10 +71,6 @@ export function createIsolatedPrisma(basePrisma: PrismaClient) {
           injectFilter(model, args);
           return query(args);
         },
-        async create({ model, args, query }) {
-          injectCreateData(model, args);
-          return query(args);
-        },
       },
     },
   });
