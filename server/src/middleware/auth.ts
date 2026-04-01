@@ -28,9 +28,9 @@ declare module 'fastify' {
  * Supabase JWT에서 사용자 ID 추출 및 DB 매핑
  */
 async function resolveSupabaseUser(token: string): Promise<string | null> {
-  if (!env.SUPABASE_JWT_SECRET) return null;
+  if (!env.SUPABASE_JWT_SECRET) { console.log('[auth] No SUPABASE_JWT_SECRET'); return null; }
   try {
-    const payload = jwt.verify(token, env.SUPABASE_JWT_SECRET) as jwt.JwtPayload;
+    const payload = jwt.verify(token, env.SUPABASE_JWT_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
     const supabaseId = payload.sub;
     if (!supabaseId) return null;
 
@@ -47,7 +47,8 @@ async function resolveSupabaseUser(token: string): Promise<string | null> {
       data: { clerkId: supabaseId, email, name: (payload as any).user_metadata?.name || null },
     });
     return newUser.id;
-  } catch {
+  } catch (err: any) {
+    console.error('[auth] Supabase JWT error:', err.message);
     return null;
   }
 }
@@ -117,7 +118,7 @@ export async function authMiddleware(
       return;
     }
 
-    request.log.warn('JWT verification failed for both Supabase and Clerk');
+    request.log.warn('JWT verification failed for both Supabase and Clerk (token length: %d)', token.length);
   }
 
   // ── 2. X-Dev-User-Id — development 환경에서만 허용 ──
