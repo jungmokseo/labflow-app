@@ -50,7 +50,8 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `API Error: ${res.status}`);
+    const details = err.details ? ` (${JSON.stringify(err.details).slice(0, 200)})` : '';
+    throw new Error((err.error || `API Error: ${res.status}`) + details);
   }
 
   return res.json();
