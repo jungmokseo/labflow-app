@@ -37,9 +37,15 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   const url = `${API_BASE}${path}`;
   const authHeaders = await getAuthHeaders();
 
+  // body 없는 POST/PATCH에서 Content-Type: application/json이 빈 body 에러를 유발하므로 제거
+  const headers = { ...authHeaders, ...options.headers } as Record<string, string>;
+  if (!options.body && headers['Content-Type'] === 'application/json') {
+    delete headers['Content-Type'];
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: { ...authHeaders, ...options.headers },
+    headers,
   });
 
   if (!res.ok) {
