@@ -6,6 +6,7 @@ import { UserButton, useUser } from '@clerk/nextjs';
 
 const NAV_ITEMS = [
   { href: '/brain', icon: '🧠', label: 'Brain' },
+  { href: '/tasks', icon: '📋', label: 'Tasks & Ideas' },
   { href: '/papers', icon: '📚', label: '연구동향' },
   { href: '/meetings', icon: '🎙️', label: '회의 노트' },
   { href: '/settings', icon: '⚙️', label: '설정' },

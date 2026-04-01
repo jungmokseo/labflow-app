@@ -151,6 +151,40 @@ function classifyCaptureLocal(text: string): CaptureClassification {
   };
 }
 
+// ── 자동 캡처 감지 (Brain 대화 중 암시적 할일/아이디어) ──
+const AUTO_TASK_PATTERNS = [
+  /해야\s*(해|돼|된다|할|하는데)/,
+  /해봐야겠/,
+  /해놔야/,
+  /까지\s*(제출|완료|준비|보내|마무리|처리)/,
+  /잊지\s*말고/,
+  /꼭\s*(해야|확인|챙겨)/,
+  /리마인드/,
+  /다음에\s*(하자|해야|처리)/,
+  /나중에\s*(해야|확인|처리|보내)/,
+];
+
+const AUTO_IDEA_PATTERNS = [
+  /해보면\s*(어떨까|좋겠|될까)/,
+  /아이디어가\s*(있|떠올)/,
+  /이런\s*거\s*(해보|시도)/,
+  /해볼\s*수\s*있겠/,
+  /실험\s*(아이디어|해보)/,
+  /가설이\s*(있|생각)/,
+  /한번\s*(해보|시도|테스트)/,
+  /새로운\s*(방법|접근|아이디어)/,
+];
+
+export function shouldAutoCapture(text: string): 'task' | 'idea' | null {
+  for (const pattern of AUTO_TASK_PATTERNS) {
+    if (pattern.test(text)) return 'task';
+  }
+  for (const pattern of AUTO_IDEA_PATTERNS) {
+    if (pattern.test(text)) return 'idea';
+  }
+  return null;
+}
+
 // ── CaptureCategory 변환 헬퍼 ─────────────────────────
 export function typeToCategory(type: string): 'IDEA' | 'TASK' | 'MEMO' {
   switch (type) {

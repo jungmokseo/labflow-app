@@ -65,22 +65,44 @@ export interface Capture {
   category: string;
   tags: string[];
   priority: string;
+  confidence: number | null;
+  actionDate: string | null;
   completed: boolean;
+  completedAt: string | null;
+  status: string;
+  reviewed: boolean;
+  sourceType: string;
+  modelUsed: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
-export async function getCaptures(limit = 20) {
-  return apiFetch<{ success: boolean; data: Capture[]; meta: any }>(`/api/captures?limit=${limit}&sort=newest`);
+export async function getCaptures(params?: {
+  category?: string;
+  completed?: string;
+  sort?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.category) qs.set('category', params.category);
+  if (params?.completed) qs.set('completed', params.completed);
+  qs.set('sort', params?.sort || 'newest');
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  qs.set('limit', String(params?.limit || 50));
+  return apiFetch<{ success: boolean; data: Capture[]; meta: any }>(`/api/captures?${qs.toString()}`);
 }
 
-export async function createCapture(content: string) {
+export async function createCapture(content: string, category?: string) {
   return apiFetch<{ success: boolean; data: Capture }>('/api/captures', {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, category }),
   });
 }
 
-export async function updateCapture(id: string, data: Partial<Pick<Capture, 'content' | 'completed'>>) {
+export async function updateCapture(id: string, data: Partial<Pick<Capture, 'content' | 'completed' | 'category' | 'tags' | 'priority' | 'actionDate' | 'reviewed'>>) {
   return apiFetch<{ success: boolean; data: Capture }>(`/api/captures/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

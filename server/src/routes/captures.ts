@@ -35,6 +35,7 @@ const updateCaptureSchema = z.object({
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
   completed: z.boolean().optional(),
   actionDate: z.string().nullable().optional(),
+  reviewed: z.boolean().optional(),
 });
 
 const listQuerySchema = z.object({
@@ -238,6 +239,7 @@ export async function captureRoutes(app: FastifyInstance) {
       updateData.completed = body.completed;
       updateData.completedAt = body.completed ? new Date() : null;
     }
+    if (body.reviewed !== undefined) updateData.reviewed = body.reviewed;
 
     const capture = await prisma.capture.update({
       where: { id },
@@ -410,6 +412,9 @@ function formatCapture(capture: any) {
     modelUsed: capture.modelUsed,
     completed: capture.completed,
     completedAt: capture.completedAt?.toISOString() || null,
+    status: capture.status || 'active',
+    reviewed: capture.reviewed ?? false,
+    sourceType: capture.sourceType || 'text',
     createdAt: capture.createdAt.toISOString(),
     updatedAt: capture.updatedAt.toISOString(),
   };

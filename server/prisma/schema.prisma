@@ -60,6 +60,7 @@ model Capture {
   sourceType  String          @default("text") @map("source_type") // text | voice
   rawInput    String?         @map("raw_input")  // 원본 음성 텍스트 (STT 결과)
   status      String          @default("active") // active | completed | archived
+  reviewed    Boolean         @default(false)  // 확인 여부 (자동 캡처 = false)
   metadata    Json?           @default("{}")  // 확장용 JSONB
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -72,6 +73,7 @@ model Capture {
   @@index([userId, completed])
   @@index([labId, category])
   @@index([labId, status])
+  @@index([userId, reviewed, status])
   @@map("captures")
 }
 

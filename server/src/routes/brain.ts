@@ -1484,6 +1484,7 @@ export async function brainRoutes(app: FastifyInstance) {
           modelUsed: 'gemini-flash',
           sourceType: 'text',
           status: 'active',
+          reviewed: true, // 명시적 요청이므로 확인됨
         },
       });
       const emoji = classification.type === 'task' ? '✅' : classification.type === 'idea' ? '💡' : '📝';
@@ -1630,6 +1631,49 @@ ${lab?.responseStyle === 'casual' ? '친근하고 캐주얼한 어조로 답변�
       autoExtractInfo(message, responseText, lab.id).catch(() => {});
     }
 
+    // 10-1. 자동 캡처 감지 (할일/아이디어 암시적 표현)
+    let autoCaptured: { type: string; summary: string } | null = null;
+    if (lab && !['capture_create', 'capture_list', 'capture_complete', 'save_memo'].includes(intent)) {
+      const { shouldAutoCapture, classifyCapture, typeToCategory, urgencyToPriority } = await import('../services/capture-classifier.js');
+      const autoType = shouldAutoCapture(message);
+      if (autoType) {
+        try {
+          const classification = await classifyCapture(message);
+          if (classification.confidence >= 0.6) {
+            await prisma.capture.create({
+              data: {
+                userId,
+                labId: lab.id,
+                content: message,
+                summary: classification.summary,
+                category: typeToCategory(classification.type),
+                tags: classification.tags,
+                priority: urgencyToPriority(classification.urgency),
+                confidence: classification.confidence,
+                actionDate: classification.dueDate ? new Date(classification.dueDate) : null,
+                modelUsed: 'gemini-flash-auto',
+                sourceType: 'text',
+                status: 'active',
+                reviewed: false,
+              },
+            });
+            autoCaptured = { type: classification.type, summary: classification.summary };
+            // 응답에 인디케이터 추가
+            const emoji = classification.type === 'task' ? '✅' : '💡';
+            const indicator = `\n\n---\n${emoji} ${classification.type === 'task' ? '할일' : '아이디어'} 자동 저장됨: "${classification.summary}"`;
+            responseText += indicator;
+            // DB 메시지도 업데이트
+            await prisma.message.updateMany({
+              where: { channelId, role: 'assistant' },
+              data: { content: responseText },
+            });
+          }
+        } catch (err) {
+          console.warn('Auto-capture failed:', err);
+        }
+      }
+    }
+
     return {
       response: responseText,
       channelId,
@@ -1637,6 +1681,7 @@ ${lab?.responseStyle === 'casual' ? '친근하고 캐주얼한 어조로 답변�
       isNewSession,
       multiHop: intent === 'multi_hop',
       dbResult: dbResult ? true : false,
+      autoCaptured,
     };
   });
 
