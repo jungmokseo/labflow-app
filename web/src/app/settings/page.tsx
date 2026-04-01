@@ -190,11 +190,12 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
   };
 
   const handleRemoveMember = async (id: string) => {
+    if (!confirm('삭제하시겠습니까?')) return;
     try {
       await removeLabMember(id);
-      loadMembers();
-    } catch (err) {
-      console.error('Remove member failed:', err);
+      await loadMembers();
+    } catch (err: any) {
+      alert(`삭제 실패: ${err.message}`);
     }
   };
 
