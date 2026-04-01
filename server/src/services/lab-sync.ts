@@ -204,11 +204,95 @@ export async function syncLabToPaperAlerts(labId: string) {
 }
 
 /**
+ * Lab researchFields/researchThemes → DomainDict 자동 생성
+ *
+ * 연구 키워드를 기반으로 Gemini가 해당 분야 핵심 기술용어를 생성하여
+ * 용어 교정 사전에 자동 추가. 이미 있는 용어는 건너뜀.
+ */
+async function syncLabToDomainDict(labId: string) {
+  const lab = await basePrismaClient.lab.findUnique({
+    where: { id: labId },
+    include: { domainDict: true },
+  });
+  if (!lab || lab.researchFields.length === 0) return;
+
+  // 이미 충분한 용어가 있으면 스킵 (시드 논문에서 채워진 경우)
+  if (lab.domainDict.length >= 20) return;
+
+  const existingTerms = new Set(lab.domainDict.map(d => d.wrongForm.toLowerCase()));
+  const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
+  const allKeywords = [
+    ...lab.researchFields,
+    ...themes.flatMap(t => t.keywords),
+  ].filter(Boolean);
+
+  if (allKeywords.length === 0) return;
+
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { env } = await import('../config/env.js');
+    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const prompt = `다음 연구 키워드를 보고, 이 분야에서 자주 사용되는 기술 약어와 전문용어를 30개 생성하세요.
+각 용어에 대해 "흔히 틀리는 소문자 표기"와 "정확한 표기"를 짝지어주세요.
+
+연구 키워드: ${allKeywords.join(', ')}
+
+규칙:
+- 약어: 소문자 → 대문자 (예: pdms → PDMS, ecg → ECG)
+- 화합물/소재: 잘못된 표기 → 정확한 표기 (예: pedot pss → PEDOT:PSS)
+- 기법/장비: 소문자 → 정확한 표기 (예: ftir → FT-IR)
+- 해당 분야에 실제로 사용되는 용어만 생성하세요
+- 이미 등록된 용어는 제외: ${[...existingTerms].slice(0, 30).join(', ')}
+
+JSON 배열로만 응답:
+[{"wrong": "소문자표기", "correct": "정확한표기", "category": "분류"}]`;
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+    });
+
+    const text = result.response.text().trim();
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return;
+
+    const terms = JSON.parse(match[0]) as Array<{ wrong: string; correct: string; category: string }>;
+    let added = 0;
+
+    for (const t of terms) {
+      if (!t.wrong || !t.correct) continue;
+      if (existingTerms.has(t.wrong.toLowerCase())) continue;
+
+      await basePrismaClient.domainDict.upsert({
+        where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
+        create: {
+          labId,
+          wrongForm: t.wrong.toLowerCase(),
+          correctForm: t.correct,
+          category: t.category || '자동생성',
+        },
+        update: {},
+      }).catch(() => {});
+      added++;
+    }
+
+    if (added > 0) {
+      console.log(`📖 DomainDict auto-generated: ${added} terms for lab ${labId}`);
+    }
+  } catch (err) {
+    console.warn('DomainDict auto-generation failed:', err);
+  }
+}
+
+/**
  * 전체 동기화 (온보딩 완료 또는 프로필 변경 시 호출)
  */
 export async function syncLabProfileToAllFeatures(userId: string, labId: string) {
   await Promise.all([
     syncLabToEmailProfile(userId, labId),
     syncLabToPaperAlerts(labId),
+    syncLabToDomainDict(labId),
   ]);
 }
