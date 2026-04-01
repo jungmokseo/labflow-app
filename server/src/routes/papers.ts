@@ -43,6 +43,8 @@ const SearchPapersSchema = z.object({
 // ── 라우트 ──────────────────────────────────────────
 
 export async function paperRoutes(app: FastifyInstance) {
+  // 모든 논문 라우트에 인증 적용
+  app.addHook('preHandler', authMiddleware);
 
   /**
    * POST /api/papers/ingest — 논문 텍스트 수집 + 임베딩 생성 + 벡터 저장
@@ -217,7 +219,7 @@ export async function paperRoutes(app: FastifyInstance) {
    * 2. Publication DB에 저장
    * 3. 전문을 청크 분할 → 벡터 임베딩 → pgvector 저장
    */
-  app.post('/api/papers/upload', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/papers/upload', async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = req.userId!;
     const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
     if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
@@ -340,7 +342,7 @@ export async function paperRoutes(app: FastifyInstance) {
    * - "하이드로겔 논문" → title/abstract에 키워드 매칭
    * - "LM 논문" → nickname="LM 논문" 또는 title에 "liquid metal"
    */
-  app.get('/api/papers/lookup', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/papers/lookup', async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = req.userId!;
     const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
     if (!lab) return reply.code(404).send({ error: '연구실 설정이 필요합니다.' });
@@ -389,7 +391,7 @@ ${pubList}
   /**
    * PATCH /api/papers/publications/:id — 별칭 설정
    */
-  app.patch('/api/papers/publications/:id', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch('/api/papers/publications/:id', async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const body = z.object({ nickname: z.string().optional() }).parse(req.body);
     const updated = await prisma.publication.update({
@@ -402,7 +404,7 @@ ${pubList}
   /**
    * GET /api/papers/publications — 등록된 핵심 논문 목록 (인덱싱 상태 포함)
    */
-  app.get('/api/papers/publications', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/papers/publications', async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = req.userId!;
     const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
     if (!lab) return reply.send({ data: [] });

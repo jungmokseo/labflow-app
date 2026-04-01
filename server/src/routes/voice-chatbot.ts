@@ -17,6 +17,7 @@ import { env } from '../config/env.js';
 import { personas, getPersona, listPersonas, listVoices, VOICE_OPTIONS } from '../config/personas.js';
 import { conversationMonitor, type ToolCallLog } from '../services/conversation-monitor.js';
 import { prisma } from '../config/prisma.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 // ── 스키마 정의 ────────────────────────────────────
 
@@ -66,7 +67,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
    * POST /api/voice/session — 새 대화 세션 시작
    * WebRTC/WebSocket 연결을 위한 토큰 및 설정 반환
    */
-  app.post('/api/voice/session', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/voice/session', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = CreateSessionSchema.parse(req.body);
     const persona = getPersona(body.personaId);
     const sessionId = generateSessionId();
@@ -77,7 +78,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
     // 도메인 사전에서 Whisper 커스텀 어휘 로드
     let whisperPrompt = '';
     try {
-      const userId = body.userId || 'dev-user-seo';
+      const userId = req.userId || body.userId || 'dev-user-seo';
       const lab = await prisma.lab.findFirst({
         where: { owner: { id: userId } },
         include: { domainDict: { take: 100 } },
@@ -196,7 +197,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
    * POST /api/voice/end-session — 대화 세션 종료 및 요약 저장
    * (기존 /api/voice/session/end에서 변경: POST /api/voice/session에 먼저 매칭되는 충돌 해소)
    */
-  app.post('/api/voice/end-session', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/voice/end-session', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = EndSessionSchema.parse(req.body);
     const { summary, turns } = conversationMonitor.endSession(
       body.sessionId, body.personaId, body.userId
@@ -215,7 +216,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
    * POST /api/voice/search-papers — RAG 논문 검색 (Research Bot용)
    * Tool execution 안내 음성을 위해 별도 엔드포인트
    */
-  app.post('/api/voice/search-papers', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/voice/search-papers', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = z.object({
       sessionId: z.string(),
       query: z.string().min(1),
@@ -265,7 +266,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   /**
    * POST /api/voice/save-correction — 교정 기록 저장 (English Tutor용)
    */
-  app.post('/api/voice/save-correction', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/voice/save-correction', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = z.object({
       sessionId: z.string(),
       original: z.string(),
@@ -290,7 +291,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
   /**
    * GET /api/voice/corrections/:userId — 특정 사용자의 교정 히스토리
    */
-  app.get('/api/voice/corrections/:userId', async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/voice/corrections/:userId', { preHandler: authMiddleware }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req.params as { userId: string };
 
     // TODO: Supabase에서 교정 히스토리 조회

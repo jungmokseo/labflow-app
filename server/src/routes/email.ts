@@ -22,12 +22,27 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { google } from 'googleapis';
+import { createHmac } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
+
+// ── OAuth state HMAC 서명 ────────────────────────────
+const STATE_SECRET = env.CLERK_SECRET_KEY || 'labflow-oauth-state-secret';
+function signState(userId: string): string {
+  const sig = createHmac('sha256', STATE_SECRET).update(userId).digest('hex').slice(0, 16);
+  return `${userId}:${sig}`;
+}
+function verifyState(state: string): string | null {
+  const [userId, sig] = state.split(':');
+  if (!userId || !sig) return null;
+  const expected = createHmac('sha256', STATE_SECRET).update(userId).digest('hex').slice(0, 16);
+  if (sig !== expected) return null;
+  return userId;
+}
 
 // ── Zod 스키마 ──────────────────────────────────────
 const briefingQuerySchema = z.object({
@@ -515,8 +530,11 @@ function profileToResponse(profile: UserProfile, lastBriefingAt?: Date | null) {
 export async function emailCallbackRoute(app: FastifyInstance) {
   app.get('/api/email/auth/callback', async (request, reply) => {
     const query = callbackQuerySchema.parse(request.query);
-    // Google 리다이렉트는 custom header 불가 → state 파라미터에서 userId 추출
-    const userId = query.state || 'dev-user-seo';
+    // Google 리다이렉트는 custom header 불가 → state 파라미터에서 userId 추출 (HMAC 검증)
+    const userId = query.state ? verifyState(query.state) : null;
+    if (!userId) {
+      return reply.code(400).send({ error: 'Invalid OAuth state — 다시 연동을 시도해주세요.' });
+    }
     try {
       const oauth2Client = createOAuth2Client();
       const { tokens } = await oauth2Client.getToken(query.code);
@@ -587,7 +605,7 @@ export async function emailRoutes(app: FastifyInstance) {
           'https://www.googleapis.com/auth/drive.file',  // Google Docs 생성용
           // NOTE: Google Cloud Console에서 Calendar API + Drive API 활성화 필요
         ],
-        state: request.userId,
+        state: signState(request.userId!),
       });
       return reply.send({ success: true, authUrl });
     } catch (error: any) {

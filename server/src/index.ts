@@ -46,7 +46,7 @@ async function buildApp() {
         allowedHeaders: ['Content-Type', 'Authorization', 'X-Dev-User-Id'],
   });
     await app.register(multipart, {
-          limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 오디오 제한
+          limits: { fileSize: 30 * 1024 * 1024 }, // 30MB (PDF 업로드 대응; 개별 라우트에서 추가 제한)
     });
     await app.register(sensible);
 
