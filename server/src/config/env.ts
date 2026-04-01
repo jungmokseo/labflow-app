@@ -4,8 +4,11 @@ import { z } from 'zod';
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DIRECT_URL: z.string().min(1).optional(),
-  CLERK_SECRET_KEY: z.string().optional(),
-  CLERK_PUBLISHABLE_KEY: z.string().optional(),
+  CLERK_SECRET_KEY: z.string().optional(), // Legacy — 제거 예정
+  CLERK_PUBLISHABLE_KEY: z.string().optional(), // Legacy — 제거 예정
+  SUPABASE_URL: z.string().optional(),
+  SUPABASE_ANON_KEY: z.string().optional(),
+  SUPABASE_JWT_SECRET: z.string().optional(),
   GEMINI_API_KEY: z.string().min(1),
   ANTHROPIC_API_KEY: z.string().optional(), // Claude Sonnet (이메일 분류 + 회의 요약)
   OPENAI_API_KEY: z.string().optional(), // OpenAI Realtime API (Voice Chatbot)

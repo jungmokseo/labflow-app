@@ -110,7 +110,7 @@ async function start() {
       ║  URL:    http://${env.HOST}:${env.PORT}              ║
       ║  Env:    ${env.NODE_ENV.padEnd(36)}║
       ║  Gemini: ✅ Connected                         ║
-      ║  Auth:   ${env.CLERK_SECRET_KEY ? '✅ Clerk' : '⚠️  Dev mode (no Clerk)'}${''.padEnd(env.CLERK_SECRET_KEY ? 24 : 14)}║
+      ║  Auth:   ${env.SUPABASE_JWT_SECRET ? '✅ Supabase' : env.CLERK_SECRET_KEY ? '✅ Clerk (legacy)' : '⚠️  Dev mode'}${''.padEnd(env.SUPABASE_JWT_SECRET ? 22 : env.CLERK_SECRET_KEY ? 16 : 22)}║
       ╚═══════════════════════════════════════════════╝
           `);
     } catch (err) {

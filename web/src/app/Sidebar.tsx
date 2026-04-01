@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { UserButton, useUser } from '@clerk/nextjs';
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 const NAV_ITEMS = [
   { href: '/', icon: '🏠', label: '대시보드' },
@@ -15,9 +16,12 @@ const NAV_ITEMS = [
   { href: '/settings', icon: '⚙️', label: '설정' },
 ];
 
-function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
-  const { user, isLoaded } = useUser();
-
+function NavContent({ pathname, onNavigate, user, onSignOut }: {
+  pathname: string;
+  onNavigate?: () => void;
+  user: User | null;
+  onSignOut: () => void;
+}) {
   return (
     <>
       <div className="p-6">
@@ -50,20 +54,19 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate?: (
 
       <div className="p-4 border-t border-bg-input/50">
         <div className="flex items-center gap-3">
-          <UserButton
-            afterSignOutUrl="/sign-in"
-            appearance={{
-              elements: {
-                avatarBox: 'w-8 h-8',
-              },
-            }}
-          />
+          <button
+            onClick={onSignOut}
+            className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-bold hover:bg-primary/30 transition-colors"
+            title="로그아웃"
+          >
+            {user?.email?.charAt(0).toUpperCase() || '?'}
+          </button>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-white truncate">
-              {isLoaded && user ? (user.fullName || user.primaryEmailAddress?.emailAddress || 'User') : '...'}
+              {user?.user_metadata?.name || user?.email || '...'}
             </p>
             <p className="text-xs text-text-muted truncate">
-              {isLoaded && user ? user.primaryEmailAddress?.emailAddress : ''}
+              {user?.email || ''}
             </p>
           </div>
         </div>
@@ -79,22 +82,38 @@ function NavContent({ pathname, onNavigate }: { pathname: string; onNavigate?: (
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
-  // Close drawer on route change
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  // Prevent body scroll when drawer open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
+  // Supabase user 로드
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/sign-in');
+  };
+
   return (
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 flex-col bg-bg-card border-r border-bg-input/50">
-        <NavContent pathname={pathname} />
+        <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} />
       </aside>
 
       {/* Mobile hamburger button */}
@@ -125,7 +144,7 @@ export function Sidebar() {
                 <path d="M5 5l10 10M15 5L5 15" />
               </svg>
             </button>
-            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} />
           </aside>
         </div>
       )}
