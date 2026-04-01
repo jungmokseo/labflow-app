@@ -2,7 +2,6 @@
  * Morning Briefing API — 모닝 브리핑 (Push + Pull)
  *
  * GET  /api/briefing          → 오늘의 브리핑 생성 (이메일 + 논문 + 캡처 + 미팅)
- * GET  /api/briefing/history  → 브리핑 히스토리 (주간 리포트용)
  * POST /api/briefing/feedback → 브리핑 항목 클릭/스킵 피드백
  *
  * 기존 데이터 소스를 종합하는 orchestration layer.
@@ -350,37 +349,6 @@ export async function briefingRoutes(app: FastifyInstance) {
     }
 
     return reply.send(briefing);
-  });
-
-  /**
-   * GET /api/briefing/history — 브리핑 히스토리 (주간 리포트용)
-   */
-  app.get('/api/briefing/history', async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = request.userId!;
-    const query = z.object({
-      days: z.coerce.number().min(1).max(30).default(7),
-    }).parse(request.query);
-
-    const since = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
-
-    const memos = await prisma.memo.findMany({
-      where: {
-        userId,
-        source: 'briefing',
-        createdAt: { gte: since },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return reply.send({
-      period: { from: since.toISOString().split('T')[0], to: new Date().toISOString().split('T')[0] },
-      briefings: memos.map(m => ({
-        date: m.createdAt.toISOString().split('T')[0],
-        summary: m.content,
-        title: m.title,
-      })),
-      count: memos.length,
-    });
   });
 
   /**

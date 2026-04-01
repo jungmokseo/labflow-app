@@ -384,10 +384,6 @@ export async function getBriefing() {
   return apiFetch<{ date: string; urgent: unknown[]; important: unknown[]; info: unknown[]; stats: { totalEmails: number; newPapers: number; pendingCaptures: number; upcomingMeetings: number } }>('/api/briefing');
 }
 
-export async function getBriefingHistory(days = 7) {
-  return apiFetch<{ briefings: unknown[]; count: number }>(`/api/briefing/history?days=${days}`);
-}
-
 // ── Lab Profile ─────────────────────────────────
 export interface LabProfile {
   id: string;
