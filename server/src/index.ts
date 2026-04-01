@@ -2,7 +2,7 @@
  * LabFlow API Server
  *
  * Fastify + Prisma + Supabase PostgreSQL + Gemini Flash
- * 캡처 CRUD, AI 자동분류, Clerk 인증 (준비됨)
+ * 캡처 CRUD, AI 자동분류, Supabase 인증
  */
 
 import Fastify from 'fastify';
@@ -101,7 +101,7 @@ async function start() {
 
       // 논문 알림 cron + 세션 아카이브
       startPaperAlertCron();
-      setInterval(() => archiveOldSessions().catch(() => {}), 24 * 60 * 60 * 1000);
+      setInterval(() => archiveOldSessions().catch((err) => console.error('[background] archiveOldSessions:', err.message || err)), 24 * 60 * 60 * 1000);
 
       console.log(`
       ╔═══════════════════════════════════════════════╗
@@ -110,7 +110,7 @@ async function start() {
       ║  URL:    http://${env.HOST}:${env.PORT}              ║
       ║  Env:    ${env.NODE_ENV.padEnd(36)}║
       ║  Gemini: ✅ Connected                         ║
-      ║  Auth:   ${env.SUPABASE_JWT_SECRET ? '✅ Supabase' : env.CLERK_SECRET_KEY ? '✅ Clerk (legacy)' : '⚠️  Dev mode'}${''.padEnd(env.SUPABASE_JWT_SECRET ? 22 : env.CLERK_SECRET_KEY ? 16 : 22)}║
+      ║  Auth:   ${env.SUPABASE_JWT_SECRET ? '✅ Supabase' : '⚠️  Dev mode'}${''.padEnd(env.SUPABASE_JWT_SECRET ? 22 : 22)}║
       ╚═══════════════════════════════════════════════╝
           `);
     } catch (err) {

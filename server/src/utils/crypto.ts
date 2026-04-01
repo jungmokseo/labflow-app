@@ -8,10 +8,10 @@ const AUTH_TAG_LENGTH = 16;
  * Derive a 32-byte encryption key from an arbitrary-length secret.
  */
 function getKey(): Buffer {
-  const secret = process.env.TOKEN_ENCRYPTION_KEY || process.env.CLERK_SECRET_KEY;
+  const secret = process.env.TOKEN_ENCRYPTION_KEY || process.env.SUPABASE_JWT_SECRET;
   if (!secret) {
     throw new Error(
-      'Missing encryption key: set TOKEN_ENCRYPTION_KEY or CLERK_SECRET_KEY env var',
+      'Missing encryption key: set TOKEN_ENCRYPTION_KEY or SUPABASE_JWT_SECRET env var',
     );
   }
   return createHash('sha256').update(secret).digest();

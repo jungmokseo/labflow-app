@@ -1,11 +1,10 @@
 /**
- * 인증 미들웨어 — Supabase JWT (우선) + Clerk JWT (레거시) + Dev Mode
+ * 인증 미들웨어 — Supabase JWT + Dev Mode
  *
  * 인증 우선순위:
  * 1. Supabase JWT (Bearer 토큰) — SUPABASE_JWT_SECRET이 있으면 검증
- * 2. Clerk JWT (Bearer 토큰) — CLERK_SECRET_KEY가 있으면 검증 (레거시 호환)
- * 3. X-Dev-User-Id 헤더 — development 환경에서만 허용
- * 4. 401 반환
+ * 2. X-Dev-User-Id 헤더 — development 환경에서만 허용
+ * 3. 401 반환
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
@@ -65,32 +64,6 @@ async function resolveSupabaseUser(token: string): Promise<string | null> {
 }
 
 /**
- * Clerk JWT에서 사용자 ID 추출 (레거시 호환)
- */
-async function resolveClerkUser(token: string): Promise<string | null> {
-  if (!env.CLERK_SECRET_KEY) return null;
-  try {
-    const { verifyToken } = await import('@clerk/backend' as string);
-    const payload = await verifyToken(token, { secretKey: env.CLERK_SECRET_KEY });
-    const clerkId = payload.sub;
-
-    const user = await basePrismaClient.user.findFirst({
-      where: { clerkId },
-      select: { id: true },
-    });
-    if (user) return user.id;
-
-    const email = (payload as any).email || `${clerkId}@clerk.user`;
-    const newUser = await basePrismaClient.user.create({
-      data: { clerkId, email, name: (payload as any).name || null },
-    });
-    return newUser.id;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Dev 모드에서 사용자 ID 해석
  */
 async function resolveDevUser(devUserId?: string): Promise<string> {
@@ -110,26 +83,18 @@ export async function authMiddleware(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  // ── 1. Bearer 토큰 (Supabase JWT → Clerk JWT) ───────
+  // ── 1. Bearer 토큰 (Supabase JWT) ───────────────────
   const authHeader = request.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
 
-    // Supabase JWT 우선
     const supabaseUserId = await resolveSupabaseUser(token);
     if (supabaseUserId) {
       request.userId = supabaseUserId;
       return;
     }
 
-    // Clerk JWT fallback (레거시)
-    const clerkUserId = await resolveClerkUser(token);
-    if (clerkUserId) {
-      request.userId = clerkUserId;
-      return;
-    }
-
-    request.log.warn('JWT verification failed for both Supabase and Clerk (token length: %d)', token.length);
+    request.log.warn('JWT verification failed (token length: %d)', token.length);
   }
 
   // ── 2. X-Dev-User-Id — development 환경에서만 허용 ──
@@ -156,7 +121,7 @@ export async function optionalAuth(
   const authHeader = request.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    const userId = await resolveSupabaseUser(token) || await resolveClerkUser(token);
+    const userId = await resolveSupabaseUser(token);
     if (userId) request.userId = userId;
     return;
   }

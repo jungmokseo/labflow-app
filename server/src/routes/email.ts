@@ -27,6 +27,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
@@ -42,7 +43,7 @@ function safeDecrypt(value: string | null | undefined): string | undefined {
 }
 
 // ── OAuth state HMAC 서명 ────────────────────────────
-const STATE_SECRET = env.CLERK_SECRET_KEY || 'labflow-oauth-state-secret';
+const STATE_SECRET = env.SUPABASE_JWT_SECRET || env.TOKEN_ENCRYPTION_KEY || 'labflow-oauth-state-secret';
 function signState(userId: string): string {
   const sig = createHmac('sha256', STATE_SECRET).update(userId).digest('hex').slice(0, 16);
   return `${userId}:${sig}`;
@@ -896,6 +897,7 @@ export async function emailRoutes(app: FastifyInstance) {
         })),
         profile,
       );
+      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
 
       // 본문 열람이 필요한 메일 식별 + full body 가져오기
       if (query.includeBody === 'true') {
@@ -929,6 +931,7 @@ export async function emailRoutes(app: FastifyInstance) {
 
           if (enrichedEmails.length > 0) {
             const reClassifications = await classifyEmailsWithSonnet(enrichedEmails, profile);
+            trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
 
             // 재분류 결과 병합
             reClassifications.forEach((value, key) => {
@@ -1465,6 +1468,7 @@ ${profile.groups.length > 0
             }],
           });
 
+          trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
           const textBlock = response.content.find(b => b.type === 'text');
           markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
         } catch (err: any) {
@@ -1668,6 +1672,7 @@ ${profile.groups.length > 0
       const result = await model.generateContent(
         `다음 이메일 본문을 ${targetLang === 'ko' ? '한국어' : targetLang}로 자연스럽게 번역하세요. 번역문만 출력하세요.\n\n${text}`
       );
+      trackAICost(request.userId!, 'gemini-flash', COST_PER_CALL['gemini-flash']);
 
       return reply.send({
         success: true,
@@ -1707,6 +1712,7 @@ ${profile.groups.length > 0
 }
 
 없으면 빈 배열로.`);
+      trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
 
       const text = result.response.text().trim();
       const match = text.match(/\{[\s\S]*\}/);

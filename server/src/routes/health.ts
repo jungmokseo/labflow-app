@@ -19,7 +19,6 @@ export async function healthRoutes(app: FastifyInstance) {
   app.get('/health/auth', async (request) => {
     const result: any = {
       supabaseConfigured: !!(env.SUPABASE_URL && env.SUPABASE_ANON_KEY),
-      clerkConfigured: !!env.CLERK_SECRET_KEY,
       hasAuthHeader: !!request.headers.authorization,
       userId: request.userId || null,
     };

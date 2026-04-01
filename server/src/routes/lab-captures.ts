@@ -16,7 +16,7 @@ import { classifyCapture, typeToCategory, urgencyToPriority } from '../services/
 import { transcribeAndClassify } from '../services/voice-transcriber.js';
 import { enqueueCaptureProcessing } from '../services/capture-queue.js';
 import { authMiddleware } from '../middleware/auth.js';
-// Use 'any' for Prisma generated types to avoid strict TS errors in CI
+import { CaptureCategory, Priority } from '@prisma/client';
 
 // ── Zod 스키마 ──────────────────────────────────────
 const createCaptureBody = z.object({
@@ -135,9 +135,9 @@ export async function labCaptureRoutes(app: FastifyInstance) {
           labId: ctx.lab.id,
           content: result.transcription,
           summary: result.summary,
-          category: result.category as any,
+          category: result.category as CaptureCategory,
           tags: result.tags,
-          priority: result.priority as any,
+          priority: result.priority as Priority,
           confidence: result.confidence,
           actionDate: result.actionDate ? new Date(result.actionDate) : null,
           modelUsed: result.modelUsed,
