@@ -170,7 +170,7 @@ const ALL_FIELDS = [...new Set(BUILT_IN_JOURNALS.flatMap(j => j.fields))].sort()
 
 // ── Schemas ─────────────────────────────────────────
 const alertSettingSchema = z.object({
-  keywords: z.array(z.string()).min(1),
+  keywords: z.array(z.string()).default([]),  // 빈 배열 허용 — Lab 테마 키워드 자동 적용
   journals: z.array(z.string()).optional(),
   customFeeds: z.array(z.object({
     name: z.string(),
@@ -609,6 +609,14 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
     const body = alertSettingSchema.parse(request.body);
 
+    // 키워드 비어있으면 Lab 연구 테마 키워드로 자동 채움
+    let keywords = body.keywords;
+    if (keywords.length === 0 && lab.researchThemes) {
+      const themes = lab.researchThemes as Array<{ name: string; keywords: string[] }>;
+      keywords = themes.flatMap(t => t.keywords || []);
+      if (keywords.length === 0) keywords = lab.researchFields || [];
+    }
+
     const totalJournals = (body.journals?.length || 0) + (body.customFeeds?.length || 0);
     if (totalJournals > MAX_JOURNALS) {
       return reply.code(400).send({ error: `최대 ${MAX_JOURNALS}개 저널까지 설정할 수 있습니다.` });
@@ -619,7 +627,7 @@ export async function paperAlertRoutes(app: FastifyInstance) {
       return prisma.paperAlert.update({
         where: { id: existing.id },
         data: {
-          keywords: body.keywords,
+          keywords,
           journals: body.journals || [],
           customFeeds: body.customFeeds ? (body.customFeeds as any) : existing.customFeeds,
           schedule: body.schedule,
@@ -628,7 +636,7 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     }
     return reply.code(201).send(await prisma.paperAlert.create({
       data: {
-        labId: lab.id, keywords: body.keywords,
+        labId: lab.id, keywords,
         journals: body.journals || [],
         customFeeds: body.customFeeds ? (body.customFeeds as any) : undefined,
         schedule: body.schedule,

@@ -111,10 +111,15 @@ export default function PapersPage() {
   }
 
   async function handleCrawl() {
+    if (selectedJournals.length === 0 && customFeeds.length === 0) {
+      setError('⚙️ 설정에서 저널을 먼저 추가해주세요');
+      return;
+    }
     setCrawling(true);
     try {
       const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
-      if (kws.length > 0) await savePaperAlert({ keywords: kws, journals: selectedJournals });
+      // 키워드 없어도 저널만으로 저장 (Lab 테마 키워드가 서버에서 자동 적용됨)
+      await savePaperAlert({ keywords: kws, journals: selectedJournals });
       await runPaperCrawl();
       await loadResults();
     } catch (err: any) { setError(err.message); }
