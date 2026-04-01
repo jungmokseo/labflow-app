@@ -84,9 +84,18 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
       }).catch(() => null);
 
       if (lab && lab.domainDict.length > 0) {
-        // Whisper prompt: 전문용어 목록을 쉼표로 나열하면 인식률 향상
-        const terms = lab.domainDict.map((d: any) => d.correctForm);
-        whisperPrompt = `Specialized vocabulary: ${terms.join(', ')}. Lab: ${lab.name}.`;
+        // 전문용어 목록 + TTS 오인식 힌트로 음성인식 정확도 향상
+        const correctTerms = lab.domainDict.map((d: any) => d.correctForm);
+        const ttsHints = lab.domainDict
+          .filter((d: any) => d.category === 'TTS오인식')
+          .map((d: any) => `${d.wrongForm}=${d.correctForm}`)
+          .slice(0, 30);
+
+        whisperPrompt = `Specialized vocabulary: ${correctTerms.join(', ')}.`;
+        if (ttsHints.length > 0) {
+          whisperPrompt += ` Common misrecognitions to avoid: ${ttsHints.join(', ')}.`;
+        }
+        whisperPrompt += ` Lab: ${lab.name}.`;
       }
     } catch {
       // 사전 로드 실패해도 세션 생성은 진행

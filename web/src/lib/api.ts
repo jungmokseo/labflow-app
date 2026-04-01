@@ -379,6 +379,10 @@ export async function getBrainMessages(channelId: string) {
 // Alias for backward compat
 export const getChannelMessages = getBrainMessages;
 
+export async function deleteBrainChannel(channelId: string) {
+  return apiFetch<{ success: boolean }>(`/api/brain/channels/${channelId}`, { method: 'DELETE' });
+}
+
 // ── Brain 타입 ──────────────────────────────────
 export interface BrainChannel {
   id: string;

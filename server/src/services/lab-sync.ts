@@ -216,17 +216,18 @@ async function syncLabToDomainDict(labId: string) {
   });
   if (!lab || lab.researchFields.length === 0) return;
 
-  // 이미 충분한 용어가 있으면 스킵 (시드 논문에서 채워진 경우)
-  if (lab.domainDict.length >= 20) return;
-
   const existingTerms = new Set(lab.domainDict.map(d => d.wrongForm.toLowerCase()));
   const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
   const allKeywords = [...new Set([
     ...lab.researchFields,
     ...themes.flatMap(t => t.keywords),
-  ].filter(Boolean))].slice(0, 15); // 키워드 너무 많으면 토큰 낭비
+  ].filter(Boolean))].slice(0, 15);
 
   if (allKeywords.length === 0) return;
+
+  // 카테고리별 개수 확인 — 각각 독립적으로 스킵 판단
+  const abbrCount = lab.domainDict.filter(d => d.category !== 'TTS오인식').length;
+  const ttsCount = lab.domainDict.filter(d => d.category === 'TTS오인식').length;
 
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -234,7 +235,12 @@ async function syncLabToDomainDict(labId: string) {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `다음 연구 키워드를 보고, 이 분야에서 자주 사용되는 기술 약어와 전문용어를 20개 생성하세요.
+    const tasks: Promise<void>[] = [];
+
+    // ── 약어 교정 생성 (기존) ────────────────────────
+    if (abbrCount < 20) {
+      tasks.push((async () => {
+        const prompt = `다음 연구 키워드를 보고, 이 분야에서 자주 사용되는 기술 약어와 전문용어를 20개 생성하세요.
 각 용어에 대해 "흔히 틀리는 소문자 표기"와 "정확한 표기"를 짝지어주세요.
 
 연구 키워드: ${allKeywords.join(', ')}
@@ -249,45 +255,77 @@ async function syncLabToDomainDict(labId: string) {
 JSON 배열로만 응답:
 [{"wrong": "소문자표기", "correct": "정확한표기", "category": "분류"}]`;
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json' },
-    });
-
-    const text = result.response.text().trim();
-    let terms: Array<{ wrong: string; correct: string; category: string }>;
-    try {
-      terms = JSON.parse(text);
-    } catch {
-      const match = text.match(/\[[\s\S]*\]/);
-      if (!match) return;
-      terms = JSON.parse(match[0]);
-    }
-    let added = 0;
-
-    for (const t of terms) {
-      if (!t.wrong || !t.correct) continue;
-      if (existingTerms.has(t.wrong.toLowerCase())) continue;
-
-      await basePrismaClient.domainDict.upsert({
-        where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
-        create: {
-          labId,
-          wrongForm: t.wrong.toLowerCase(),
-          correctForm: t.correct,
-          category: t.category || '자동생성',
-        },
-        update: {},
-      }).catch(() => {});
-      added++;
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+        });
+        const parsed = parseJsonArray(result.response.text());
+        let added = 0;
+        for (const t of parsed) {
+          if (!t.wrong || !t.correct || existingTerms.has(t.wrong.toLowerCase())) continue;
+          await basePrismaClient.domainDict.upsert({
+            where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
+            create: { labId, wrongForm: t.wrong.toLowerCase(), correctForm: t.correct, category: t.category || '자동생성' },
+            update: {},
+          }).catch(() => {});
+          existingTerms.add(t.wrong.toLowerCase());
+          added++;
+        }
+        if (added > 0) console.log(`📖 DomainDict abbreviations: ${added} terms for lab ${labId}`);
+      })());
     }
 
-    if (added > 0) {
-      console.log(`📖 DomainDict auto-generated: ${added} terms for lab ${labId}`);
+    // ── TTS 오인식 패턴 생성 (신규) ──────────────────
+    if (ttsCount < 25) {
+      tasks.push((async () => {
+        const ttsPrompt = `다음 연구 분야에서 한국어 음성인식(STT)이 자주 오인식하는 패턴을 20개 생성하세요.
+전문용어가 일상 단어로 잘못 변환되는 패턴입니다.
+
+연구 키워드: ${allKeywords.join(', ')}
+
+규칙:
+- 오인식: 실제 STT가 출력하는 잘못된 한국어 (예: "이혼용돈법" ← 이온토포레시스)
+- 영어 음차 오인식 포함 (예: "커버파일" → "Gerber 파일", "어피던스" → "임피던스")
+- 복합 전문용어 오인식 (예: "스핀코딩" → "스핀코팅", "플라스마 에칭" → "플라즈마 에칭")
+- 실제 STT 엔진에서 발생할 법한 오류만 생성
+- 이미 등록된 용어 제외: ${[...existingTerms].slice(0, 30).join(', ')}
+
+JSON 배열로만 응답:
+[{"wrong": "STT오인식형태", "correct": "정확한표기"}]`;
+
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: ttsPrompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 4096, responseMimeType: 'application/json' },
+        });
+        const parsed = parseJsonArray(result.response.text());
+        let added = 0;
+        for (const t of parsed) {
+          if (!t.wrong || !t.correct || existingTerms.has(t.wrong.toLowerCase())) continue;
+          await basePrismaClient.domainDict.upsert({
+            where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
+            create: { labId, wrongForm: t.wrong.toLowerCase(), correctForm: t.correct, category: 'TTS오인식', autoAdded: true },
+            update: {},
+          }).catch(() => {});
+          existingTerms.add(t.wrong.toLowerCase());
+          added++;
+        }
+        if (added > 0) console.log(`🎙️ DomainDict TTS patterns: ${added} terms for lab ${labId}`);
+      })());
     }
+
+    await Promise.allSettled(tasks);
   } catch (err) {
     console.warn('DomainDict auto-generation failed:', err);
   }
+}
+
+/** JSON 배열 파싱 헬퍼 */
+function parseJsonArray(text: string): Array<{ wrong: string; correct: string; category?: string }> {
+  const trimmed = text.trim();
+  try { return JSON.parse(trimmed); } catch {}
+  const match = trimmed.match(/\[[\s\S]*\]/);
+  if (match) try { return JSON.parse(match[0]); } catch {}
+  return [];
 }
 
 /**

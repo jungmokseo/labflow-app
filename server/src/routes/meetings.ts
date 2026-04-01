@@ -164,6 +164,80 @@ async function buildCorrectionDict(userId: string): Promise<string> {
 }
 
 /**
+ * DomainDict 기반 사전 교정 (LLM 호출 전 regex 치환)
+ * 긴 wrongForm부터 적용하여 부분 매칭 방지
+ */
+async function applyPreCorrection(rawText: string, userId: string): Promise<string> {
+  try {
+    const lab = await prisma.lab.findUnique({
+      where: { ownerId: userId },
+      include: { domainDict: true },
+    });
+    if (!lab?.domainDict?.length) return rawText;
+
+    let text = rawText;
+    // 긴 것부터 치환 (부분 매칭 방지)
+    const sorted = [...lab.domainDict].sort((a, b) => b.wrongForm.length - a.wrongForm.length);
+    for (const entry of sorted) {
+      const escaped = entry.wrongForm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      text = text.replace(new RegExp(escaped, 'gi'), entry.correctForm);
+    }
+    return text;
+  } catch { return rawText; }
+}
+
+/**
+ * 미팅 후 교정 패턴 학습 — raw vs corrected 비교하여 새 TTS 오인식 패턴 자동 저장
+ */
+async function learnCorrectionPatterns(rawText: string, correctedText: string, userId: string): Promise<void> {
+  if (rawText === correctedText) return;
+  try {
+    const lab = await prisma.lab.findUnique({
+      where: { ownerId: userId },
+      include: { domainDict: { select: { wrongForm: true } } },
+    });
+    if (!lab) return;
+
+    const existingWrongs = new Set(lab.domainDict.map(d => d.wrongForm.toLowerCase()));
+
+    const prompt = `다음 두 텍스트를 비교하여 음성인식 오류 교정 패턴을 추출하세요.
+
+원본(STT 출력): ${rawText.slice(0, 2000)}
+
+교정본: ${correctedText.slice(0, 2000)}
+
+반복적으로 적용할 수 있는 "잘못된 표현 → 올바른 표현" 패턴만 추출하세요.
+- 일회성 오타나 문맥 교정은 제외
+- 다른 회의에서도 재사용 가능한 전문용어 교정만 포함
+- 이미 등록된 것 제외: ${[...existingWrongs].slice(0, 20).join(', ')}
+- 패턴이 없으면 빈 배열 반환
+
+JSON: [{"wrong": "...", "correct": "..."}]`;
+
+    const result = await geminiModel.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 1024, responseMimeType: 'application/json' },
+    });
+
+    let parsed: Array<{ wrong: string; correct: string }>;
+    try { parsed = JSON.parse(result.response.text().trim()); } catch { return; }
+    if (!Array.isArray(parsed)) return;
+
+    let added = 0;
+    for (const p of parsed) {
+      if (!p.wrong || !p.correct || existingWrongs.has(p.wrong.toLowerCase())) continue;
+      await prisma.domainDict.upsert({
+        where: { labId_wrongForm: { labId: lab.id, wrongForm: p.wrong.toLowerCase() } },
+        create: { labId: lab.id, wrongForm: p.wrong.toLowerCase(), correctForm: p.correct, category: 'TTS오인식', autoAdded: true },
+        update: {},
+      }).catch(() => {});
+      added++;
+    }
+    if (added > 0) console.log(`🎙️ Learned ${added} new TTS correction patterns from meeting`);
+  } catch { /* non-critical */ }
+}
+
+/**
  * 이름 제거 후처리: LabMember 이름을 스캔하여 역할로 대체
  */
 async function removeNames(text: string, userId: string): Promise<string> {
@@ -419,11 +493,18 @@ async function processMeetingAudio(
     throw new Error('음성을 인식할 수 없습니다. 다시 시도해주세요.');
   }
 
+  // Step 1.5: DomainDict 기반 사전 교정 (regex, LLM 토큰 절약)
+  const preCorrected = userId ? await applyPreCorrection(rawTranscription, userId) : rawTranscription;
+
   // Step 2: Sonnet 교정 + 구조화 요약 (동적 교정 사전 사용)
-  const summary = await summarizeWithSonnet(rawTranscription, userId);
+  const summary = await summarizeWithSonnet(preCorrected, userId);
+
+  // Step 2.5: 교정 패턴 학습 (fire-and-forget — raw vs Sonnet 비교)
+  if (userId) {
+    learnCorrectionPatterns(rawTranscription, summary.correctedTranscription, userId).catch(() => {});
+  }
 
   // Step 3: 이름 제거 없음 — 교수님 양식에서는 참석자 이름을 유지
-  // (이전에는 removeNames로 이름을 역할로 대체했으나, 양식 변경으로 불필요)
 
   const summaryText = formatSummaryText(summary);
 

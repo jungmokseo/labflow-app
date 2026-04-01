@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { brainChat, brainUpload, getBrainChannels, getChannelMessages, searchBrainMemory, type BrainMessage, type UploadResult } from '@/lib/api';
+import { brainChat, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel, searchBrainMemory, type BrainMessage, type UploadResult } from '@/lib/api';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -71,6 +71,20 @@ export default function BrainPage() {
   function handleNewSession() {
     setActiveChannelId(null);
     setMessages([]);
+  }
+
+  async function handleDeleteSession(channelId: string) {
+    if (!confirm('이 대화를 삭제하시겠습니까?')) return;
+    try {
+      await deleteBrainChannel(channelId);
+      setSessions(prev => prev.filter(s => s.id !== channelId));
+      if (activeChannelId === channelId) {
+        setActiveChannelId(null);
+        setMessages([]);
+      }
+    } catch {
+      alert('삭제 실패');
+    }
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -218,7 +232,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
               {todaySessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
               ))}
             </>
           )}
@@ -226,7 +240,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
               {weekSessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
               ))}
             </>
           )}
@@ -234,7 +248,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
               {olderSessions.slice(0, 15).map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
               ))}
             </>
           )}
@@ -392,21 +406,27 @@ export default function BrainPage() {
   );
 }
 
-function SessionButton({ ch, isActive, onClick }: { ch: any; isActive: boolean; onClick: () => void }) {
+function SessionButton({ ch, isActive, onClick, onDelete }: { ch: any; isActive: boolean; onClick: () => void; onDelete: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-        isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
-      }`}
-    >
-      {isActive && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
-      <span className="flex-1 text-left truncate text-xs">
-        {ch.name || `대화 #${ch.id.slice(-4)}`}
-      </span>
-      <span className="text-[10px] text-text-muted flex-shrink-0">
-        {timeAgo(ch.lastMessageAt || ch.createdAt)}
-      </span>
-    </button>
+    <div className={`group w-full flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
+      isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
+    }`}>
+      <button onClick={onClick} className="flex-1 flex items-center gap-2 min-w-0">
+        {isActive && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+        <span className="flex-1 text-left truncate text-xs">
+          {ch.name || `대화 #${ch.id.slice(-4)}`}
+        </span>
+        <span className="text-[10px] text-text-muted flex-shrink-0">
+          {timeAgo(ch.lastMessageAt || ch.createdAt)}
+        </span>
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 flex-shrink-0 p-0.5 transition-opacity"
+        title="삭제"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
   );
 }
