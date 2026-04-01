@@ -60,13 +60,21 @@ function buildClassificationPrompt(userInput: string): string {
 - 그 외/마감 없음 → "low"
 - idea/memo는 null
 
+요약 규칙 (매우 중요):
+- 누가, 무엇을, 언제를 반드시 포함하세요
+- 나중에 목록에서 봤을 때 맥락을 이해할 수 있어야 합니다
+- 나쁜 예: "피드백 하기" (누구? 무엇에 대해?)
+- 좋은 예: "한빛 학생 과제 피드백 하기"
+- 나쁜 예: "보고서 제출" (무슨 보고서?)
+- 좋은 예: "TIPS 과제 중간보고서 제출"
+
 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만:
 {
   "type": "idea" | "task" | "memo",
   "tags": ["태그1", "태그2"],
   "dueDate": "2026-04-01T00:00:00Z" | null,
   "urgency": "high" | "medium" | "low" | null,
-  "summary": "한줄 요약 (30자 이내)",
+  "summary": "구체적 요약 — 누가/무엇을/언제 포함 (80자 이내)",
   "confidence": 0.0~1.0
 }`;
 }
@@ -100,7 +108,7 @@ export async function classifyCapture(text: string): Promise<CaptureClassificati
       tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 5) : [],
       dueDate: parsed.dueDate && parsed.dueDate !== 'null' ? parsed.dueDate : null,
       urgency: type === 'task' && validUrgencies.includes(parsed.urgency) ? parsed.urgency : null,
-      summary: String(parsed.summary || text).substring(0, 50),
+      summary: String(parsed.summary || text).substring(0, 80),
       confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0.7)),
     };
   } catch (error) {
@@ -146,7 +154,7 @@ function classifyCaptureLocal(text: string): CaptureClassification {
     tags: [],
     dueDate: null,
     urgency: type === 'task' ? 'low' : null,
-    summary: text.length > 50 ? text.substring(0, 47) + '...' : text,
+    summary: text.length > 80 ? text.substring(0, 77) + '...' : text,
     confidence: 0.5,
   };
 }
@@ -162,6 +170,14 @@ const AUTO_TASK_PATTERNS = [
   /리마인드/,
   /다음에\s*(하자|해야|처리)/,
   /나중에\s*(해야|확인|처리|보내)/,
+  /\S+\s*하기/, // "피드백 하기", "검토 하기", "연락 하기" 등
+  /\S+\s*해주기/, // "확인 해주기" 등
+  /\S+\s*해줘야/,
+  /챙겨야/,
+  /보내야/,
+  /연락\s*(해야|하기|드려야)/,
+  /확인\s*(해야|하기|해봐야)/,
+  /정리\s*(해야|하기)/,
 ];
 
 const AUTO_IDEA_PATTERNS = [
