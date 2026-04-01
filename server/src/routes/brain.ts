@@ -1315,7 +1315,8 @@ export async function brainRoutes(app: FastifyInstance) {
 
     // ── 의도 분류 + RAG 병렬 검색 ──
     const classified = await classifyIntent(message);
-    const { intent, entities, hops } = classified;
+    const { intent, hops } = classified;
+    const entities = classified.entities || {};
 
     // 2. RAG: 데이터 중심 병렬 검색 (intent와 무관하게 항상 실행)
     //    Intent는 액션 커맨드(save_memo, capture_*)에만 사용
@@ -1540,14 +1541,15 @@ ${currentRules}
     }
 
     // 4-1. 캡처 인텐트 처리
-    if (intent === 'capture_create' && lab && entities.content) {
+    const captureContent = entities.content || message;
+    if (intent === 'capture_create' && lab) {
       const { classifyCapture, typeToCategory, urgencyToPriority } = await import('../services/capture-classifier.js');
-      const classification = await classifyCapture(entities.content);
+      const classification = await classifyCapture(captureContent);
       const capture = await prisma.capture.create({
         data: {
           userId,
           labId: lab.id,
-          content: entities.content,
+          content: captureContent,
           summary: classification.summary,
           category: typeToCategory(classification.type),
           tags: classification.tags,
