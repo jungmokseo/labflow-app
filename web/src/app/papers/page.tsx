@@ -6,6 +6,7 @@ import {
   getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
   type PaperAlertResult,
 } from '@/lib/api';
+import { SkeletonCard, SkeletonLine, StepProgress } from '@/components/Skeleton';
 
 const MAX_JOURNALS = 15;
 
@@ -63,6 +64,7 @@ export default function PapersPage() {
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
   const [customFeeds, setCustomFeeds] = useState<Array<{ name: string; rssUrl: string }>>([]);
   const [crawling, setCrawling] = useState(false);
+  const [crawlStep, setCrawlStep] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState('');
   const [expandedPapers, setExpandedPapers] = useState<Set<string>>(new Set());
@@ -116,14 +118,18 @@ export default function PapersPage() {
       return;
     }
     setCrawling(true);
+    setCrawlStep(0);
     try {
       const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
-      // 키워드 없어도 저널만으로 저장 (Lab 테마 키워드가 서버에서 자동 적용됨)
+      setCrawlStep(0); // 설정 저장
       await savePaperAlert({ keywords: kws, journals: selectedJournals });
+      setCrawlStep(1); // RSS 수집 + 키워드 매칭
       await runPaperCrawl();
+      setCrawlStep(2); // 결과 로드
       await loadResults();
+      setCrawlStep(3); // 완료
     } catch (err: any) { setError(err.message); }
-    finally { setCrawling(false); }
+    finally { setCrawling(false); setCrawlStep(0); }
   }
 
   function togglePaper(id: string) {
@@ -232,6 +238,16 @@ export default function PapersPage() {
         </div>
       </div>
 
+      {/* 수집 진행 상태 */}
+      {crawling && (
+        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
+          <StepProgress
+            steps={['설정 저장', 'RSS 수집 + 키워드 매칭', '결과 정리', '완료']}
+            currentStep={crawlStep}
+          />
+        </div>
+      )}
+
       {error && <div className="bg-red-500/10 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center justify-between">{error}<button onClick={() => setError('')}>✕</button></div>}
 
       {/* Settings Panel */}
@@ -308,10 +324,11 @@ export default function PapersPage() {
               className="w-full bg-bg-input text-white px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
           </div>
 
-          <button onClick={async () => {
-            const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
-            if (kws.length > 0) await savePaperAlert({ keywords: kws, journals: selectedJournals });
+          <button onClick={() => {
+            // Optimistic: close settings immediately
             setShowSettings(false);
+            const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
+            if (kws.length > 0) savePaperAlert({ keywords: kws, journals: selectedJournals }).catch(() => setShowSettings(true));
           }} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">설정 저장</button>
         </div>
       )}

@@ -317,8 +317,13 @@ export default function BrainPage() {
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="bg-bg-input px-4 py-3 rounded-2xl rounded-bl-md text-sm text-text-muted">
-                    생각 중...
+                  <div className="bg-bg-input px-4 py-3 rounded-2xl rounded-bl-md text-sm text-text-muted flex items-center gap-1.5">
+                    <span>생각 중</span>
+                    <span className="flex gap-0.5">
+                      <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
                   </div>
                 </div>
               )}

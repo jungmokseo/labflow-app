@@ -6,6 +6,7 @@ import {
   analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl,
   type Lab,
 } from '@/lib/api';
+import { SkeletonForm, SkeletonLine } from '@/components/Skeleton';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
 
@@ -127,7 +128,10 @@ export default function LabProfilePage() {
     setEditingInfo(true);
   }
   async function handleSaveInfo() {
-    setSaving(true);
+    // Optimistic: update UI immediately
+    const prevLab = lab;
+    setLab(prev => prev ? { ...prev, name: editName, institution: editInstitution, department: editDepartment, piName: editPiName, piEmail: editPiEmail } : prev);
+    setEditingInfo(false);
     try {
       await updateLab({
         name: editName,
@@ -136,39 +140,83 @@ export default function LabProfilePage() {
         piName: editPiName,
         piEmail: editPiEmail || undefined,
       });
-      setEditingInfo(false);
       await loadProfile();
-    } catch (err: any) { setError(err.message); }
-    finally { setSaving(false); }
+    } catch (err: any) {
+      setLab(prevLab); // rollback
+      setEditingInfo(true);
+      setError(err.message);
+    }
   }
 
   // ── 멤버 삭제 ──
   async function handleDeleteMember(id: string, name: string) {
     if (!confirm(`${name}을(를) 삭제하시겠습니까?`)) return;
+    // Optimistic: remove immediately
+    const prevLab = lab;
+    setLab(prev => prev ? { ...prev, members: (prev.members || []).filter((m: any) => m.id !== id) } : prev);
     try {
       await removeLabMember(id);
-      await loadProfile();
-    } catch (err: any) { setError(err.message); }
+      loadProfile();
+    } catch (err: any) {
+      setLab(prevLab); // rollback
+      setError(err.message);
+    }
   }
 
   // ── 기존 CRUD ──
   async function handleAddMember() {
     if (!newMemberName.trim()) return;
-    await addLabMember({ name: newMemberName, role: newMemberRole, email: newMemberEmail || undefined });
-    setNewMemberName(''); setNewMemberEmail(''); loadProfile();
+    // Optimistic: append immediately
+    const tempMember = { id: `temp-${Date.now()}`, name: newMemberName, role: newMemberRole, email: newMemberEmail || '' };
+    setLab(prev => prev ? { ...prev, members: [...(prev.members || []), tempMember] } : prev);
+    const saved = { name: newMemberName, role: newMemberRole, email: newMemberEmail || undefined };
+    setNewMemberName(''); setNewMemberEmail('');
+    try {
+      await addLabMember(saved);
+      loadProfile();
+    } catch {
+      setLab(prev => prev ? { ...prev, members: (prev.members || []).filter((m: any) => m.id !== tempMember.id) } : prev);
+    }
   }
   async function handleAddProject() {
     if (!newProjectName.trim()) return;
-    await addLabProject({ name: newProjectName, funder: newProjectFunder || undefined });
-    setNewProjectName(''); setNewProjectFunder(''); loadProfile();
+    // Optimistic: append immediately
+    const tempProject = { id: `temp-${Date.now()}`, name: newProjectName, funder: newProjectFunder || '', status: 'active' };
+    setLab(prev => prev ? { ...prev, projects: [...(prev.projects || []), tempProject] } : prev);
+    const saved = { name: newProjectName, funder: newProjectFunder || undefined };
+    setNewProjectName(''); setNewProjectFunder('');
+    try {
+      await addLabProject(saved);
+      loadProfile();
+    } catch {
+      setLab(prev => prev ? { ...prev, projects: (prev.projects || []).filter((p: any) => p.id !== tempProject.id) } : prev);
+    }
   }
   async function handleAddDict() {
     if (!newDictWrong.trim() || !newDictCorrect.trim()) return;
-    await addDictEntry({ wrongForm: newDictWrong, correctForm: newDictCorrect });
-    setNewDictWrong(''); setNewDictCorrect(''); loadProfile();
+    // Optimistic: append immediately
+    const tempDict = { id: `temp-${Date.now()}`, wrongForm: newDictWrong, correctForm: newDictCorrect };
+    setLab(prev => prev ? { ...prev, domainDict: [...(prev.domainDict || []), tempDict] } : prev);
+    const saved = { wrongForm: newDictWrong, correctForm: newDictCorrect };
+    setNewDictWrong(''); setNewDictCorrect('');
+    try {
+      await addDictEntry(saved);
+      loadProfile();
+    } catch {
+      setLab(prev => prev ? { ...prev, domainDict: (prev.domainDict || []).filter((d: any) => d.id !== tempDict.id) } : prev);
+    }
   }
 
-  if (loading) return <div className="text-text-muted p-8">로딩 중...</div>;
+  if (loading) return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <SkeletonLine width="w-48" />
+        <SkeletonLine width="w-72" />
+      </div>
+      <SkeletonForm rows={4} />
+      <SkeletonForm rows={3} />
+    </div>
+  );
 
   // ═══════════════════════════════════════════════
   //  온보딩 플로우 (4단계)
@@ -232,7 +280,7 @@ export default function LabProfilePage() {
             {!seedResult ? (
               <div className="flex gap-2">
                 <button onClick={handleSeedAnalyze} disabled={seedAnalyzing || !seedDoiInput.trim()} className="flex-1 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
-                  {seedAnalyzing ? '분석 중... (Semantic Scholar + Gemini)' : '🔍 논문 분석'}
+                  {seedAnalyzing ? '분석 중...' : '🔍 논문 분석'}
                 </button>
                 <button onClick={() => setStep(3)} className="px-4 py-3 bg-bg-input text-text-muted rounded-lg text-sm">건너뛰기</button>
               </div>
@@ -312,7 +360,7 @@ export default function LabProfilePage() {
           <div className="bg-bg-card rounded-xl p-6 text-center space-y-4">
             <p className="text-5xl mb-2">🎉</p>
             <h2 className="text-xl font-bold text-white">온보딩 완료!</h2>
-            <p className="text-text-muted text-sm">미니브레인이 연구실 정보를 학습했습니다</p>
+            <p className="text-text-muted text-sm">연구실 정보가 등록되었습니다</p>
             <div className="bg-bg-input rounded-lg p-4 text-left space-y-2 text-sm text-text-muted">
               <p>이제 할 수 있는 것들:</p>
               <p>🧠 <span className="text-white">"NRF 과제 사사 문구 알려줘"</span> — DB 기반 정확한 답변</p>
@@ -454,7 +502,7 @@ export default function LabProfilePage() {
                 <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10">✕</button>
               </div>
             ))}
-            {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. 미니브레인 대화로도 가능해요: "김태영 박사과정 추가해줘"</p>}
+            {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. Brain 대화에서도 가능해요: "김태영 박사과정 추가해줘"</p>}
           </div>
         )}
 
@@ -480,7 +528,7 @@ export default function LabProfilePage() {
 
         {tab === 'dict' && (
           <div className="space-y-4">
-            <p className="text-text-muted text-xs mb-2">미팅 STT와 미니브레인 대화에서 자동으로 전문용어를 교정합니다. 대표 논문 DOI를 입력하면 자동 구축됩니다.</p>
+            <p className="text-text-muted text-xs mb-2">회의록과 대화에서 전문용어를 자동 교정합니다. 대표 논문 DOI를 입력하면 자동 구축됩니다.</p>
             <div className="flex gap-2">
               <input value={newDictWrong} onChange={e => setNewDictWrong(e.target.value)} placeholder="잘못된 표현" className="flex-1 bg-bg-input text-white px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <span className="text-text-muted self-center">→</span>

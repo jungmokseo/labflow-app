@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { SkeletonCard, SkeletonLine } from '@/components/Skeleton';
 
 const ACCEPTED_AUDIO_TYPES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/m4a', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
 const ACCEPTED_EXTENSIONS = ['.webm', '.mp3', '.m4a', '.wav'];
@@ -20,7 +21,7 @@ function isAcceptedAudioFile(file: File): boolean {
   return ACCEPTED_EXTENSIONS.includes(ext);
 }
 
-type RecordingState = 'idle' | 'recording' | 'stopped' | 'processing';
+type RecordingState = 'idle' | 'recording' | 'stopped';
 
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -34,6 +35,9 @@ export default function MeetingsPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioTitle, setAudioTitle] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Background processing queue
+  const [processingQueue, setProcessingQueue] = useState<Array<{ id: string; title: string; status: 'uploading' | 'done' | 'error'; error?: string }>>([]);
 
   // File attach / drag-drop state
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -79,6 +83,7 @@ export default function MeetingsPage() {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'
           : 'audio/webm',
+        audioBitsPerSecond: 32000, // 32kbps — speech quality, 10min ≈ 2.3MB
       });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -177,24 +182,40 @@ export default function MeetingsPage() {
     if (file) handleFileSelect(file);
   }, []);
 
-  // ── Submit ──
+  // ── Submit (non-blocking: 즉시 idle로 복귀, 백그라운드 업로드) ──
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
   const handleSubmit = async () => {
     const fileToUpload = attachedFile || (audioBlob ? new File([audioBlob], 'recording.webm', { type: 'audio/webm' }) : null);
     if (!fileToUpload) return;
 
-    setRecordingState('processing');
-    setError(null);
+    if (fileToUpload.size > MAX_FILE_SIZE) {
+      setError(`오디오 파일이 너무 큽니다 (${(fileToUpload.size / (1024 * 1024)).toFixed(1)}MB / 최대 50MB)`);
+      return;
+    }
+
+    const jobId = `job-${Date.now()}`;
+    const jobTitle = audioTitle.trim() || `녹음 ${new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+    const jobFile = fileToUpload;
+    const jobDuration = elapsed > 0 ? elapsed : undefined;
+
+    // 즉시 idle로 복귀 → 새 녹음 가능
+    setProcessingQueue(prev => [...prev, { id: jobId, title: jobTitle, status: 'uploading' }]);
+    resetRecording();
+
+    // 백그라운드 업로드
     try {
-      const res = await uploadMeetingAudio(fileToUpload, {
-        title: audioTitle.trim() || undefined,
-        duration: elapsed > 0 ? elapsed : undefined,
+      const res = await uploadMeetingAudio(jobFile, {
+        title: jobTitle || undefined,
+        duration: jobDuration,
       });
-      setMeetings((prev) => [res.data, ...prev]);
-      resetRecording();
+      setMeetings(prev => [res.data, ...prev]);
+      setProcessingQueue(prev => prev.map(j => j.id === jobId ? { ...j, status: 'done' } : j));
+      // 3초 후 완료 표시 제거
+      setTimeout(() => setProcessingQueue(prev => prev.filter(j => j.id !== jobId)), 3000);
     } catch (err: any) {
       console.error('Upload failed:', err);
-      setError(err.message || '업로드에 실패했습니다. 다시 시도해 주세요.');
-      setRecordingState('stopped');
+      setProcessingQueue(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error', error: err.message } : j));
     }
   };
 
@@ -210,8 +231,14 @@ export default function MeetingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="space-y-2">
+          <SkeletonLine width="w-40" />
+          <SkeletonLine width="w-64" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+        </div>
       </div>
     );
   }
@@ -369,27 +396,44 @@ export default function MeetingsPage() {
             </div>
           )}
 
-          {/* Processing state */}
-          {recordingState === 'processing' && (
-            <div className="flex flex-col items-center gap-4 py-4">
-              <div className="animate-spin w-10 h-10 border-3 border-primary border-t-transparent rounded-full" />
-              <div className="text-center">
-                <p className="text-white font-medium">회의록 생성 중...</p>
-                <p className="text-sm text-text-muted mt-1">
-                  음성 인식(STT) 및 요약을 진행하고 있습니다
-                </p>
-                <p className="text-xs text-text-muted mt-1">약 30~60초 소요됩니다</p>
-              </div>
-            </div>
-          )}
-
           {/* Error */}
           {error && (
-            <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center justify-between gap-3">
               <p className="text-sm text-red-400">{error}</p>
+              {recordingState === 'stopped' && (
+                <button onClick={resetRecording} className="text-xs text-text-muted hover:text-white whitespace-nowrap px-3 py-1.5 rounded-lg bg-bg-input/50">
+                  새 녹음
+                </button>
+              )}
             </div>
           )}
         </div>
+
+        {/* Background processing queue */}
+        {processingQueue.length > 0 && (
+          <div className="space-y-2">
+            {processingQueue.map(job => (
+              <div key={job.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                job.status === 'error' ? 'bg-red-500/5 border-red-500/20' : job.status === 'done' ? 'bg-green-500/5 border-green-500/20' : 'bg-bg-card border-bg-input/50'
+              }`}>
+                {job.status === 'uploading' && <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0" />}
+                {job.status === 'done' && <span className="text-green-400 flex-shrink-0">✓</span>}
+                {job.status === 'error' && <span className="text-red-400 flex-shrink-0">✕</span>}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white truncate">{job.title}</p>
+                  <p className="text-xs text-text-muted">
+                    {job.status === 'uploading' && '회의록 생성 중...'}
+                    {job.status === 'done' && '완료!'}
+                    {job.status === 'error' && (job.error || '생성 실패')}
+                  </p>
+                </div>
+                {job.status === 'error' && (
+                  <button onClick={() => setProcessingQueue(prev => prev.filter(j => j.id !== job.id))} className="text-xs text-text-muted hover:text-white px-2 py-1">닫기</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Meeting list */}
         {meetings.length === 0 ? (
@@ -398,7 +442,7 @@ export default function MeetingsPage() {
             <p className="text-lg mb-2">아직 회의 기록이 없습니다</p>
             <p className="text-sm">녹음하거나 오디오 파일을 업로드해 보세요.</p>
             <p className="text-xs mt-4 text-text-muted">
-              Gemini STT로 음성을 텍스트로, Claude Sonnet으로 요약 및 액션아이템을 자동 생성합니다.
+              음성을 자동으로 텍스트로 변환하고, 요약 및 액션아이템을 생성합니다.
             </p>
           </div>
         ) : (

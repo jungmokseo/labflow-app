@@ -5,6 +5,7 @@ import {
   getCaptures, createCapture, updateCapture, deleteCapture, deleteCompletedCaptures,
   type Capture,
 } from '@/lib/api';
+import { SkeletonCard } from '@/components/Skeleton';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
 type StatusFilter = 'active' | 'completed';
@@ -219,9 +220,8 @@ export default function TasksPage() {
 
       {/* List */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-text-muted">
-          <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-primary mr-3" />
-          불러오는 중...
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
@@ -304,7 +304,7 @@ export default function TasksPage() {
                       ))}
                       {/* Source */}
                       {c.sourceType === 'voice' && <span className="text-[10px] text-text-muted">🎤</span>}
-                      {c.modelUsed === 'gemini-flash-auto' && <span className="text-[10px] text-text-muted">auto</span>}
+                      {c.modelUsed === 'gemini-flash-auto' && <span className="text-[10px] text-text-muted">자동 분류</span>}
                       {/* Date */}
                       <span className="text-[10px] text-text-muted ml-auto">
                         {new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}

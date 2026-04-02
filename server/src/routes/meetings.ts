@@ -15,7 +15,11 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { Readable } from 'node:stream';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
@@ -26,6 +30,9 @@ import { buildGraphFromText } from '../services/knowledge-graph.js';
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const fileManager = new GoogleAIFileManager(env.GEMINI_API_KEY);
+
+const FILE_API_THRESHOLD = 15 * 1024 * 1024; // 15MB 이상이면 File API 사용
 
 function createAnthropicClient(): Anthropic | null {
   if (!env.ANTHROPIC_API_KEY) {
@@ -279,6 +286,11 @@ async function transcribeAudio(
   audioBuffer: Buffer,
   mimeType: string = 'audio/webm',
 ): Promise<string> {
+  // 큰 파일은 Gemini File API로 업로드 후 참조 (inlineData 한계 우회)
+  if (audioBuffer.length > FILE_API_THRESHOLD) {
+    return transcribeViaFileApi(audioBuffer, mimeType);
+  }
+
   const result = await geminiModel.generateContent({
     contents: [
       {
@@ -302,6 +314,58 @@ async function transcribeAudio(
 
   const response = result.response.text().trim();
   return response;
+}
+
+async function transcribeViaFileApi(
+  audioBuffer: Buffer,
+  mimeType: string,
+): Promise<string> {
+  const ext = mimeType.includes('mp3') ? '.mp3' : mimeType.includes('wav') ? '.wav' : mimeType.includes('m4a') || mimeType.includes('mp4') ? '.m4a' : '.webm';
+  const tmpPath = path.join(os.tmpdir(), `labflow-meeting-${Date.now()}${ext}`);
+
+  try {
+    fs.writeFileSync(tmpPath, audioBuffer);
+
+    const uploadResult = await fileManager.uploadFile(tmpPath, {
+      mimeType,
+      displayName: `meeting-${Date.now()}`,
+    });
+
+    // 파일 처리 완료 대기
+    let file = uploadResult.file;
+    while (file.state === 'PROCESSING') {
+      await new Promise(r => setTimeout(r, 2000));
+      const check = await fileManager.getFile(file.name);
+      file = check;
+    }
+
+    if (file.state === 'FAILED') {
+      throw new Error('Gemini 파일 처리 실패');
+    }
+
+    const result = await geminiModel.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { fileData: { fileUri: file.uri, mimeType } },
+            { text: GEMINI_STT_PROMPT },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 16384, // 긴 회의는 출력 토큰도 늘림
+      },
+    });
+
+    // 업로드된 파일 정리
+    fileManager.deleteFile(file.name).catch(() => {});
+
+    return result.response.text().trim();
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch {}
+  }
 }
 
 // ── Step 2: Sonnet 구조화 요약 ──────────────────────────
@@ -616,8 +680,8 @@ export async function meetingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '빈 오디오 파일입니다' });
     }
 
-    if (audioBuffer.length > 10 * 1024 * 1024) {
-      return reply.code(413).send({ error: '오디오 파일이 너무 큽니다 (최대 10MB)' });
+    if (audioBuffer.length > 50 * 1024 * 1024) {
+      return reply.code(413).send({ error: '오디오 파일이 너무 큽니다 (최대 50MB)' });
     }
 
     const mimeType = data.mimetype || 'audio/webm';

@@ -7,6 +7,7 @@ import {
   getLabDictionary, addDictEntry, getLabCompleteness,
   updateEmailProfile, LabProfile,
 } from '@/lib/api';
+import { SkeletonForm, SkeletonLine } from '@/components/Skeleton';
 
 type Tab = 'status' | 'lab' | 'email' | 'dictionary';
 
@@ -37,8 +38,13 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+      <div className="p-6 max-w-4xl mx-auto space-y-6">
+        <div className="space-y-2">
+          <SkeletonLine width="w-32" />
+          <SkeletonLine width="w-56" />
+        </div>
+        <SkeletonForm rows={3} />
+        <SkeletonForm rows={2} />
       </div>
     );
   }
@@ -54,7 +60,7 @@ export default function SettingsPage() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-white">⚙️ 설정</h2>
-        <p className="text-text-muted mt-1">ResearchFlow 시스템 설정 및 프로필 관리</p>
+        <p className="text-text-muted mt-1">연구실 설정 및 프로필 관리</p>
       </div>
 
       {/* Tab Navigation */}
@@ -98,7 +104,7 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
           <StatusItem label="API 서버" status={health === true ? 'healthy' : 'error'} detail="Railway" />
           <StatusItem label="Gmail" status={emailConnected ? 'healthy' : 'disconnected'} detail={emailConnected ? '연동됨' : '미연동'} />
           <StatusItem label="연구실" status={lab ? 'healthy' : 'disconnected'} detail={lab ? lab.name : '미설정'} />
-          <StatusItem label="AI 모델" status="info" detail="Gemini Flash + Claude Sonnet" />
+          <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
         {!emailConnected && (
           <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
@@ -156,45 +162,58 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
   }
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      const validThemes = themes.filter(t => t.name.trim()).map(t => ({
-        name: t.name.trim(),
-        keywords: t.keywords.split(',').map(k => k.trim()).filter(Boolean),
-        journals: t.journals ? t.journals.split(',').map(j => j.trim()).filter(Boolean) : [],
-      }));
+    const validThemes = themes.filter(t => t.name.trim()).map(t => ({
+      name: t.name.trim(),
+      keywords: t.keywords.split(',').map(k => k.trim()).filter(Boolean),
+      journals: t.journals ? t.journals.split(',').map(j => j.trim()).filter(Boolean) : [],
+    }));
 
+    // Optimistic: update UI immediately
+    const optimistic = {
+      ...lab!,
+      name, institution, department,
+      researchThemes: validThemes,
+      researchFields: validThemes.flatMap(t => t.keywords),
+    };
+    onUpdate(optimistic as any);
+    setEditing(false);
+
+    try {
       const updated = await updateLab({
         name, institution, department,
         researchThemes: validThemes,
         researchFields: validThemes.flatMap(t => t.keywords),
       });
       onUpdate(updated as any);
-      setEditing(false);
-    } catch (err) {
-      console.error('Save failed:', err);
-    } finally {
-      setSaving(false);
+    } catch {
+      onUpdate(lab!); // rollback
     }
   };
 
   const handleAddMember = async () => {
     if (!newMember.name.trim()) return;
+    // Optimistic: append immediately
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMember = { id: tempId, ...newMember };
+    setMembers(prev => [...prev, optimisticMember]);
+    setNewMember({ name: '', email: '', role: '학생' });
     try {
       await addLabMember(newMember);
-      setNewMember({ name: '', email: '', role: '학생' });
-      loadMembers();
-    } catch (err) {
-      console.error('Add member failed:', err);
+      loadMembers(); // sync real IDs
+    } catch {
+      setMembers(prev => prev.filter(m => m.id !== tempId)); // rollback
     }
   };
 
   const handleRemoveMember = async (id: string) => {
     if (!confirm('삭제하시겠습니까?')) return;
+    // Optimistic: remove immediately
+    const prev = members;
+    setMembers(members.filter(m => m.id !== id));
     try {
       await removeLabMember(id);
-      await loadMembers();
     } catch (err: any) {
+      setMembers(prev); // rollback
       alert(`삭제 실패: ${err.message}`);
     }
   };
@@ -286,12 +305,16 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           </div>
           <button
             onClick={async () => {
+              // Optimistic: show saved immediately
+              const prev = lab;
+              onUpdate({ ...lab!, instructions } as any);
               setSavingInstructions(true);
               try {
                 const updated = await updateLab({ instructions } as any);
                 onUpdate(updated as any);
-              } catch (err) { console.error('Save instructions failed:', err); }
-              finally { setSavingInstructions(false); }
+              } catch {
+                onUpdate(prev!); // rollback
+              } finally { setSavingInstructions(false); }
             }}
             disabled={savingInstructions}
             className="text-xs px-3 py-1.5 bg-primary text-white rounded-lg disabled:opacity-50"
@@ -359,6 +382,7 @@ function EmailTab({ connected }: { connected: boolean }) {
   }, [connected]);
 
   const handleSave = async () => {
+    // Optimistic: show saved state immediately
     setSaving(true);
     try {
       await updateEmailProfile({
@@ -373,9 +397,8 @@ function EmailTab({ connected }: { connected: boolean }) {
       } as any);
     } catch (err) {
       console.error('Save failed:', err);
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   };
 
   if (loading) return <div className="text-text-muted text-center py-8">로딩 중...</div>;
@@ -444,13 +467,18 @@ function DictionaryTab() {
 
   const handleAdd = async () => {
     if (!newWrong.trim() || !newCorrect.trim()) return;
+    // Optimistic: append immediately
+    const tempEntry = { id: `temp-${Date.now()}`, wrongForm: newWrong.trim(), correctForm: newCorrect.trim(), category: '' };
+    setEntries(prev => [...prev, tempEntry]);
+    const savedWrong = newWrong.trim();
+    const savedCorrect = newCorrect.trim();
+    setNewWrong('');
+    setNewCorrect('');
     try {
-      await addDictEntry({ wrongForm: newWrong.trim(), correctForm: newCorrect.trim() });
-      setNewWrong('');
-      setNewCorrect('');
-      loadDict();
-    } catch (err) {
-      console.error('Add dict entry failed:', err);
+      await addDictEntry({ wrongForm: savedWrong, correctForm: savedCorrect });
+      loadDict(); // sync real IDs
+    } catch {
+      setEntries(prev => prev.filter(e => e.id !== tempEntry.id)); // rollback
     }
   };
 
