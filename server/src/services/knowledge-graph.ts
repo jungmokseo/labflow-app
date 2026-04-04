@@ -10,6 +10,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import { generateEmbedding } from './embedding-service.js';
+import { createHash } from 'crypto';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -105,7 +107,7 @@ export async function extractRelationsFromText(
         evidence: String(r.evidence || '').substring(0, 500),
       }));
   } catch (error) {
-    console.warn('⚠️ 관계 추출 실패 (비치명적):', error);
+    console.warn('[warn] 관계 추출 실패 (비치명적):', error);
     return [];
   }
 }
@@ -137,9 +139,26 @@ export async function upsertNode(
     return existing;
   }
 
-  return prisma.knowledgeNode.create({
+  const node = await prisma.knowledgeNode.create({
     data: { userId, entityType, name, metadata: metadata || {}, entityId },
   });
+
+  // Auto-embed new knowledge node (fire-and-forget)
+  const nodeText = [name, (metadata as any)?.description || ''].filter(Boolean).join('\n');
+  generateEmbedding(nodeText)
+    .then(result => {
+      const vectorStr = `[${result.embedding.join(',')}]`;
+      const hash = createHash('sha256').update(nodeText).digest('hex').slice(0, 16);
+      return prisma.$executeRawUnsafe(
+        `INSERT INTO memo_embeddings (source_type, source_id, user_id, title, chunk_index, chunk_text, content_hash, embedding, metadata)
+         VALUES ('knowledge_node', $1, $2, $3, 0, $4, $5, $6::vector, '{}')
+         ON CONFLICT (source_id, source_type, chunk_index) DO UPDATE SET embedding = $6::vector, chunk_text = $4, content_hash = $5, updated_at = NOW()`,
+        node.id, userId, name, nodeText.slice(0, 2000), hash, vectorStr
+      );
+    })
+    .catch(err => console.warn('[embed] knowledge node embedding failed:', err));
+
+  return node;
 }
 
 // ── 엣지 upsert (weight 증가) ──────────────────────────
@@ -189,13 +208,13 @@ export async function buildGraphFromText(
         await upsertEdge(fromNode.id, toNode.id, rel.relation, source, rel.evidence, userId);
       } catch (err) {
         // 개별 관계 저장 실패는 무시 (unique constraint 등)
-        console.warn('⚠️ 관계 저장 스킵:', err);
+        console.warn('[warn] 관계 저장 스킵:', err);
       }
     }
 
-    console.log(`📊 지식 그래프: ${relations.length}개 관계 추출됨 (source: ${source})`);
+    console.log(`[knowledge-graph] ${relations.length}개 관계 추출됨 (source: ${source})`);
   } catch (error) {
-    console.warn('⚠️ 그래프 구축 실패 (비치명적):', error);
+    console.warn('[warn] 그래프 구축 실패 (비치명적):', error);
   }
 }
 
@@ -329,6 +348,201 @@ export async function getConnectionsByType(userId: string, entityType: string) {
     ],
     totalConnections: n.outEdges.length + n.inEdges.length,
   }));
+}
+
+// ── LightRAG: Graph + Vector 검색 ──────────────────────
+
+export type GraphContext = {
+  entities: Array<{ id: string; name: string; type: string; description?: string }>;
+  relationships: Array<{ from: string; to: string; relation: string; weight: number }>;
+  vectorMatches: Array<{ source: string; text: string; similarity: number }>;
+  contextText: string;
+};
+
+export async function extractQueryEntities(query: string): Promise<{
+  lowLevel: string[];
+  highLevel: string[];
+}> {
+  try {
+    const result = await geminiModel.generateContent({
+      contents: [{
+        role: 'user',
+        parts: [{
+          text: `다음 질문에서 엔티티를 추출하세요.
+- lowLevel: 구체적 이름 (사람명, 논문 제목, 과제명 등)
+- highLevel: 추상적 주제나 연구 테마
+반드시 JSON으로만 응답: {"lowLevel":[],"highLevel":[]}
+
+질문: "${query}"`,
+        }],
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 256 },
+    });
+    const text = result.response.text().trim();
+    const json = text.match(/\{[\s\S]*\}/);
+    if (!json) return { lowLevel: [], highLevel: [] };
+    const parsed = JSON.parse(json[0]);
+    return {
+      lowLevel: Array.isArray(parsed.lowLevel) ? parsed.lowLevel.map(String) : [],
+      highLevel: Array.isArray(parsed.highLevel) ? parsed.highLevel.map(String) : [],
+    };
+  } catch {
+    return { lowLevel: [], highLevel: [] };
+  }
+}
+
+export async function getGraphContextForQuery(
+  query: string,
+  userId: string,
+  labId: string | null,
+  options?: { maxNodes?: number; maxHops?: number; timeoutMs?: number }
+): Promise<GraphContext> {
+  const maxNodes = options?.maxNodes ?? 20;
+  const timeoutMs = options?.timeoutMs ?? 800;
+
+  const entities: GraphContext['entities'] = [];
+  const relationships: GraphContext['relationships'] = [];
+  const vectorMatches: GraphContext['vectorMatches'] = [];
+  const seenNodeIds = new Set<string>();
+
+  try {
+    await Promise.race([
+      _graphSearch(query, userId, labId, maxNodes, seenNodeIds, entities, relationships, vectorMatches),
+      new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
+    ]);
+
+    return { entities, relationships, vectorMatches, contextText: formatGraphContext(entities, relationships, vectorMatches) };
+  } catch (err) {
+    console.warn('[LightRAG] graph context failed:', err);
+    return { entities, relationships, vectorMatches, contextText: formatGraphContext(entities, relationships, vectorMatches) };
+  }
+}
+
+async function _graphSearch(
+  query: string,
+  userId: string,
+  labId: string | null,
+  maxNodes: number,
+  seenNodeIds: Set<string>,
+  entities: GraphContext['entities'],
+  relationships: GraphContext['relationships'],
+  vectorMatches: GraphContext['vectorMatches'],
+) {
+  // Step 1: Extract entities from query (Gemini Flash)
+  const { lowLevel, highLevel } = await extractQueryEntities(query);
+
+  // Step 2: Low-level exact + fuzzy node matching
+  const lowLevelNodes = await Promise.all(
+    lowLevel.map(name =>
+      prisma.knowledgeNode.findMany({
+        where: { userId, name: { contains: name, mode: 'insensitive' } },
+        take: 5,
+      })
+    )
+  );
+
+  for (const nodes of lowLevelNodes) {
+    for (const n of nodes) {
+      if (!seenNodeIds.has(n.id) && seenNodeIds.size < maxNodes) {
+        seenNodeIds.add(n.id);
+        entities.push({ id: n.id, name: n.name, type: n.entityType, description: (n.metadata as any)?.description });
+      }
+    }
+  }
+
+  // Step 3: High-level — vector search on MemoEmbedding
+  try {
+    const queryEmb = await generateEmbedding(query);
+    const vectorStr = `[${queryEmb.embedding.join(',')}]`;
+
+    const vectorResults = await prisma.$queryRawUnsafe(`
+      SELECT id::text, source_type as "sourceType", source_id as "sourceId",
+             title, chunk_text as "chunkText",
+             1 - (embedding <=> $1::vector) as similarity
+      FROM memo_embeddings
+      WHERE (lab_id = $2 OR user_id = $3)
+        AND 1 - (embedding <=> $1::vector) > 0.5
+      ORDER BY embedding <=> $1::vector
+      LIMIT 10
+    `, vectorStr, labId, userId) as Array<any>;
+
+    for (const r of vectorResults) {
+      vectorMatches.push({
+        source: `[${r.sourceType}] ${r.title || ''}`.trim(),
+        text: (r.chunkText || '').slice(0, 200),
+        similarity: Number(r.similarity?.toFixed(3) ?? 0),
+      });
+    }
+  } catch (err) {
+    console.warn('[LightRAG] vector search failed:', err);
+  }
+
+  // Step 4: 1-2 hop graph traversal from matched nodes
+  if (seenNodeIds.size > 0) {
+    const nodeIds = Array.from(seenNodeIds);
+    const edges = await prisma.knowledgeEdge.findMany({
+      where: {
+        OR: [
+          { fromNodeId: { in: nodeIds } },
+          { toNodeId: { in: nodeIds } },
+        ],
+      },
+      include: { fromNode: true, toNode: true },
+      orderBy: { weight: 'desc' },
+      take: 30,
+    });
+
+    for (const e of edges) {
+      relationships.push({
+        from: e.fromNode.name,
+        to: e.toNode.name,
+        relation: e.relation,
+        weight: e.weight,
+      });
+
+      // Add discovered nodes (2nd hop)
+      for (const n of [e.fromNode, e.toNode]) {
+        if (!seenNodeIds.has(n.id) && seenNodeIds.size < maxNodes) {
+          seenNodeIds.add(n.id);
+          entities.push({ id: n.id, name: n.name, type: n.entityType });
+        }
+      }
+    }
+  }
+}
+
+function formatGraphContext(
+  entities: GraphContext['entities'],
+  relationships: GraphContext['relationships'],
+  vectorMatches: GraphContext['vectorMatches'],
+): string {
+  if (entities.length === 0 && vectorMatches.length === 0) return '';
+
+  const parts: string[] = [];
+
+  if (entities.length > 0) {
+    parts.push('## 관련 지식 그래프');
+    for (const e of entities.slice(0, 10)) {
+      parts.push(`- ${e.name}(${e.type})${e.description ? ': ' + e.description : ''}`);
+    }
+  }
+
+  if (relationships.length > 0) {
+    parts.push('\n## 그래프 관계 (weight 높은 순)');
+    const sorted = [...relationships].sort((a, b) => b.weight - a.weight);
+    for (const r of sorted.slice(0, 10)) {
+      parts.push(`- ${r.from} --${r.relation}--> ${r.to} [${r.weight.toFixed(2)}]`);
+    }
+  }
+
+  if (vectorMatches.length > 0) {
+    parts.push('\n## 유사 문서');
+    for (const v of vectorMatches.slice(0, 5)) {
+      parts.push(`${v.source} ${v.text}... (유사도 ${v.similarity})`);
+    }
+  }
+
+  return parts.join('\n');
 }
 
 // ── AI 인사이트 생성 ──────────────────────────────────
@@ -555,12 +769,12 @@ ${briefingData}` }] }],
     return sanitizeLlmOutput(result.response.text());
   } catch {
     // fallback: raw data 반환
-    return `📋 **오늘의 브리핑**\n\n` +
-      (urgentEmails > 0 ? `⚠️ 긴급 이메일 ${urgentEmails}건\n` : '') +
-      (actionEmails > 0 ? `📝 대응필요 이메일 ${actionEmails}건\n` : '') +
-      (recentCaptures.length > 0 ? `\n✅ 미완료 태스크 ${recentCaptures.length}건\n${recentCaptures.map(c => `  - ${c.summary || c.content.slice(0, 50)}`).join('\n')}\n` : '') +
-      (unreadAlerts > 0 ? `\n📚 안 읽은 논문 ${unreadAlerts}건\n` : '') +
-      (pendingEvents.length > 0 ? `\n📅 대기 중 일정 ${pendingEvents.length}건\n` : '');
+    return `**오늘의 브리핑**\n\n` +
+      (urgentEmails > 0 ? `[긴급] 이메일 ${urgentEmails}건\n` : '') +
+      (actionEmails > 0 ? `[대응] 이메일 ${actionEmails}건\n` : '') +
+      (recentCaptures.length > 0 ? `\n[할일] 미완료 태스크 ${recentCaptures.length}건\n${recentCaptures.map(c => `  - ${c.summary || c.content.slice(0, 50)}`).join('\n')}\n` : '') +
+      (unreadAlerts > 0 ? `\n[논문] 안 읽은 논문 ${unreadAlerts}건\n` : '') +
+      (pendingEvents.length > 0 ? `\n[일정] 대기 중 일정 ${pendingEvents.length}건\n` : '');
   }
 }
 
@@ -760,9 +974,9 @@ ${weekAlerts.map(a => `- ${'★'.repeat(a.stars || 1)} ${a.title}`).join('\n') |
 ${weekData}` }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
-    return `📊 **주간 리뷰**\n\n${sanitizeLlmOutput(result.response.text())}`;
+    return `**주간 리뷰**\n\n${sanitizeLlmOutput(result.response.text())}`;
   } catch {
-    return `📊 **주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
+    return `**주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
       `미팅: ${weekMeetings.length}건 | 캡처: ${weekCaptures.length}건 (완료: ${completedCaptures}건) | 대화: ${weekMessages}회\n` +
       `Knowledge Graph: +${newNodes} 노드, +${newEdges} 관계`;
   }
