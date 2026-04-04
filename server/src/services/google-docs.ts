@@ -112,37 +112,37 @@ export async function createMeetingDoc(
   },
 ): Promise<{ docId: string; docUrl: string }> {
   const date = meeting.date || new Date().toISOString().split('T')[0];
-  const title = `📋 ${meeting.title} (${date})`;
+  const title = `회의록: ${meeting.title} (${date})`;
 
   const sections: string[] = [
-    `📋 회의록: ${meeting.title}`,
+    `회의록: ${meeting.title}`,
     `날짜: ${date}\n`,
   ];
 
   if (meeting.agenda.length > 0) {
-    sections.push('📋 안건');
+    sections.push('안건');
     sections.push(meeting.agenda.map((a, i) => `${i + 1}. ${a}`).join('\n'));
   }
 
   if (meeting.discussions.length > 0) {
-    sections.push('\n📝 논의 내용');
+    sections.push('\n논의 내용');
     for (const d of meeting.discussions) {
       sections.push(`▸ ${d.topic}\n  ${d.content}`);
     }
   }
 
   if (meeting.actionItems.length > 0) {
-    sections.push('\n✅ 액션 아이템');
+    sections.push('\n액션 아이템');
     sections.push(meeting.actionItems.map(a => `• ${a}`).join('\n'));
   }
 
   if (meeting.nextSteps.length > 0) {
-    sections.push('\n📌 다음 할 일');
+    sections.push('\n다음 할 일');
     sections.push(meeting.nextSteps.map(n => `• ${n}`).join('\n'));
   }
 
   if (meeting.transcription) {
-    sections.push('\n---\n📄 전사 원문');
+    sections.push('\n---\n전사 원문');
     sections.push(meeting.transcription);
   }
 
@@ -160,8 +160,8 @@ export async function createBriefingDoc(
     emails: Array<{ group?: string; groupEmoji?: string; category: string; categoryEmoji: string; subject: string; sender: string; summary: string }>;
   },
 ): Promise<{ docId: string; docUrl: string }> {
-  const title = `📧 이메일 브리핑 ${briefingData.date}`;
-  const lines: string[] = [`📧 이메일 브리핑 — ${briefingData.date}`, ''];
+  const title = `이메일 브리핑 ${briefingData.date}`;
+  const lines: string[] = [`이메일 브리핑 — ${briefingData.date}`, ''];
 
   // 그룹별 정리
   const grouped: Record<string, typeof briefingData.emails> = {};
@@ -172,7 +172,7 @@ export async function createBriefingDoc(
   }
 
   for (const [group, emails] of Object.entries(grouped)) {
-    const emoji = emails[0]?.groupEmoji || '📧';
+    const emoji = emails[0]?.groupEmoji || '[mail]';
     lines.push(`${emoji} ${group} (${emails.length}건)`);
     lines.push('─'.repeat(20));
     for (const e of emails) {

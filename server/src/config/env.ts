@@ -24,7 +24,7 @@ const envSchema = z.object({
 function loadEnv(): z.infer<typeof envSchema> {
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('❌ 환경변수 오류:', result.error.format());
+    console.error('[error] 환경변수 오류:', result.error.format());
     process.exit(1);
   }
   return result.data;

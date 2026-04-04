@@ -142,7 +142,7 @@ export async function classify(text: string, useAI: boolean = true): Promise<Cla
     try {
       return await classifyWithGemini(text);
     } catch (error) {
-      console.warn('⚠️ Gemini 분류 실패, 로컬 fallback:', error);
+      console.warn('[warn] Gemini 분류 실패, 로컬 fallback:', error);
       return classifyLocal(text);
     }
   }

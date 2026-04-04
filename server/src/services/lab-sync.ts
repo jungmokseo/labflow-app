@@ -50,7 +50,7 @@ export async function syncLabToEmailProfile(userId: string, labId: string) {
     if (uniqueDomains.length > 0) {
       groups.push({
         name: lab.institution,
-        emoji: '🏫',
+        emoji: '[univ]',
         domains: uniqueDomains,
       });
     }
@@ -271,7 +271,7 @@ JSON 배열로만 응답:
           existingTerms.add(t.wrong.toLowerCase());
           added++;
         }
-        if (added > 0) console.log(`📖 DomainDict abbreviations: ${added} terms for lab ${labId}`);
+        if (added > 0) console.log(`[domain-dict] DomainDict abbreviations: ${added} terms for lab ${labId}`);
       })());
     }
 
@@ -309,7 +309,7 @@ JSON 배열로만 응답:
           existingTerms.add(t.wrong.toLowerCase());
           added++;
         }
-        if (added > 0) console.log(`🎙️ DomainDict TTS patterns: ${added} terms for lab ${labId}`);
+        if (added > 0) console.log(`[tts-dict] DomainDict TTS patterns: ${added} terms for lab ${labId}`);
       })());
     }
 

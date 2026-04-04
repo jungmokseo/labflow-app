@@ -84,7 +84,7 @@ function buildStage1Prompt(
     const groupList = profile.groups
       .map(g => `- "${g.name}" (${g.emoji}): domains ${g.domains.join(', ')}`)
       .join('\n');
-    groupInstruction = `\n\nGroup Classification:\n${groupList}\n- "개인" (👤): all others\nAdd "group" and "groupEmoji" fields.`;
+    groupInstruction = `\n\nGroup Classification:\n${groupList}\n- "개인": all others\nAdd "group" and "groupEmoji" fields.`;
   }
 
   let keywordSection = '';
@@ -172,7 +172,7 @@ export async function classifyEmailBatchStage1(
       groupEmoji: item.groupEmoji || undefined,
     }));
   } catch (error) {
-    console.warn('⚠️ Stage 1 (Gemini Flash) classification failed:', error);
+    console.warn('[warn] Stage 1 (Gemini Flash) classification failed:', error);
     // Fallback: 모든 이메일을 medium/info로 분류
     return emails.map(e => ({
       index: e.index,
@@ -277,7 +277,7 @@ export async function classifyEmailDetailStage2(
       groupEmoji: item.groupEmoji || undefined,
     }));
   } catch (error) {
-    console.warn('⚠️ Stage 2 (Sonnet) classification failed:', error);
+    console.warn('[warn] Stage 2 (Sonnet) classification failed:', error);
     return emails.map(e => ({
       index: e.index,
       category: 'info' as EmailCategory,

@@ -196,7 +196,7 @@ export function startPaperAlertCron() {
   }, 24 * 60 * 60 * 1000); // 24시간
   // 서버 시작 시 즉시 1회 체크 (밀린 스케줄 처리)
   checkAndRunScheduledAlerts().catch(() => {});
-  console.log('📚 Paper alert cron started (daily check)');
+  console.log('[paper-alert] Paper alert cron started (daily check)');
 }
 
 export function stopPaperAlertCron() {
@@ -219,7 +219,7 @@ async function checkAndRunScheduledAlerts() {
     if (alert.schedule === 'weekly' && hoursSinceLastRun >= 167) shouldRun = true; // ~7일
 
     if (shouldRun) {
-      console.log(`📚 Running scheduled paper alert: ${alert.id} (${alert.schedule})`);
+      console.log(`[paper-alert] Running scheduled paper alert: ${alert.id} (${alert.schedule})`);
       try {
         await runPaperCrawl(alert, alert.lab);
       } catch (err) {
@@ -299,6 +299,7 @@ async function generatePaperSummary(title: string, abstract: string, matchedThem
 - 이 논문이 기존 연구 대비 무엇이 새로운지 명확히 짚어주세요.
 - 구체적 수치, 소재, 방법이 있으면 반드시 포함하세요.
 - 해당 분야 연구자가 읽었을 때 "이 논문을 읽어야 하는 이유"가 드러나야 합니다.
+- 응답에 이모지를 절대 사용하지 마라.
 
 ${ctx}제목: ${title}
 초록: ${abstract.slice(0, 2000)}

@@ -16,7 +16,7 @@ import { basePrismaClient as prisma } from '../config/prisma.js';
 import { embedBatch, type EmbeddableRecord } from '../services/rag-engine.js';
 
 async function main() {
-  console.log('🔧 Step 1: Checking table exists...');
+  console.log('[setup] Step 1: Checking table exists...');
   // Table creation DDL (no functions — those must be run in Supabase SQL editor)
   const ddlStatements = [
     `CREATE EXTENSION IF NOT EXISTS vector`,
@@ -42,9 +42,9 @@ async function main() {
     await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS idx_memo_emb_source ON memo_embeddings (source_id, source_type, chunk_index)`);
   } catch { /* ignore */ }
 
-  console.log('✅ Table ready');
+  console.log('[ok] Table ready');
 
-  console.log('\n📦 Step 2: Loading existing data...');
+  console.log('\n[load] Step 2: Loading existing data...');
   const [memos, members, projects, pubs] = await Promise.all([
     prisma.memo.findMany(),
     prisma.labMember.findMany({ where: { active: true } }),
@@ -104,10 +104,10 @@ async function main() {
     })),
   ];
 
-  console.log(`\n🚀 Step 3: Embedding ${records.length} records...`);
+  console.log(`\n[embed] Step 3: Embedding ${records.length} records...`);
   const result = await embedBatch(prisma, records, 50);
 
-  console.log(`\n✅ Done!`);
+  console.log(`\n[done] Done!`);
   console.log(`  Embedded: ${result.success}`);
   console.log(`  Skipped (unchanged): ${result.skipped}`);
   console.log(`  Failed: ${result.failed}`);
@@ -115,13 +115,13 @@ async function main() {
   // Analyze index
   try {
     await prisma.$executeRawUnsafe('ANALYZE memo_embeddings;');
-    console.log('  Index analyzed ✅');
+    console.log('  Index analyzed [ok]');
   } catch {}
 
   process.exit(0);
 }
 
 main().catch(err => {
-  console.error('❌ Embedding failed:', err);
+  console.error('[error] Embedding failed:', err);
   process.exit(1);
 });

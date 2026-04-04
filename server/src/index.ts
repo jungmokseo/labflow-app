@@ -105,16 +105,16 @@ async function start() {
 
       console.log(`
       ╔═══════════════════════════════════════════════╗
-      ║           🧪 LabFlow API Server               ║
+      ║           LabFlow API Server                  ║
       ╠═══════════════════════════════════════════════╣
       ║  URL:    http://${env.HOST}:${env.PORT}              ║
       ║  Env:    ${env.NODE_ENV.padEnd(36)}║
-      ║  Gemini: ✅ Connected                         ║
-      ║  Auth:   ${env.SUPABASE_JWT_SECRET ? '✅ Supabase' : '⚠️  Dev mode'}${''.padEnd(env.SUPABASE_JWT_SECRET ? 22 : 22)}║
+      ║  Gemini: [ok] Connected                       ║
+      ║  Auth:   ${env.SUPABASE_JWT_SECRET ? '[ok] Supabase' : '[dev] Dev mode'}${''.padEnd(env.SUPABASE_JWT_SECRET ? 20 : 20)}║
       ╚═══════════════════════════════════════════════╝
           `);
     } catch (err) {
-          console.error('❌ 서버 시작 실패:', err);
+          console.error('[error] 서버 시작 실패:', err);
           process.exit(1);
     }
 }

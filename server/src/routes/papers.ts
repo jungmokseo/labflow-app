@@ -316,7 +316,7 @@ export async function paperRoutes(app: FastifyInstance) {
             }, embedding);
           }
           await prisma.publication.update({ where: { id: paperId }, data: { indexed: true } });
-          console.log(`📄 Paper indexed: ${meta.title} (${textChunks.length} chunks)`);
+          console.log(`[paper] Paper indexed: ${meta.title} (${textChunks.length} chunks)`);
         } catch (err) {
           console.error('Paper indexing failed:', err);
         }
@@ -362,7 +362,7 @@ export async function paperRoutes(app: FastifyInstance) {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const pubList = pubs.map((p, i) => `[${i}] "${p.title}" (${p.journal || '?'}, ${p.year || '?'})${p.nickname ? ` 별칭: ${p.nickname}` : ''} ${p.indexed ? '✅인덱싱됨' : '⏳'}`).join('\n');
+    const pubList = pubs.map((p, i) => `[${i}] "${p.title}" (${p.journal || '?'}, ${p.year || '?'})${p.nickname ? ` 별칭: ${p.nickname}` : ''} ${p.indexed ? '[indexed]' : '[pending]'}`).join('\n');
 
     const result = await model.generateContent(
       `사용자가 "${q}"라고 검색했습니다. 다음 논문 목록에서 매칭되는 논문의 인덱스를 JSON 배열로 반환하세요.

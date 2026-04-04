@@ -113,7 +113,7 @@ export async function classifyCapture(text: string): Promise<CaptureClassificati
       confidence: Math.min(1, Math.max(0, Number(parsed.confidence) || 0.7)),
     };
   } catch (error) {
-    console.warn('⚠️ Gemini 캡처 분류 실패, 로컬 fallback:', error);
+    console.warn('[warn] Gemini 캡처 분류 실패, 로컬 fallback:', error);
     return classifyCaptureLocal(text);
   }
 }

@@ -64,7 +64,7 @@ const onboardingSchema = z.object({
   emailAccounts: z.array(z.object({
     name: z.string(),
     domains: z.array(z.string()),
-    emoji: z.string().max(4).default('📧'),
+    emoji: z.string().max(8).default('[mail]'),
   })).optional(),
 });
 
