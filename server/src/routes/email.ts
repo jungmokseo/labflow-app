@@ -72,7 +72,7 @@ const callbackQuerySchema = z.object({
 const emailGroupSchema = z.object({
   name: z.string().min(1).max(50),
   domains: z.array(z.string()),
-  emoji: z.string().max(4).default('📧'),
+  emoji: z.string().max(4).default('[mail]'),
 });
 
 const importanceRuleSchema = z.object({
@@ -165,13 +165,13 @@ interface EmailClassification {
   needsBody: boolean;
 }
 
-// ── 카테고리 이모지 매핑 (고정 — 출력 포맷) ──────────
+// ── 카테고리 라벨 매핑 (고정 — 출력 포맷) ──────────
 const CATEGORY_EMOJI: Record<EmailCategory, string> = {
-  'urgent': '⚠️',
-  'action-needed': '📝',
-  'schedule': '📅',
-  'info': '📰',
-  'ads': '🛒',
+  'urgent': '[긴급]',
+  'action-needed': '[대응]',
+  'schedule': '[일정]',
+  'info': '[정보]',
+  'ads': '[광고]',
 };
 
 // ── 시간대 유틸 ──────────────────────────────────────
@@ -234,7 +234,7 @@ function buildClassificationPrompt(profile: UserProfile | null): string {
 ## 기관별 분류
 발신자(From) 주소를 1차 기준으로, 모호한 경우 To/Cc 주소로 판단하여 다음 그룹 중 하나에 배정:
 ${groupList}
-- "개인" (👤): 위 그룹에 해당하지 않는 모든 메일
+- "개인": 위 그룹에 해당하지 않는 모든 메일
 
 각 이메일의 JSON에 "group"과 "groupEmoji" 필드를 추가하세요.`;
   }
@@ -265,11 +265,11 @@ ${rules}`;
 
 | 카테고리 | 이모지 | 설명 |
 |----------|--------|------|
-| urgent | ⚠️ | 마감 24시간 이내 또는 즉각 조치 필요 |
-| action-needed | 📝 | 의견·결정·승인 요청, 명시적 회신 요청 |
-| schedule | 📅 | 날짜/시간이 포함된 이벤트, 마감일, 미팅, 캘린더 초대 |
-| info | 📰 | 공지, 뉴스레터, 알림, 단순 CC 수신, 처리 완료 보고 |
-| ads | 🛒 | 마케팅 광고, 프로모션, 할인, 구독 권유 |
+| urgent | [긴급] | 마감 24시간 이내 또는 즉각 조치 필요 |
+| action-needed | [대응] | 의견·결정·승인 요청, 명시적 회신 요청 |
+| schedule | [일정] | 날짜/시간이 포함된 이벤트, 마감일, 미팅, 캘린더 초대 |
+| info | [정보] | 공지, 뉴스레터, 알림, 단순 CC 수신, 처리 완료 보고 |
+| ads | [광고] | 마케팅 광고, 프로모션, 할인, 구독 권유 |
 ${groupInstruction}
 
 ## 중요도 조정 규칙
@@ -282,11 +282,13 @@ ${keywordSection}${importanceSection}
 - info / ads → false
 
 ## 요약 규칙
-- ⚠️/📝: 핵심 내용 + 조치사항(→) 1줄. 최대 3줄.
-- 📅: 이벤트명 + 날짜/시간.
-- 📰: 발신자 — 한 줄 요약.
-- 🛒: 발신자 + 제목만.
-- 같은 스레드의 여러 메일은 하나로 합쳐 최신 상태로 요약.`;
+- [긴급]/[대응]: 핵심 내용 + 조치사항(→) 1줄. 최대 3줄.
+- [일정]: 이벤트명 + 날짜/시간.
+- [정보]: 발신자 — 한 줄 요약.
+- [광고]: 발신자 + 제목만.
+- 같은 스레드의 여러 메일은 하나로 합쳐 최신 상태로 요약.
+
+응답에 이모지를 절대 사용하지 마라. 이모지 대신 마크다운 서식으로 구조를 표현하라.`;
 }
 
 /** 도메인 매칭으로 기관 찾기 */
@@ -306,8 +308,8 @@ function domainMatchGroup(sender: string, profile: UserProfile | null): { name: 
  */
 function generateFallbackNarrative(emailData: string[], timezone: string): string {
   const today = new Date().toLocaleDateString('ko-KR', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-  let md = `# 📧 이메일 브리핑\n\n> ${today} 기준 · 총 ${emailData.length}건\n\n`;
-  md += `## 📬 수신 이메일 목록\n\n`;
+  let md = `# 이메일 브리핑\n\n> ${today} 기준 · 총 ${emailData.length}건\n\n`;
+  md += `## 수신 이메일 목록\n\n`;
   for (const email of emailData) {
     md += email + '\n\n';
   }
@@ -356,7 +358,7 @@ function classifyByRules(
       // 매칭 안 되면 마지막 그룹 (보통 "개인")
       const lastGroup = profile.groups[profile.groups.length - 1];
       group = lastGroup?.name || '개인';
-      groupEmoji = lastGroup?.emoji || '👤';
+      groupEmoji = lastGroup?.emoji || '[개인]';
     }
   }
 
@@ -440,7 +442,7 @@ async function classifyEmailsWithSonnet(
       }
     });
   } catch (error) {
-    console.warn('⚠️ Sonnet 분류 실패:', error);
+    console.warn('[warn] Sonnet 분류 실패:', error);
     emails.forEach((e) => {
       results.set(String(e.index), {
         category: 'info',
@@ -974,7 +976,7 @@ export async function emailRoutes(app: FastifyInstance) {
           category: cls.category,
           categoryEmoji: CATEGORY_EMOJI[cls.category],
           group: cls.group || domainMatchGroup(email.sender, profile)?.name || '개인',
-          groupEmoji: cls.groupEmoji || domainMatchGroup(email.sender, profile)?.emoji || '👤',
+          groupEmoji: cls.groupEmoji || domainMatchGroup(email.sender, profile)?.emoji || '[개인]',
           summary: cls.summary,
           messageId: email.messageId,
           threadId: email.threadId,
@@ -1022,7 +1024,7 @@ export async function emailRoutes(app: FastifyInstance) {
         });
       }
 
-      // 🔗 비동기 지식 그래프 관계 추출
+      // 비동기 지식 그래프 관계 추출
       const emailGraphText = briefings
         .slice(0, 10)
         .map((b: any) => `${b.senderName || b.sender}: ${b.subject} — ${b.summary || ''}`)
@@ -1031,7 +1033,7 @@ export async function emailRoutes(app: FastifyInstance) {
         buildGraphFromText(userId, emailGraphText, 'email').catch(() => {});
       }
 
-      // 📅 일정 메일에서 이벤트 감지 → pending events
+      // 일정 메일에서 이벤트 감지 → pending events
       const scheduleEmails = briefings.filter((b: any) => b.category === 'schedule');
       if (scheduleEmails.length > 0) {
         import('../services/calendar.js').then(({ detectEventsFromText }) => {
@@ -1046,13 +1048,13 @@ export async function emailRoutes(app: FastifyInstance) {
         }).catch(() => {});
       }
 
-      // 📦 브리핑 히스토리 저장 (Memo에 JSON 형태로)
+      // 브리핑 히스토리 저장 (Memo에 JSON 형태로)
       try {
         await prisma.memo.create({
           data: {
             userId: user.id,
             labId: request.labId || undefined,
-            title: `📧 이메일 브리핑 ${now.toISOString().split('T')[0]}`,
+            title: `이메일 브리핑 ${now.toISOString().split('T')[0]}`,
             content: JSON.stringify({
               briefings,
               meta: {
@@ -1168,7 +1170,7 @@ export async function emailRoutes(app: FastifyInstance) {
       if (allMessageIds.length === 0) {
         return reply.send({
           success: true,
-          markdown: '# 📧 이메일 브리핑\n\n새로운 이메일이 없습니다.',
+          markdown: '# 이메일 브리핑\n\n새로운 이메일이 없습니다.',
           emailCount: 0,
           generatedAt: new Date().toISOString(),
         });
@@ -1219,7 +1221,7 @@ export async function emailRoutes(app: FastifyInstance) {
         const toCC = `${getHeader('to')} ${getHeader('cc')}`.trim();
 
         // 기관 분류: profile.groups의 도메인으로 To/Cc + From 동적 매칭
-        let groupLabel = '👤개인';
+        let groupLabel = '[개인]';
         const allAddresses = `${toCC} ${sender}`.toLowerCase();
         if (profile.classifyByGroup && profile.groups.length > 0) {
           for (const g of profile.groups) {
@@ -1243,7 +1245,7 @@ export async function emailRoutes(app: FastifyInstance) {
       if (parsedEmails.length === 0) {
         return reply.send({
           success: true,
-          markdown: '# 📧 이메일 브리핑\n\n새로운 이메일이 없습니다.',
+          markdown: '# 이메일 브리핑\n\n새로운 이메일이 없습니다.',
           emailCount: 0,
           generatedAt: new Date().toISOString(),
         });
@@ -1304,7 +1306,7 @@ export async function emailRoutes(app: FastifyInstance) {
       // 이메일 데이터 구성 (본문 열람 규칙 적용)
       const emailDataForPrompt: string[] = parsedEmails.map(e => {
         const cls = classificationMap.get(e.index);
-        const categoryLabel = cls ? `${CATEGORY_EMOJI[cls.category] || '📰'}${cls.category}` : '📰info';
+        const categoryLabel = cls ? `${CATEGORY_EMOJI[cls.category] || '[정보]'}${cls.category}` : '[정보]info';
         const priorityLabel = cls?.priority || 'medium';
 
         // 스레드 내 다른 메일 표시
@@ -1318,7 +1320,7 @@ export async function emailRoutes(app: FastifyInstance) {
         text += `\n   날짜: ${e.dateStr}`;
         text += `\n   미리보기: ${e.snippet}`;
 
-        // 본문 열람 규칙: ⚠️긴급/📝대응필요 → 전체 본문, 소속 기관 도메인 발송 → 본문
+        // 본문 열람 규칙: 긴급/대응필요 → 전체 본문, 소속 기관 도메인 발송 → 본문
         const isUrgentOrAction = cls?.category === 'urgent' || cls?.category === 'action-needed';
         // 동적: 사용자의 첫 번째 그룹(소속 기관) 도메인으로 학생/내부 이메일 판별
         const primaryDomains = profile.groups?.[0]?.domains || [];
@@ -1386,7 +1388,7 @@ export async function emailRoutes(app: FastifyInstance) {
         // 기관별 그룹 동적 생성
         const groupRules = profile.classifyByGroup && profile.groups.length > 0
           ? profile.groups.map(g => `- ${g.emoji} ${g.name}: ${g.domains.join(', ')}`).join('\n')
-          : '- 🏫/🏢/👤 기관별 분류는 To/Cc 주소의 도메인으로 판별합니다.';
+          : '- 기관별 분류는 To/Cc 주소의 도메인으로 판별합니다.';
 
         const customInstructions = briefingStyle.customInstructions || '';
         const excludeWeeklyReport = briefingStyle.excludeWeeklyReport !== false;
@@ -1401,60 +1403,62 @@ ${threadsSection}
 
 ## 기관별 분류
 ${groupRules}
-- 분류 기준: To/Cc 주소의 도메인. 매칭되지 않으면 👤개인.
+- 분류 기준: To/Cc 주소의 도메인. 매칭되지 않으면 [개인].
 
 ## 성격별 분류
-| 이모지 | 분류 | 설명 |
+| 라벨 | 분류 | 설명 |
 |--------|------|------|
-| ⚠️ | 긴급 | 마감 24시간 이내 또는 즉각 조치 필요 |
-| 📝 | 대응필요 | 교수님 의견·결정·승인 요청, 저널 의사결정, 명시적 회신 요청 |
-| 📅 | 일정 | 날짜/시간 포함 이벤트, 마감일, 미팅 |
-| 📰 | 정보성 | 공지, 뉴스레터, 알림, CC |
-| 🛒 | 광고 | 프로모션, Call for Papers, 투고 초대 |
+| [긴급] | 긴급 | 마감 24시간 이내 또는 즉각 조치 필요 |
+| [대응] | 대응필요 | 교수님 의견·결정·승인 요청, 저널 의사결정, 명시적 회신 요청 |
+| [일정] | 일정 | 날짜/시간 포함 이벤트, 마감일, 미팅 |
+| [정보] | 정보성 | 공지, 뉴스레터, 알림, CC |
+| [광고] | 광고 | 프로모션, Call for Papers, 투고 초대 |
 
 ## 중요도 조정
 ${(profile.keywords as string[]).length > 0 ? `- 연구/사업 키워드(${(profile.keywords as string[]).join(', ')}) → 1단계 상향` : ''}
-- Submission confirmation, Decision, Review results → ⚠️ 최우선 상향
-- Call for Papers, 투고 초대 → 📰 또는 🛒 강등
+- Submission confirmation, Decision, Review results → [긴급] 최우선 상향
+- Call for Papers, 투고 초대 → [정보] 또는 [광고] 강등
 
 ## Gemini 1차 분류 통계
-⚠️긴급 ${urgentCount} · 📝대응필요 ${actionCount} · 📅일정 ${scheduleCount} · 📰정보성 ${infoCount} · 🛒광고 ${adsCount}
+긴급 ${urgentCount} · 대응필요 ${actionCount} · 일정 ${scheduleCount} · 정보성 ${infoCount} · 광고 ${adsCount}
 
-${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBriefing.substring(0, 2000)}\n\n위 이전 브리핑에서 추적 중인 건의 상태가 업데이트되었는지 확인하고, 📊 요약에 진행 상황을 반영하세요.` : ''}
+${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBriefing.substring(0, 2000)}\n\n위 이전 브리핑에서 추적 중인 건의 상태가 업데이트되었는지 확인하고, 요약에 진행 상황을 반영하세요.` : ''}
 
 ## 출력 포맷 (정확히 따르세요)
 
-📧 이메일 브리핑 — ${todayStr} ${timeStr} ${tzLabel}
+이메일 브리핑 — ${todayStr} ${timeStr} ${tzLabel}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-총 ~N건 신규 (${afterTimeStr} 이후) | ⚠️ 긴급 N건 · 대응필요 N건 · 정보성 N건+ · 광고 ~N건
+총 ~N건 신규 (${afterTimeStr} 이후) | 긴급 N건 · 대응필요 N건 · 정보성 N건+ · 광고 ~N건
 
 ${profile.groups.length > 0
-  ? profile.groups.map((g: any) => `${g.emoji} ${g.name} (N건)\n──────────────\n(이모지 + 제목 + 시간 + 맥락 분석)`).join('\n\n')
-  : '📧 수신 이메일 (N건)\n──────────────\n(이모지 + 제목 + 시간 + 맥락 분석)'}
+  ? profile.groups.map((g: any) => `${g.name} (N건)\n──────────────\n(분류 라벨 + 제목 + 시간 + 맥락 분석)`).join('\n\n')
+  : '수신 이메일 (N건)\n──────────────\n(분류 라벨 + 제목 + 시간 + 맥락 분석)'}
 
-👤 개인 (N건)
+개인 (N건)
 ──────────────
 (위 기관에 해당하지 않는 메일)
 
-🛒 광고/프로모션 (N건)
+광고/프로모션 (N건)
 [발신자] · [발신자] · ... (한 줄 압축)
 
-📊 요약
+### 요약
 ━━━━━━
-오늘 완료된 것들: ✅ 항목
-즉시 대응: ⚠️/📝 구체적 액션
+오늘 완료된 것들: 항목
+즉시 대응: [긴급]/[대응] 구체적 액션
 진행 상황 업데이트: 이전 브리핑에서 추적 중인 건의 현재 상태
 이번 주 일정: 날짜별 정리
 
 ## 압축 규칙
-- ⚠️/📝: 핵심 내용 최대 2줄 + 조치사항(→) 1줄. 스레드 히스토리는 간결하게 합침.
-- 📰: "발신자 (시간) — 한 줄" 만.
+- [긴급]/[대응]: 핵심 내용 최대 2줄 + 조치사항(→) 1줄. 스레드 히스토리는 간결하게 합침.
+- [정보]: "발신자 (시간) — 한 줄" 만.
 - 다건 동일 성격: "전자결재 수신참조 (3건): 항목1, 항목2, 항목3" 한 줄 묶음.
-- 🛒: [발신자] · [발신자] 형태로 압축. 학술지 초대도 여기 포함.
+- [광고]: [발신자] · [발신자] 형태로 압축. 학술지 초대도 여기 포함.
 - 조치 없는 항목에는 → 달지 않음.
 - 한국발 메일: KST → ${tzLabel} 병기. 예: 09:22 KST (전일 19:22 ${tzLabel})
 - 같은 스레드의 여러 메일은 타임라인으로 합쳐서 한 항목으로 정리 (답장 내용 포함)
-- 한국어로 작성. 마크다운 문법. HTML 금지.`;
+- 한국어로 작성. 마크다운 문법. HTML 금지.
+
+응답에 이모지를 절대 사용하지 마라. 이모지 대신 대괄호 라벨([긴급], [대응] 등)과 마크다운 서식으로 구조를 표현하라.`;
 
         try {
           const response = await anthropic.messages.create({
@@ -1517,14 +1521,14 @@ ${profile.groups.length > 0
               currentPeople.push({
                 name: e.senderName,
                 email: emailAddr,
-                org: e.groupLabel.replace(/[🏫🏢👤]/g, '').trim(),
+                org: e.groupLabel.replace(/\[개인\]/g, '').trim(),
                 relationship: 'frequent correspondent',
               });
             }
           }
         }
 
-        // 추적 중인 건 업데이트: 브리핑에서 ⚠️/📝 항목 추출
+        // 추적 중인 건 업데이트: 긴급/대응필요 항목 추출
         const currentThreads = [...activeThreads];
         for (const e of parsedEmails) {
           const cls = classificationMap.get(e.index);
@@ -1572,7 +1576,7 @@ ${profile.groups.length > 0
           data: {
             userId: user.id,
             labId: request.labId || undefined,
-            title: `📧 서사형 브리핑 ${now.toISOString().split('T')[0]}`,
+            title: `서사형 브리핑 ${now.toISOString().split('T')[0]}`,
             content: markdown.substring(0, 10000),
             tags: ['email-briefing', 'narrative', 'auto'],
             source: 'email-briefing',
@@ -1618,6 +1622,19 @@ ${profile.groups.length > 0
       oauth2Client.setCredentials({
         access_token: safeDecrypt(gmailToken.accessToken),
         refresh_token: safeDecrypt(gmailToken.refreshToken),
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken.id },
+            data: {
+              accessToken: encryptToken(tokens.access_token!),
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+            },
+          });
+        } catch {}
       });
 
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
@@ -1784,6 +1801,19 @@ ${profile.groups.length > 0
       oauth2Client.setCredentials({
         access_token: safeDecrypt(gmailToken.accessToken),
         refresh_token: safeDecrypt(gmailToken.refreshToken),
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken.id },
+            data: {
+              accessToken: encryptToken(tokens.access_token!),
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+            },
+          });
+        } catch {}
       });
 
       const calendar = google.calendar({ version: 'v3', auth: oauth2Client });

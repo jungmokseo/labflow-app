@@ -329,16 +329,16 @@ export async function briefingRoutes(app: FastifyInstance) {
     // 브리핑 내역을 Memo로 저장 (히스토리 + 주간 리포트용)
     try {
       const briefingSummary = [
-        urgent.length > 0 ? `🔴 긴급 ${urgent.length}건: ${urgent.map(i => i.title).join(', ')}` : null,
-        important.length > 0 ? `🟡 확인 필요 ${important.length}건` : null,
-        info.length > 0 ? `✅ 참고 ${info.length}건` : null,
+        urgent.length > 0 ? `[긴급] ${urgent.length}건: ${urgent.map(i => i.title).join(', ')}` : null,
+        important.length > 0 ? `[확인필요] ${important.length}건` : null,
+        info.length > 0 ? `[참고] ${info.length}건` : null,
       ].filter(Boolean).join('\n');
 
       await basePrismaClient.memo.create({
         data: {
           userId,
           labId: labId || undefined,
-          title: `📋 브리핑 ${briefing.date}`,
+          title: `브리핑 ${briefing.date}`,
           content: briefingSummary || '오늘은 확인할 사항이 없습니다.',
           tags: ['briefing', 'auto'],
           source: 'briefing',

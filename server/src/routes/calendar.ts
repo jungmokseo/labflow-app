@@ -161,7 +161,7 @@ export async function savePendingEvent(
     data: {
       userId,
       labId: labId || undefined,
-      title: `📅 ${event.title} (${event.date})`,
+      title: `[일정] ${event.title} (${event.date})`,
       content: JSON.stringify(event),
       tags: ['pending'],
       source: 'pending-event',
