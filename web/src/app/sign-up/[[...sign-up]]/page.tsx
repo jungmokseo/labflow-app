@@ -57,7 +57,7 @@ export default function SignUpPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-bg px-4">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-white mb-2">
-          🧪 <span className="text-primary">LabFlow</span>
+          <span className="text-primary">LabFlow</span>
         </h1>
         <p className="text-text-muted text-sm">Research Lab AI OS</p>
       </div>

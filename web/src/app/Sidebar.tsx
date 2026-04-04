@@ -5,15 +5,19 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import {
+  LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
+  FlaskConical, Settings,
+} from 'lucide-react';
 
 const NAV_ITEMS = [
-  { href: '/', icon: '🏠', label: '대시보드' },
-  { href: '/brain', icon: '🧠', label: 'Brain' },
-  { href: '/tasks', icon: '📋', label: 'Tasks & Ideas' },
-  { href: '/papers', icon: '📚', label: '연구동향' },
-  { href: '/meetings', icon: '🎙️', label: '회의 노트' },
-  { href: '/lab-profile', icon: '🔬', label: '연구실 프로필' },
-  { href: '/settings', icon: '⚙️', label: '설정' },
+  { href: '/', icon: LayoutDashboard, label: '대시보드' },
+  { href: '/brain', icon: Brain, label: 'Brain' },
+  { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
+  { href: '/papers', icon: BookOpen, label: '연구동향' },
+  { href: '/meetings', icon: Mic, label: '회의 노트' },
+  { href: '/lab-profile', icon: FlaskConical, label: '연구실 프로필' },
+  { href: '/settings', icon: Settings, label: '설정' },
 ];
 
 function NavContent({ pathname, onNavigate, user, onSignOut }: {
@@ -26,7 +30,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
     <>
       <div className="p-6">
         <h1 className="text-xl font-bold text-white">
-          🧪 <span className="text-primary">LabFlow</span>
+          <FlaskConical className="w-5 h-5 text-primary inline-block" /> <span className="text-primary">LabFlow</span>
         </h1>
         <p className="text-xs text-text-muted mt-1">Research Lab AI OS</p>
       </div>
@@ -45,7 +49,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
                   : 'text-text-muted hover:bg-bg-input/50 hover:text-white'
               }`}
             >
-              <span className="text-base">{item.icon}</span>
+              <item.icon className="w-4 h-4" />
               {item.label}
             </Link>
           );

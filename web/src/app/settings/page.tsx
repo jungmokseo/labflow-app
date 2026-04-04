@@ -8,6 +8,7 @@ import {
   updateEmailProfile, LabProfile,
 } from '@/lib/api';
 import { SkeletonForm, SkeletonLine } from '@/components/Skeleton';
+import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon } from 'lucide-react';
 
 type Tab = 'status' | 'lab' | 'email' | 'dictionary';
 
@@ -49,17 +50,24 @@ export default function SettingsPage() {
     );
   }
 
-  const TABS: { key: Tab; label: string; icon: string }[] = [
-    { key: 'status', label: '시스템 상태', icon: '📊' },
-    { key: 'lab', label: '연구실 프로필', icon: '🔬' },
-    { key: 'email', label: '이메일 분류', icon: '📧' },
-    { key: 'dictionary', label: '용어 사전', icon: '📖' },
+  const TAB_ICONS: Record<Tab, React.ReactNode> = {
+    status: <BarChart3 className="w-4 h-4 inline mr-1" />,
+    lab: <FlaskConical className="w-4 h-4 inline mr-1" />,
+    email: <Mail className="w-4 h-4 inline mr-1" />,
+    dictionary: <BookOpen className="w-4 h-4 inline mr-1" />,
+  };
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'status', label: '시스템 상태' },
+    { key: 'lab', label: '연구실 프로필' },
+    { key: 'email', label: '이메일 분류' },
+    { key: 'dictionary', label: '용어 사전' },
   ];
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white">⚙️ 설정</h2>
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
         <p className="text-text-muted mt-1">연구실 설정 및 프로필 관리</p>
       </div>
 
@@ -72,7 +80,7 @@ export default function SettingsPage() {
             className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors
               ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-white hover:bg-bg-input/50'}`}
           >
-            {t.icon} {t.label}
+            {TAB_ICONS[t.key]} {t.label}
           </button>
         ))}
       </div>
@@ -154,7 +162,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
   if (!lab) {
     return (
       <div className="bg-bg-card rounded-xl border border-bg-input/50 p-12 text-center">
-        <span className="text-5xl block mb-3">🔬</span>
+        <FlaskConical className="w-12 h-12 text-text-muted/40 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-white mb-2">연구실이 등록되지 않았습니다</h3>
         <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-white rounded-lg font-medium mt-4">온보딩 시작</a>
       </div>
@@ -372,7 +380,7 @@ function EmailTab({ connected }: { connected: boolean }) {
         setKeywords((p.keywords || []).join(', '));
         setTimezone(p.timezone || 'America/New_York');
         setGroups((p.groups || []).map((g: any) => ({
-          name: g.name, domains: g.domains.join(', '), emoji: g.emoji || '📧',
+          name: g.name, domains: g.domains.join(', '), emoji: g.emoji || '',
         })));
       } catch { /* no profile */ }
       setLoading(false);

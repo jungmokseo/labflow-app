@@ -27,6 +27,35 @@ export function SkeletonCard() {
   );
 }
 
+// 채팅 메시지 스켈레톤
+export function SkeletonMessage({ align = 'left' }: { align?: 'left' | 'right' }) {
+  return (
+    <div className={`flex ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+      <div className={`space-y-2 ${align === 'right' ? 'max-w-[60%]' : 'max-w-[70%] w-full'}`}>
+        <SkeletonBlock className={`h-4 ${align === 'right' ? 'w-48' : 'w-full'} rounded-2xl`} />
+        {align === 'left' && <SkeletonBlock className="h-4 w-3/4 rounded-2xl" />}
+      </div>
+    </div>
+  );
+}
+
+// 리스트 아이템 스켈레톤
+export function SkeletonList({ items = 5 }: { items?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: items }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 p-3">
+          <SkeletonBlock className="w-8 h-8 rounded-lg flex-shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <SkeletonLine width="w-3/4" />
+            <SkeletonLine width="w-1/2" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // 페이지 전체 스켈레톤 (헤더 + 카드 N개)
 export function SkeletonPage({ cards = 4 }: { cards?: number }) {
   return (

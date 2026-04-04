@@ -6,15 +6,22 @@ import {
   type Capture,
 } from '@/lib/api';
 import { SkeletonCard } from '@/components/Skeleton';
+import { CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic, X } from 'lucide-react';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
 type StatusFilter = 'active' | 'completed';
 type SortBy = 'newest' | 'oldest' | 'dueDate';
 
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  task: <CheckCircle className="w-4 h-4 text-green-400" />,
+  idea: <Lightbulb className="w-4 h-4 text-yellow-400" />,
+  memo: <FileText className="w-4 h-4 text-gray-400" />,
+};
+
 const CATEGORY_INFO: Record<string, { emoji: string; label: string; color: string }> = {
-  task: { emoji: '✅', label: '할일', color: 'bg-blue-500/10 text-blue-400' },
-  idea: { emoji: '💡', label: '아이디어', color: 'bg-yellow-500/10 text-yellow-400' },
-  memo: { emoji: '📝', label: '메모', color: 'bg-gray-500/10 text-gray-400' },
+  task: { emoji: '', label: '할일', color: 'bg-blue-500/10 text-blue-400' },
+  idea: { emoji: '', label: '아이디어', color: 'bg-yellow-500/10 text-yellow-400' },
+  memo: { emoji: '', label: '메모', color: 'bg-gray-500/10 text-gray-400' },
 };
 
 const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
@@ -160,7 +167,7 @@ export default function TasksPage() {
       {/* Tab Filters */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <div className="flex bg-bg-input/30 rounded-lg p-0.5 gap-0.5">
-          {([['all', '전체'], ['TASK', '✅ 할일'], ['IDEA', '💡 아이디어'], ['MEMO', '📝 메모']] as const).map(([key, label]) => (
+          {([['all', '전체'], ['TASK', '할일'], ['IDEA', '아이디어'], ['MEMO', '메모']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
@@ -225,7 +232,7 @@ export default function TasksPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20">
-          <div className="text-4xl mb-3">{tab === 'TASK' ? '✅' : tab === 'IDEA' ? '💡' : '📋'}</div>
+          <div className="mb-3 flex justify-center">{tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> : tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> : <ClipboardList className="w-10 h-10 text-text-muted" />}</div>
           <h3 className="text-white font-medium mb-1">
             {statusFilter === 'completed' ? '완료된 항목이 없습니다' : '아직 항목이 없습니다'}
           </h3>
@@ -270,7 +277,7 @@ export default function TasksPage() {
                         </span>
                       )}
                       {/* Category */}
-                      <span className="text-sm">{cat.emoji}</span>
+                      {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
                       {/* Summary */}
                       <span className={`text-sm font-medium ${c.completed ? 'line-through text-text-muted' : 'text-white'}`}>
                         {c.summary || c.content.substring(0, 60)}
@@ -292,8 +299,8 @@ export default function TasksPage() {
                       )}
                       {/* Due date */}
                       {c.actionDate && (
-                        <span className="text-[10px] text-text-muted">
-                          📅 {c.actionDate.split('T')[0]}
+                        <span className="text-[10px] text-text-muted flex items-center gap-0.5">
+                          <Calendar className="w-3 h-3" /> {c.actionDate.split('T')[0]}
                         </span>
                       )}
                       {/* Tags */}
@@ -303,7 +310,7 @@ export default function TasksPage() {
                         </span>
                       ))}
                       {/* Source */}
-                      {c.sourceType === 'voice' && <span className="text-[10px] text-text-muted">🎤</span>}
+                      {c.sourceType === 'voice' && <Mic className="w-3 h-3 text-text-muted" />}
                       {c.modelUsed === 'gemini-flash-auto' && <span className="text-[10px] text-text-muted">자동 분류</span>}
                       {/* Date */}
                       <span className="text-[10px] text-text-muted ml-auto">
@@ -328,7 +335,7 @@ export default function TasksPage() {
                       className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10"
                       title="삭제"
                     >
-                      ✕
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>

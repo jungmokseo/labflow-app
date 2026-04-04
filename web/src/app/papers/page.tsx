@@ -7,14 +7,28 @@ import {
   type PaperAlertResult,
 } from '@/lib/api';
 import { SkeletonCard, SkeletonLine, StepProgress } from '@/components/Skeleton';
+import {
+  BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
+  Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight, Upload,
+} from 'lucide-react';
 
 const MAX_JOURNALS = 15;
 
-const STAR_INFO: Record<number, { label: string; color: string }> = {
-  3: { label: '★★★ 직접 관련', color: 'text-yellow-400' },
-  2: { label: '★★ 높은 관련', color: 'text-orange-400' },
-  1: { label: '★ 참고', color: 'text-gray-400' },
+const STAR_INFO: Record<number, { stars: number; label: string; color: string }> = {
+  3: { stars: 3, label: '직접 관련', color: 'text-yellow-400' },
+  2: { stars: 2, label: '높은 관련', color: 'text-orange-400' },
+  1: { stars: 1, label: '참고', color: 'text-gray-400' },
 };
+
+function StarRating({ count, className }: { count: number; className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-0.5 ${className || ''}`}>
+      {Array.from({ length: count }).map((_, i) => (
+        <Star key={i} className="w-3 h-3 fill-current" />
+      ))}
+    </span>
+  );
+}
 
 // 주차 계산 (ISO week)
 function getWeekLabel(dateStr: string): string {
@@ -35,20 +49,25 @@ function getWeekLabel(dateStr: string): string {
   return `${year}년 ${month}월 ${weekNum}주차 (${fmt(monday)} ~ ${fmt(sunday)})`;
 }
 
-// 테마 이모지 매핑
-const THEME_EMOJI: Record<string, string> = {
-  '하이드로겔': '🧪', 'Hydrogel': '🧪',
-  '이종소재 접착제': '🔗', 'Adhesive': '🔗',
-  'Antifouling Coating': '🛡️', 'Antifouling': '🛡️',
-  'Liquid Metal': '🔬', '액체금속': '🔬',
-  'Neuromorphic Device': '🧠', 'Neuromorphic': '🧠',
+// Theme icon mapping
+const THEME_ICON_MAP: Record<string, React.ReactNode> = {
+  '하이드로겔': <TestTube2 className="w-4 h-4 inline" />,
+  'Hydrogel': <TestTube2 className="w-4 h-4 inline" />,
+  '이종소재 접착제': <Link2 className="w-4 h-4 inline" />,
+  'Adhesive': <Link2 className="w-4 h-4 inline" />,
+  'Antifouling Coating': <Shield className="w-4 h-4 inline" />,
+  'Antifouling': <Shield className="w-4 h-4 inline" />,
+  'Liquid Metal': <FlaskConical className="w-4 h-4 inline" />,
+  '액체금속': <FlaskConical className="w-4 h-4 inline" />,
+  'Neuromorphic Device': <Brain className="w-4 h-4 inline" />,
+  'Neuromorphic': <Brain className="w-4 h-4 inline" />,
 };
 
-function getThemeEmoji(theme: string): string {
-  for (const [key, emoji] of Object.entries(THEME_EMOJI)) {
-    if (theme.toLowerCase().includes(key.toLowerCase())) return emoji;
+function getThemeIcon(theme: string): React.ReactNode {
+  for (const [key, icon] of Object.entries(THEME_ICON_MAP)) {
+    if (theme.toLowerCase().includes(key.toLowerCase())) return icon;
   }
-  return '📄';
+  return <FileText className="w-4 h-4 inline" />;
 }
 
 interface WeekGroup {
@@ -114,7 +133,7 @@ export default function PapersPage() {
 
   async function handleCrawl() {
     if (selectedJournals.length === 0 && customFeeds.length === 0) {
-      setError('⚙️ 설정에서 저널을 먼저 추가해주세요');
+      setError('설정에서 저널을 먼저 추가해주세요');
       return;
     }
     setCrawling(true);
@@ -216,7 +235,7 @@ export default function PapersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">📚 연구동향</h1>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> 연구동향</h1>
           <p className="text-text-muted text-sm mt-1">
             {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
           </p>
@@ -225,15 +244,15 @@ export default function PapersPage() {
           <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" />
           <button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}
             className="px-4 py-2 bg-bg-card text-text-muted border border-bg-input/50 rounded-lg text-sm hover:text-white">
-            {pdfUploading ? '⏳' : '📄'} PDF 업로드
+            {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드
           </button>
           <button onClick={handleCrawl} disabled={crawling}
             className="px-4 py-2 bg-bg-card text-text-muted border border-bg-input/50 rounded-lg text-sm hover:text-white disabled:opacity-50">
-            {crawling ? '수집 중...' : '🔄 수집'}
+            {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 수집</>}
           </button>
           <button onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
             className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-bg-input/50 hover:text-white'}`}>
-            ⚙️ 설정
+            <Settings className="w-4 h-4 inline mr-1" /> 설정
           </button>
         </div>
       </div>
@@ -248,7 +267,7 @@ export default function PapersPage() {
         </div>
       )}
 
-      {error && <div className="bg-red-500/10 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center justify-between">{error}<button onClick={() => setError('')}>✕</button></div>}
+      {error && <div className="bg-red-500/10 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center justify-between">{error}<button onClick={() => setError('')}><X className="w-4 h-4" /></button></div>}
 
       {/* Settings Panel */}
       {showSettings && (
@@ -262,7 +281,7 @@ export default function PapersPage() {
           <div className="flex flex-wrap gap-2">
             {selectedJournals.map(j => (
               <span key={j} className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs">
-                {j} <button onClick={() => toggleJournal(j)} className="text-primary/50 hover:text-primary ml-1">✕</button>
+                {j} <button onClick={() => toggleJournal(j)} className="text-primary/50 hover:text-primary ml-1"><X className="w-3 h-3 inline" /></button>
               </span>
             ))}
             {customFeeds.map(f => (
@@ -336,15 +355,15 @@ export default function PapersPage() {
       {/* ── 주차별 논문 대시보드 ── */}
       {results.length === 0 ? (
         <div className="bg-bg-card rounded-xl border border-bg-input/50 p-12 text-center">
-          <p className="text-4xl mb-4">📚</p>
+          <BookOpen className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
           <p className="text-white font-medium">수집된 논문이 없습니다</p>
-          <p className="text-text-muted text-sm mt-2">⚙️ 설정에서 저널과 키워드를 설정한 후 🔄 수집을 실행하세요</p>
+          <p className="text-text-muted text-sm mt-2">설정에서 저널과 키워드를 설정한 후 수집을 실행하세요</p>
         </div>
       ) : weekGroups.map(week => (
         <div key={week.label} className="space-y-4">
           {/* 주차 헤더 */}
           <div className="border-t border-bg-input/30 pt-6">
-            <h2 className="text-lg font-bold text-white">📅 {week.label}</h2>
+            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> {week.label}</h2>
             <p className="text-text-muted text-sm mt-1">
               총 {week.papers.length}편 선별
               {' · '}
@@ -355,8 +374,8 @@ export default function PapersPage() {
           {/* 테마별 섹션 */}
           {Array.from(week.themes.entries()).map(([theme, papers]) => (
             <div key={theme} className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
-              <h3 className="text-primary font-semibold text-sm mb-2">
-                {getThemeEmoji(theme)} {theme} ({papers.length}편)
+              <h3 className="text-primary font-semibold text-sm mb-2 flex items-center gap-1.5">
+                {getThemeIcon(theme)} {theme} ({papers.length}편)
               </h3>
 
               {/* 논문 토글 리스트 */}
@@ -373,10 +392,10 @@ export default function PapersPage() {
                         onClick={() => togglePaper(paper.id)}
                         className="w-full flex items-center gap-2 text-left py-2 px-3 rounded-lg hover:bg-bg-input/30 transition-colors"
                       >
-                        <span className="text-xs text-text-muted">{isOpen ? '▼' : '▶'}</span>
+                        {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />}
                         <span className="flex-1 text-sm text-white truncate">{paper.title}</span>
                         <span className="text-xs text-text-muted flex-shrink-0">({paper.journal})</span>
-                        <span className={`text-xs flex-shrink-0 ${si.color}`}>{si.label}</span>
+                        <span className={`text-xs flex-shrink-0 flex items-center gap-0.5 ${si.color}`}><StarRating count={si.stars} /> {si.label}</span>
                       </button>
 
                       {/* 열림 상태: 상세 */}
@@ -387,8 +406,8 @@ export default function PapersPage() {
                             {(paper as any).pubDate && <> | <span className="font-medium">발행일</span>: {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
                           </p>
                           {((paper as any).doi || paper.url) && (
-                            <p className="text-xs">
-                              🔗{' '}
+                            <p className="text-xs flex items-center gap-1">
+                              <Link2 className="w-3 h-3" />
                               {(paper as any).doi ? (
                                 <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
                               ) : paper.url ? (

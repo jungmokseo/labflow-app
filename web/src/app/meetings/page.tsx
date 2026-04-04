@@ -5,6 +5,10 @@ import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/a
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SkeletonCard, SkeletonLine } from '@/components/Skeleton';
+import {
+  Mic, Paperclip, ClipboardList, FileText, CheckCircle, Music,
+  ChevronUp, ChevronDown, Copy, X,
+} from 'lucide-react';
 
 const ACCEPTED_AUDIO_TYPES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/m4a', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
 const ACCEPTED_EXTENSIONS = ['.webm', '.mp3', '.m4a', '.wav'];
@@ -256,7 +260,7 @@ export default function MeetingsPage() {
       {dragOver && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-none">
           <div className="border-2 border-dashed border-primary rounded-2xl p-12 text-center">
-            <span className="text-5xl block mb-4">🎵</span>
+            <Music className="w-12 h-12 text-primary mx-auto mb-4" />
             <p className="text-xl text-white font-semibold">오디오 파일을 여기에 놓으세요</p>
             <p className="text-sm text-text-muted mt-2">webm, mp3, m4a, wav</p>
           </div>
@@ -266,7 +270,7 @@ export default function MeetingsPage() {
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl font-bold text-white">🎙️ 회의 노트</h2>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
           <p className="text-text-muted mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
         </div>
 
@@ -280,7 +284,7 @@ export default function MeetingsPage() {
                 className="w-24 h-24 rounded-full bg-primary hover:bg-primary-hover transition-all duration-200 flex items-center justify-center text-5xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-105 active:scale-95"
                 title="녹음 시작"
               >
-                🎙️
+                <Mic className="w-10 h-10 text-white" />
               </button>
               <p className="text-sm text-text-muted">탭하여 녹음 시작</p>
 
@@ -295,7 +299,7 @@ export default function MeetingsPage() {
                   onClick={() => fileInputRef.current?.click()}
                   className="flex items-center gap-2 px-4 py-2.5 bg-bg-input/50 hover:bg-bg-input text-text-muted hover:text-white rounded-lg text-sm transition-colors border border-bg-input/50 hover:border-primary/30"
                 >
-                  📎 파일 첨부
+                  <Paperclip className="w-4 h-4" /> 파일 첨부
                 </button>
                 <span className="text-xs text-text-muted">
                   드래그 앤 드롭도 가능 (webm, mp3, m4a, wav)
@@ -364,8 +368,8 @@ export default function MeetingsPage() {
               </div>
 
               {attachedFile && (
-                <p className="text-xs text-text-muted">
-                  📎 {attachedFile.name} ({(attachedFile.size / (1024 * 1024)).toFixed(1)} MB)
+                <p className="text-xs text-text-muted flex items-center gap-1">
+                  <Paperclip className="w-3 h-3" /> {attachedFile.name} ({(attachedFile.size / (1024 * 1024)).toFixed(1)} MB)
                 </p>
               )}
 
@@ -384,7 +388,7 @@ export default function MeetingsPage() {
                   onClick={handleSubmit}
                   className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-colors"
                 >
-                  🎙️ 회의록 생성
+                  <Mic className="w-4 h-4 inline mr-1" /> 회의록 생성
                 </button>
                 <button
                   onClick={resetRecording}
@@ -418,7 +422,7 @@ export default function MeetingsPage() {
               }`}>
                 {job.status === 'uploading' && <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0" />}
                 {job.status === 'done' && <span className="text-green-400 flex-shrink-0">✓</span>}
-                {job.status === 'error' && <span className="text-red-400 flex-shrink-0">✕</span>}
+                {job.status === 'error' && <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-white truncate">{job.title}</p>
                   <p className="text-xs text-text-muted">
@@ -438,7 +442,7 @@ export default function MeetingsPage() {
         {/* Meeting list */}
         {meetings.length === 0 ? (
           <div className="text-center py-16 text-text-muted">
-            <span className="text-5xl block mb-4">🎙️</span>
+            <Mic className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
             <p className="text-lg mb-2">아직 회의 기록이 없습니다</p>
             <p className="text-sm">녹음하거나 오디오 파일을 업로드해 보세요.</p>
             <p className="text-xs mt-4 text-text-muted">
@@ -491,14 +495,14 @@ export default function MeetingsPage() {
                           })}
                         </span>
                         {m.actionItems.length > 0 && (
-                          <span className="text-xs text-yellow-400">
-                            📋 {m.actionItems.length} 액션아이템
+                          <span className="text-xs text-yellow-400 flex items-center gap-1">
+                            <ClipboardList className="w-3 h-3" /> {m.actionItems.length} 액션아이템
                           </span>
                         )}
-                        {m.summary && <span className="text-xs text-green-400">✅ 요약 완료</span>}
+                        {m.summary && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> 요약 완료</span>}
                       </div>
                     </div>
-                    <span className="text-text-muted text-sm">{expanded ? '▲' : '▼'}</span>
+                    {expanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
                   </div>
 
                   {expanded && (
@@ -522,7 +526,7 @@ export default function MeetingsPage() {
                           }}
                           className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
                         >
-                          📋 마크다운 복사
+                          <Copy className="w-3 h-3" /> 마크다운 복사
                         </button>
                         <button
                           onClick={async (e) => {
@@ -542,7 +546,7 @@ export default function MeetingsPage() {
                           }}
                           className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
                         >
-                          📄 Google Docs 내보내기
+                          <FileText className="w-3 h-3" /> Google Docs 내보내기
                         </button>
                         <div className="flex-1" />
                         <button

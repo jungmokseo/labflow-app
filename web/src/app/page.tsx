@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getMeetings, checkHealth, Meeting } from '@/lib/api';
+import { Brain, ClipboardList, BookOpen, Mic } from 'lucide-react';
 
 export default function DashboardPage() {
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
@@ -54,22 +55,22 @@ export default function DashboardPage() {
       {/* 바로가기 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <a href="/brain" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
-          <span className="text-2xl">🧠</span>
+          <Brain className="w-7 h-7 text-primary" />
           <h3 className="text-sm font-medium text-white mt-3">Brain</h3>
-          <p className="text-xs text-text-muted mt-1">이메일, 일정, 메모 — 대화로 요청</p>
+          <p className="text-xs text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
         </a>
         <a href="/tasks" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
-          <span className="text-2xl">📋</span>
+          <ClipboardList className="w-7 h-7 text-blue-400" />
           <h3 className="text-sm font-medium text-white mt-3">Tasks & Ideas</h3>
           <p className="text-xs text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
         </a>
         <a href="/papers" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
-          <span className="text-2xl">📚</span>
+          <BookOpen className="w-7 h-7 text-green-400" />
           <h3 className="text-sm font-medium text-white mt-3">연구동향</h3>
           <p className="text-xs text-text-muted mt-1">주간 자동 논문 모니터링</p>
         </a>
         <a href="/meetings" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
-          <span className="text-2xl">🎙️</span>
+          <Mic className="w-7 h-7 text-yellow-400" />
           <h3 className="text-sm font-medium text-white mt-3">회의 노트</h3>
           <p className="text-xs text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
         </a>
@@ -78,7 +79,7 @@ export default function DashboardPage() {
       {/* 최근 회의 */}
       <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-white">🎙️ 최근 회의</h3>
+          <h3 className="font-semibold text-white flex items-center gap-2"><Mic className="w-4 h-4 text-yellow-400" /> 최근 회의</h3>
           <a href="/meetings" className="text-xs text-primary hover:underline">모두 보기 →</a>
         </div>
         {meetings.length === 0 ? (
@@ -93,7 +94,7 @@ export default function DashboardPage() {
                 )}
                 <div className="flex items-center gap-3 mt-2">
                   {m.actionItems.length > 0 && (
-                    <span className="text-[10px] text-yellow-400">📋 {m.actionItems.length} 액션아이템</span>
+                    <span className="text-[10px] text-yellow-400">{m.actionItems.length} 액션아이템</span>
                   )}
                   <span className="text-[10px] text-text-muted">
                     {new Date(m.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
@@ -122,7 +123,7 @@ function StatusBadge({ healthy }: { healthy: boolean | null }) {
 }
 
 function SummaryCard({ icon, title, value, subtitle, color }: {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   value: string | number;
   subtitle: string;
@@ -131,7 +132,7 @@ function SummaryCard({ icon, title, value, subtitle, color }: {
   return (
     <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
       <div className="flex items-center justify-between">
-        <span className="text-2xl">{icon}</span>
+        <span>{icon}</span>
         <span className={`text-2xl font-bold ${color}`}>{value}</span>
       </div>
       <h3 className="text-sm font-medium text-white mt-3">{title}</h3>
