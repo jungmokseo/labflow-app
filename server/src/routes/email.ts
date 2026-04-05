@@ -758,15 +758,14 @@ export async function emailRoutes(app: FastifyInstance) {
 
       const timezone = profile.timezone;
 
-      // T_last 결정: query.since > profile.lastBriefingAt > 오늘 0시
+      // T_last 결정: query.since > profile.lastBriefingAt > 24시간 전
       let afterDate: Date;
       if (query.since) {
         afterDate = new Date(query.since);
       } else if (rawProfile?.lastBriefingAt) {
         afterDate = rawProfile.lastBriefingAt;
       } else {
-        const now = new Date();
-        afterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        afterDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 첫 브리핑: 24시간 전
       }
 
       // Gmail 검색 쿼리 구성
@@ -1119,14 +1118,14 @@ export async function emailRoutes(app: FastifyInstance) {
       const timezone = profile.timezone;
 
       // T_last 결정
+      // T_last 결정: query.since > profile.lastBriefingAt > 24시간 전
       let afterDate: Date;
       if (query.since) {
         afterDate = new Date(query.since);
       } else if (rawProfile?.lastBriefingAt) {
         afterDate = rawProfile.lastBriefingAt;
       } else {
-        const now = new Date();
-        afterDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        afterDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 첫 브리핑: 24시간 전
       }
 
       const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
