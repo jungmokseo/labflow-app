@@ -46,7 +46,7 @@ async function backfillTable(
 
         if (existing) {
           await prisma.$executeRawUnsafe(
-            `UPDATE memo_embeddings SET embedding = $1::vector, chunk_text = $2, content_hash = $3, title = $4, updated_at = NOW() WHERE id = $5`,
+            `UPDATE memo_embeddings SET embedding = $1::vector, chunk_text = $2, content_hash = $3, title = $4, updated_at = NOW() WHERE id = $5::uuid`,
             vectorStr, rec.text.slice(0, 2000), hash, rec.title || null, (existing as any).id
           );
         } else {

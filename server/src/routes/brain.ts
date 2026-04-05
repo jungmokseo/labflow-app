@@ -138,8 +138,11 @@ type Intent =
   | 'weekly_review'  // /weekly — 주간 리뷰
   | 'email_briefing' // 이메일 브리핑 요청
   | 'email_query'    // 이메일 관련 후속 질문
+  | 'email_read'     // 특정 이메일 전문 읽기 / 최근 이메일 보기
+  | 'email_reply_draft' // 이메일 답장 초안 작성
   | 'email_preference' // 이메일 분류 설정 변경 (중요도, 키워드, 제외 패턴 등)
   | 'calendar_query' // 캘린더/일정 관련 질문
+  | 'calendar_create' // 일정 등록/생성
   | 'fallback_search'; // Intent 분류 실패 시 DB 범용 검색
 
 interface ClassifiedIntent {
@@ -271,9 +274,12 @@ ${contextBlock}${correctionBlock}
 - emerge: 숨겨진 연결/패턴 발견 요청. 예: "아이디어 연결 찾아줘", "패턴 찾아", "emerge", "숨겨진 연결", "연구 교차점"
 - weekly_review: 주간 리뷰/정리 요청. 예: "이번 주 정리", "주간 리뷰", "이번주 뭐 했지?", "weekly"
 - email_briefing: 이메일 브리핑 요청. 예: "이메일 확인해줘", "이메일 브리핑 해줘", "메일 뭐 왔어?", "오늘 이메일"
-- email_query: 이메일 관련 후속 질문. 예: "그 이메일 자세히", "OO교수 이메일", "답장 초안 써줘"
+- email_query: 이메일 관련 후속 질문 (브리핑 이후 추가 질문, 특정 이메일 검색). 예: "그 이메일 자세히", "OO교수 이메일"
+- email_read: 이메일 전문/전체 내용/원문을 보고 싶을 때, 특정 이메일을 읽고 싶을 때. 예: "이메일 보여줘", "메일 전체 내용", "원문 보여줘", "무슨 내용이야", "자세히 보여줘", "가장 최근 이메일 전체 내용"
+- email_reply_draft: 이메일 답장/회신/응답 초안을 작성해달라고 할 때. 예: "답장 써줘", "회신 초안", "이 메일에 답해줘", "reply 해줘", "답장 초안 써줘"
 - email_preference: 이메일 분류 설정 변경 요청. 예: "학술지 리뷰 중요도 올려줘", "광고 메일 제외해줘", "OO 키워드 중요하게 처리해", "이메일 분류 규칙 바꿔줘", "뉴스레터 안 보여줘"
-- calendar_query: 캘린더/일정 관련. 예: "오늘 일정", "이번주 스케줄", "다음 미팅 언제", "일정 잡아줘"
+- calendar_query: 캘린더/일정 조회 관련. 예: "오늘 일정", "이번주 스케줄", "다음 미팅 언제"
+- calendar_create: 일정/이벤트/미팅/회의를 캘린더에 등록/생성/추가할 때. 예: "일정 등록해줘", "캘린더에 넣어줘", "일정 만들어줘", "미팅 잡아줘", "이 미팅을 일정에 등록해줘"
 - general_chat: 일반 대화
 
 **분류 규칙:**
@@ -903,7 +909,7 @@ async function build5LayerContext(channelId: string, userId: string, labId: stri
   }
 
   // L5: Graph + Vector Context (LightRAG pattern)
-  const skipIntents = ['capture_create', 'capture_list', 'capture_complete', 'save_memo', 'email_briefing', 'add_dict'];
+  const skipIntents = ['capture_create', 'capture_list', 'capture_complete', 'save_memo', 'email_briefing', 'email_read', 'email_reply_draft', 'calendar_create', 'add_dict'];
   const simplePatterns = /^(안녕|고마워|감사|ㅎㅎ|ㅋㅋ|ok|네|응|좋아|알겠)/i;
 
   if (query && !skipIntents.includes(intent || '') && !simplePatterns.test(query.trim())) {
@@ -1056,8 +1062,8 @@ type ShadowType = 'email' | 'calendar' | 'knowledge';
  * Shadow에 저장할 도구 관련 intent만 매핑, 나머지는 null
  */
 function determineShadowType(intent: string, message: string): ShadowType | null {
-  if (['email_briefing', 'email_query', 'email_preference'].includes(intent)) return 'email';
-  if (intent === 'calendar_query') return 'calendar';
+  if (['email_briefing', 'email_query', 'email_preference', 'email_read', 'email_reply_draft'].includes(intent)) return 'email';
+  if (intent === 'calendar_query' || intent === 'calendar_create') return 'calendar';
   // 키워드 fallback (intent 분류 실패 대비)
   const lower = message.toLowerCase();
   if (/이메일|메일|email|브리핑|briefing|gmail/.test(lower)) return 'email';
@@ -1503,7 +1509,8 @@ export async function brainRoutes(app: FastifyInstance) {
     // 액션 커맨드 또는 도구 호출 intent (RAG 스킵)
     const isActionIntent = ['save_memo', 'capture_create', 'capture_complete',
       'daily_brief', 'emerge', 'weekly_review', 'add_dict',
-      'email_briefing', 'email_query', 'calendar_query'].includes(intent);
+      'email_briefing', 'email_query', 'email_read', 'email_reply_draft',
+      'calendar_query', 'calendar_create'].includes(intent);
 
     // ── Shadow Session: 도구 관련 intent 처리 ──
     const shadowType = determineShadowType(intent, message);
@@ -1546,6 +1553,154 @@ export async function brainRoutes(app: FastifyInstance) {
       const shadowChannelId = await getOrCreateShadow(userId, 'email');
       saveShadowMessage(shadowChannelId, message, toolResult.response).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
       shadowResult = toolResult.response;
+    } else if (shadowType === 'email' && intent === 'email_read') {
+      // ── 이메일 전문 읽기 ──
+      try {
+        const searchTerms = entities.subject || entities.sender || entities.content || '';
+        const queryParam = searchTerms ? `&q=${encodeURIComponent(searchTerms)}` : '';
+
+        const emailRes = await app.inject({
+          method: 'GET',
+          url: `/api/email/messages/recent?limit=3${queryParam}`,
+          headers: {
+            authorization: request.headers.authorization || '',
+            'content-type': 'application/json',
+            'x-dev-user-id': request.headers['x-dev-user-id'] as string || '',
+          },
+        });
+
+        const emailData = JSON.parse(emailRes.body);
+        if (emailData.emails && emailData.emails.length > 0) {
+          const emailTexts = emailData.emails.map((e: any, i: number) => {
+            return `--- 이메일 ${i + 1} ---
+**발신자:** ${e.from}
+**수신자:** ${e.to}
+**날짜:** ${e.date}
+**제목:** ${e.subject}
+${e.cc ? `**참조:** ${e.cc}` : ''}
+**Message-ID:** ${e.messageId || e.id}
+**Thread-ID:** ${e.threadId}
+
+**본문:**
+${e.body?.slice(0, 3000) || '(본문 없음)'}`;
+          }).join('\n\n');
+
+          shadowResult = `최근 이메일 ${emailData.emails.length}건:\n\n${emailTexts}`;
+
+          // Save to shadow for context
+          const shadowChannelId = await getOrCreateShadow(userId, 'email');
+          saveShadowMessage(shadowChannelId, message, shadowResult.slice(0, 2000)).catch(() => {});
+        } else {
+          shadowResult = '최근 이메일이 없습니다.';
+        }
+      } catch (err: any) {
+        console.error('[brain] email_read error:', err.message);
+        shadowResult = `이메일 조회 실패: ${err.message}`;
+      }
+    } else if (shadowType === 'email' && intent === 'email_reply_draft') {
+      // ── 이메일 답장 초안 작성 ──
+      try {
+        const searchTerms = entities.subject || entities.sender || entities.content || '';
+        const queryParam = searchTerms ? `&q=${encodeURIComponent(searchTerms)}` : '';
+
+        const emailRes = await app.inject({
+          method: 'GET',
+          url: `/api/email/messages/recent?limit=1${queryParam}`,
+          headers: {
+            authorization: request.headers.authorization || '',
+            'content-type': 'application/json',
+            'x-dev-user-id': request.headers['x-dev-user-id'] as string || '',
+          },
+        });
+
+        const emailData = JSON.parse(emailRes.body);
+        if (!emailData.emails || emailData.emails.length === 0) {
+          shadowResult = '답장할 이메일을 찾을 수 없습니다.';
+        } else {
+          const email = emailData.emails[0];
+
+          // Use Gemini to generate reply draft
+          const { GoogleGenerativeAI } = await import('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+          const draftModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+          const draftPrompt = `다음 이메일에 대한 답장 초안을 작성해주세요.
+사용자가 추가로 지시한 내용이 있으면 반영하세요.
+
+원본 이메일:
+- 발신자: ${email.from}
+- 제목: ${email.subject}
+- 본문: ${(email.body as string)?.slice(0, 2000) || email.snippet}
+
+사용자 지시: ${message}
+
+답장 초안을 한국어로 작성하세요. 이모지를 사용하지 마세요. 정중하고 전문적인 어조로 작성하세요.
+제목(Subject)과 본문(Body)을 구분하여 다음 JSON 형식으로만 응답하세요:
+{"subject": "Re: 원본 제목", "body": "답장 본문"}`;
+
+          const draftResult = await draftModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: draftPrompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
+          });
+
+          const draftText = draftResult.response.text().trim();
+          const jsonMatch = draftText.match(/\{[\s\S]*\}/);
+
+          if (jsonMatch) {
+            const draft = JSON.parse(jsonMatch[0]);
+
+            // Extract sender email for "to" field
+            const senderEmail = (email.from as string).match(/<([^>]+)>/)?.[1] || email.from;
+
+            // Create draft in Gmail
+            const draftRes = await app.inject({
+              method: 'POST',
+              url: '/api/email/draft',
+              headers: {
+                authorization: request.headers.authorization || '',
+                'content-type': 'application/json',
+                'x-dev-user-id': request.headers['x-dev-user-id'] as string || '',
+              },
+              body: JSON.stringify({
+                to: senderEmail,
+                subject: draft.subject || `Re: ${email.subject}`,
+                body: draft.body,
+                threadId: email.threadId,
+                inReplyTo: email.messageId,
+              }),
+            });
+
+            const draftData = JSON.parse(draftRes.body);
+
+            if (draftData.success) {
+              shadowResult = `**답장 초안이 Gmail 임시보관함에 저장되었습니다.**
+
+**원본:** ${email.subject} (${email.from})
+**제목:** ${draft.subject}
+
+**초안 내용:**
+${draft.body}
+
+---
+Gmail에서 확인하고 수정한 후 전송하세요.`;
+            } else {
+              shadowResult = `답장 초안 생성은 완료했으나 Gmail 저장에 실패했습니다: ${draftData.error || '알 수 없는 오류'}
+
+**초안 내용:**
+${draft.body}`;
+            }
+
+            // Save to shadow
+            const shadowChannelId = await getOrCreateShadow(userId, 'email');
+            saveShadowMessage(shadowChannelId, message, `답장 초안 작성: ${email.subject}`).catch(() => {});
+          } else {
+            shadowResult = '답장 초안 생성에 실패했습니다. 다시 시도해주세요.';
+          }
+        }
+      } catch (err: any) {
+        console.error('[brain] email_reply_draft error:', err.message);
+        shadowResult = `답장 초안 생성 실패: ${err.message}`;
+      }
     } else if (intent === 'email_preference') {
       // ── 이메일 분류 설정 변경 (중요도, 키워드, 제외 패턴 등) ──
       try {
@@ -1609,6 +1764,71 @@ ${currentRules}
       } catch (err: any) {
         console.error('[brain] email_preference error:', err.message);
         shadowResult = '이메일 설정 변경 중 오류가 발생했습니다. 설정 페이지에서 직접 변경해주세요.';
+      }
+    } else if (shadowType === 'calendar' && intent === 'calendar_create') {
+      // ── 캘린더 이벤트 생성 ──
+      try {
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+        const calModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+        const today = new Date().toISOString().split('T')[0];
+        const extractPrompt = `오늘 날짜: ${today}
+다음 메시지에서 일정 정보를 추출하세요. JSON으로만 응답:
+{"title": "일정 제목", "date": "YYYY-MM-DD", "time": "HH:mm" 또는 null, "duration": 60, "location": "" 또는 null, "description": "" 또는 null}
+
+메시지: "${message}"`;
+
+        const extractResult = await calModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: extractPrompt }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 500 },
+        });
+
+        const extractText = extractResult.response.text().trim();
+        const jsonMatch = extractText.match(/\{[\s\S]*\}/);
+
+        if (jsonMatch) {
+          const eventData = JSON.parse(jsonMatch[0]);
+
+          if (!eventData.title || !eventData.date) {
+            shadowResult = '일정 제목과 날짜를 알려주세요. 예: "내일 오후 2시에 팀 미팅 일정 등록해줘"';
+          } else {
+            const calRes = await app.inject({
+              method: 'POST',
+              url: '/api/email/calendar-event',
+              headers: {
+                authorization: request.headers.authorization || '',
+                'content-type': 'application/json',
+                'x-dev-user-id': request.headers['x-dev-user-id'] as string || '',
+              },
+              body: JSON.stringify(eventData),
+            });
+
+            const calData = JSON.parse(calRes.body);
+
+            if (calData.eventId) {
+              shadowResult = `**일정이 Google Calendar에 등록되었습니다.**
+
+- **제목:** ${eventData.title}
+- **날짜:** ${eventData.date}${eventData.time ? ` ${eventData.time}` : ' (종일)'}
+- **시간:** ${eventData.duration}분
+${eventData.location ? `- **장소:** ${eventData.location}` : ''}
+
+${calData.htmlLink ? `[Google Calendar에서 보기](${calData.htmlLink})` : ''}`;
+            } else {
+              shadowResult = `일정 등록 실패: ${calData.error || '알 수 없는 오류'}`;
+            }
+          }
+        } else {
+          shadowResult = '일정 정보를 추출할 수 없습니다. 제목, 날짜, 시간을 포함해서 다시 말씀해주세요.';
+        }
+
+        // Save to shadow
+        const shadowChannelId = await getOrCreateShadow(userId, 'calendar');
+        saveShadowMessage(shadowChannelId, message, shadowResult || '').catch(() => {});
+      } catch (err: any) {
+        console.error('[brain] calendar_create error:', err.message);
+        shadowResult = `일정 등록 실패: ${err.message}`;
       }
     } else if (shadowType === 'calendar') {
       const toolResult = await handleToolMessage('calendar', message + fileContext, userId, lab, request.labId);

@@ -1857,6 +1857,87 @@ ${profile.groups.length > 0
     }
   });
 
+  // ── GET /api/email/messages/recent — 최근 이메일 목록 (전문 포함) ──
+  app.get('/api/email/messages/recent', async (request, reply) => {
+    const userId = request.userId!;
+    const query = request.query as { limit?: string; q?: string };
+    const limit = Math.min(parseInt(query.limit || '5', 10) || 5, 10);
+    const searchQuery = (query.q || '').trim();
+
+    try {
+      const user = await prisma.user.findFirst({ where: { id: userId } });
+      if (!user) return reply.code(404).send({ error: 'User not found' });
+
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail not connected' });
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken.id },
+            data: {
+              accessToken: encryptToken(tokens.access_token!),
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+            },
+          });
+        } catch { /* ignore token refresh save error */ }
+      });
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+      const listRes = await gmail.users.messages.list({
+        userId: 'me',
+        maxResults: limit,
+        q: searchQuery || undefined,
+      });
+
+      const messageIds = listRes.data.messages || [];
+      if (messageIds.length === 0) return reply.send({ emails: [] });
+
+      // Fetch full message details in parallel
+      const emails = await Promise.all(
+        messageIds.map(async (msg) => {
+          const detail = await gmail.users.messages.get({
+            userId: 'me',
+            id: msg.id!,
+            format: 'full',
+          });
+
+          const headers = detail.data.payload?.headers || [];
+          const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+
+          // Extract body text using existing extractBody helper
+          const body = detail.data.payload ? extractBody(detail.data.payload) : '';
+
+          return {
+            id: msg.id,
+            threadId: detail.data.threadId,
+            from: getHeader('From'),
+            to: getHeader('To'),
+            cc: getHeader('Cc'),
+            subject: getHeader('Subject'),
+            date: getHeader('Date'),
+            snippet: detail.data.snippet || '',
+            body,
+            messageId: getHeader('Message-ID'),
+          };
+        })
+      );
+
+      return reply.send({ emails });
+    } catch (error: any) {
+      app.log.error('Recent emails fetch failed:', error);
+      return reply.code(500).send({ error: '이메일 조회 실패', details: error.message });
+    }
+  });
+
   // ── GET /api/email/briefing/history — 이메일 브리핑 히스토리 ──
   app.get('/api/email/briefing/history', async (request, reply) => {
     const userId = request.userId!;
