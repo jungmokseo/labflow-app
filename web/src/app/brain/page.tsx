@@ -5,6 +5,8 @@ import {
   brainChat, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel, searchBrainMemory,
   type BrainMessage, type UploadResult,
 } from '@/lib/api';
+import { useApiData } from '@/lib/use-api';
+import { useConversationsStore } from '@/store/conversations';
 import { stripEmoji } from '@/lib/strip-emoji';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -42,11 +44,10 @@ function formatRecordingTime(seconds: number): string {
 const MAX_RECORDING_SECONDS = 180; // 3 minutes
 
 export default function BrainPage() {
-  const [sessions, setSessions] = useState<any[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<BrainMessage[]>([]);
+  const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
   const [tab, setTab] = useState<'chat' | 'search'>('chat');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any>(null);
@@ -67,8 +68,30 @@ export default function BrainPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
 
-  useEffect(() => { loadChannels(); }, []);
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  // Conversations store
+  const { conversations, setMessages: storeMessages, addMessage: storeAddMessage, setStreaming } = useConversationsStore();
+
+  // SWR for channels list
+  const { data: channelsData, mutate: refreshChannels } = useApiData(
+    'brain-channels',
+    async () => { const res = await getBrainChannels(); return Array.isArray(res.data) ? res.data : []; },
+    { revalidateOnFocus: false, dedupingInterval: 60000 }
+  );
+  const sessions = channelsData || [];
+
+  // Derive messages from store or local state
+  const activeMessages = activeChannelId ? (conversations[activeChannelId]?.messages || []) : localNewMessages;
+  const isChannelStreaming = activeChannelId ? (conversations[activeChannelId]?.isStreaming || false) : false;
+  const loading = localLoading || isChannelStreaming;
+
+  // Auto-load first channel messages
+  useEffect(() => {
+    if (sessions.length > 0 && !activeChannelId) {
+      loadMessages(sessions[0].id);
+    }
+  }, [sessions]);
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
 
   // Auto-stop recording at max time
   useEffect(() => {
@@ -77,21 +100,16 @@ export default function BrainPage() {
     }
   }, [isRecording, recordingTime]);
 
-  const loadChannels = useCallback(async () => {
-    try {
-      const res = await getBrainChannels();
-      const data = Array.isArray(res.data) ? res.data : [];
-      setSessions(data);
-      if (data.length > 0 && !activeChannelId) {
-        loadMessages(data[0].id);
-      }
-    } catch {}
-  }, []);
-
   async function loadMessages(channelId: string) {
+    // Check store first
+    if (conversations[channelId]?.messages?.length) {
+      setActiveChannelId(channelId);
+      return;
+    }
     try {
       const res = await getChannelMessages(channelId);
-      setMessages(res.data || res || []);
+      const msgs = res.data || res || [];
+      storeMessages(channelId, msgs);
       setActiveChannelId(channelId);
     } catch (err) {
       console.error('Failed to load messages', err);
@@ -104,20 +122,28 @@ export default function BrainPage() {
 
   function handleNewSession() {
     setActiveChannelId(null);
-    setMessages([]);
+    setLocalNewMessages([]);
   }
 
   async function handleDeleteSession(channelId: string) {
     if (!confirm('이 대화를 삭제하시겠습니까?')) return;
     try {
       await deleteBrainChannel(channelId);
-      setSessions(prev => prev.filter(s => s.id !== channelId));
+      refreshChannels((prev: any) => prev ? (prev as any[]).filter((s: any) => s.id !== channelId) : prev, { revalidate: false });
       if (activeChannelId === channelId) {
         setActiveChannelId(null);
-        setMessages([]);
+        setLocalNewMessages([]);
       }
     } catch {
       alert('삭제 실패');
+    }
+  }
+
+  function addMessageToActive(msg: BrainMessage) {
+    if (activeChannelId) {
+      storeAddMessage(activeChannelId, msg);
+    } else {
+      setLocalNewMessages(prev => [...prev, msg]);
     }
   }
 
@@ -128,19 +154,19 @@ export default function BrainPage() {
     try {
       const result = await brainUpload(file);
       setUploadedFile(result);
-      setMessages(prev => [...prev, {
+      addMessageToActive({
         id: `file-${Date.now()}`,
         role: 'assistant',
         content: result.message,
         createdAt: new Date().toISOString(),
-      }]);
+      });
     } catch (err: any) {
-      setMessages(prev => [...prev, {
+      addMessageToActive({
         id: `err-${Date.now()}`,
         role: 'assistant',
         content: `파일 처리 실패: ${err.message}`,
         createdAt: new Date().toISOString(),
-      }]);
+      });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -152,39 +178,67 @@ export default function BrainPage() {
     const msg = input;
     const currentFileId = uploadedFile?.fileId;
     const isNewSession = !activeChannelId;
+    const channelIdAtSend = activeChannelId;
     setInput('');
     setUploadedFile(null);
-    setMessages(prev => [...prev, { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() }]);
-    setLoading(true);
+
+    const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() };
+
+    if (channelIdAtSend) {
+      storeAddMessage(channelIdAtSend, userMsg);
+      setStreaming(channelIdAtSend, true);
+    } else {
+      setLocalNewMessages(prev => [...prev, userMsg]);
+      setLocalLoading(true);
+    }
 
     try {
-      const result = await brainChat(msg, activeChannelId || undefined, currentFileId, isNewSession ? true : undefined);
-      setMessages(prev => [...prev, {
+      const result = await brainChat(msg, channelIdAtSend || undefined, currentFileId, isNewSession ? true : undefined);
+      const assistantMsg: BrainMessage = {
         id: `resp-${Date.now()}`,
         role: 'assistant',
         content: result.response,
         createdAt: new Date().toISOString(),
-      }]);
-      if (result.channelId && result.channelId !== activeChannelId) {
+      };
+
+      if (result.channelId && result.channelId !== channelIdAtSend) {
+        // New channel created -- move local messages to store
+        const newMsgs = isNewSession ? [...localNewMessages, userMsg, assistantMsg] : [userMsg, assistantMsg];
+        storeMessages(result.channelId, newMsgs);
         setActiveChannelId(result.channelId);
-        loadChannels();
+        setLocalNewMessages([]);
+        refreshChannels();
+        // Sync with server messages
         try {
           const res = await getChannelMessages(result.channelId);
           const serverMsgs = res.data || res || [];
           if (Array.isArray(serverMsgs) && serverMsgs.length > 0) {
-            setMessages(serverMsgs);
+            storeMessages(result.channelId, serverMsgs);
           }
         } catch {}
+      } else if (channelIdAtSend) {
+        storeAddMessage(channelIdAtSend, assistantMsg);
+      } else {
+        setLocalNewMessages(prev => [...prev, assistantMsg]);
       }
     } catch (err: any) {
-      setMessages(prev => [...prev, {
+      const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
         content: `오류: ${err.message}`,
         createdAt: new Date().toISOString(),
-      }]);
+      };
+      if (channelIdAtSend) {
+        storeAddMessage(channelIdAtSend, errMsg);
+      } else {
+        setLocalNewMessages(prev => [...prev, errMsg]);
+      }
     } finally {
-      setLoading(false);
+      if (channelIdAtSend) {
+        setStreaming(channelIdAtSend, false);
+      } else {
+        setLocalLoading(false);
+      }
     }
   }
 
@@ -303,9 +357,9 @@ export default function BrainPage() {
     try {
       const result = await brainUpload(file);
       setUploadedFile(result);
-      setMessages(prev => [...prev, { id: `file-${Date.now()}`, role: 'assistant', content: result.message, createdAt: new Date().toISOString() }]);
+      addMessageToActive({ id: `file-${Date.now()}`, role: 'assistant', content: result.message, createdAt: new Date().toISOString() });
     } catch (err: any) {
-      setMessages(prev => [...prev, { id: `err-${Date.now()}`, role: 'assistant', content: `파일 처리 실패: ${err.message}`, createdAt: new Date().toISOString() }]);
+      addMessageToActive({ id: `err-${Date.now()}`, role: 'assistant', content: `파일 처리 실패: ${err.message}`, createdAt: new Date().toISOString() });
     } finally { setUploading(false); }
   }
 
@@ -356,7 +410,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
               {todaySessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
             </>
           )}
@@ -364,7 +418,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
               {weekSessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
             </>
           )}
@@ -372,7 +426,7 @@ export default function BrainPage() {
             <>
               <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
               {olderSessions.slice(0, 15).map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} />
+                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
             </>
           )}
@@ -415,7 +469,7 @@ export default function BrainPage() {
             {/* Messages area — Claude-style */}
             <div className="flex-1 overflow-y-auto p-4">
               <div className="max-w-3xl mx-auto space-y-6">
-                {messages.length === 0 && (
+                {activeMessages.length === 0 && (
                   <div className="text-center text-text-muted py-12">
                     <Brain className="w-12 h-12 text-primary/40 mx-auto mb-4" />
                     <p className="text-lg font-medium">연구실 AI 비서</p>
@@ -429,7 +483,7 @@ export default function BrainPage() {
                     </div>
                   </div>
                 )}
-                {messages.map(msg => (
+                {activeMessages.map(msg => (
                   <div key={msg.id}>
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
@@ -587,13 +641,13 @@ export default function BrainPage() {
 // Need to import these for the search labels
 import { ClipboardList, BookOpen, User } from 'lucide-react';
 
-function SessionButton({ ch, isActive, onClick, onDelete }: { ch: any; isActive: boolean; onClick: () => void; onDelete: () => void }) {
+function SessionButton({ ch, isActive, onClick, onDelete, isStreaming }: { ch: any; isActive: boolean; onClick: () => void; onDelete: () => void; isStreaming?: boolean }) {
   return (
     <div className={`group w-full flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
       isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
     }`}>
       <button onClick={onClick} className="flex-1 flex items-center gap-2 min-w-0">
-        {isActive && <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" />}
+        {isStreaming ? <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" /> : isActive ? <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" /> : null}
         <span className="flex-1 text-left truncate text-xs">
           {ch.name || `대화 #${ch.id.slice(-4)}`}
         </span>

@@ -7,8 +7,9 @@ import { createClient } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
-  FlaskConical, Settings,
+  FlaskConical, Settings, Loader2,
 } from 'lucide-react';
+import { useBackgroundTasks } from '@/store/background-tasks';
 
 const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
@@ -26,6 +27,9 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
   user: User | null;
   onSignOut: () => void;
 }) {
+  const { tasks } = useBackgroundTasks();
+  const runningTasks = tasks.filter(t => t.status === 'running');
+
   return (
     <>
       <div className="p-6">
@@ -55,6 +59,17 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
           );
         })}
       </nav>
+
+      {runningTasks.length > 0 && (
+        <div className="px-4 py-2 border-t border-bg-input/50">
+          {runningTasks.map(task => (
+            <div key={task.id} className="flex items-center gap-2 text-xs text-text-muted py-1">
+              <Loader2 className="w-3 h-3 animate-spin text-primary" />
+              <span className="truncate">{task.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="p-4 border-t border-bg-input/50">
         <div className="flex items-center gap-3">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/api';
+import { useApiData } from '@/lib/use-api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SkeletonCard, SkeletonLine } from '@/components/Skeleton';
@@ -28,8 +29,6 @@ function isAcceptedAudioFile(file: File): boolean {
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
 export default function MeetingsPage() {
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Recording state
@@ -55,20 +54,12 @@ export default function MeetingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Load meetings
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await getMeetings(20);
-        setMeetings(res.data);
-      } catch (err) {
-        console.error('Failed to load meetings:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+  // Load meetings via SWR
+  const { data: meetingsData, isLoading: loading, mutate: refreshMeetings } = useApiData(
+    'meetings',
+    async () => { const res = await getMeetings(20); return res; }
+  );
+  const meetings = meetingsData?.data || [];
 
   // Cleanup audio URL on unmount
   useEffect(() => {
@@ -213,7 +204,7 @@ export default function MeetingsPage() {
         title: jobTitle || undefined,
         duration: jobDuration,
       });
-      setMeetings(prev => [res.data, ...prev]);
+      refreshMeetings((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
       setProcessingQueue(prev => prev.map(j => j.id === jobId ? { ...j, status: 'done' } : j));
       // 3초 후 완료 표시 제거
       setTimeout(() => setProcessingQueue(prev => prev.filter(j => j.id !== jobId)), 3000);
@@ -227,7 +218,7 @@ export default function MeetingsPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteMeeting(id);
-      setMeetings((prev) => prev.filter((m) => m.id !== id));
+      refreshMeetings((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((m: Meeting) => m.id !== id) } : prev, { revalidate: false });
     } catch (err) {
       console.error('Failed to delete meeting:', err);
     }

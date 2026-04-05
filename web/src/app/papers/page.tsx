@@ -6,6 +6,7 @@ import {
   getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
   type PaperAlertResult,
 } from '@/lib/api';
+import { useApiData } from '@/lib/use-api';
 import { SkeletonCard, SkeletonLine, StepProgress } from '@/components/Skeleton';
 import {
   BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
@@ -78,7 +79,6 @@ interface WeekGroup {
 }
 
 export default function PapersPage() {
-  const [results, setResults] = useState<PaperAlertResult[]>([]);
   const [keywords, setKeywords] = useState('');
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
   const [customFeeds, setCustomFeeds] = useState<Array<{ name: string; rssUrl: string }>>([]);
@@ -100,7 +100,14 @@ export default function PapersPage() {
   const [pdfUploading, setPdfUploading] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadAlerts(); loadResults(); }, []);
+  // SWR for paper results
+  const { data: resultsData, mutate: refreshResults } = useApiData(
+    'paper-results',
+    async () => { const data = await getPaperAlertResults(); return data.results || data.data || []; }
+  );
+  const results: PaperAlertResult[] = resultsData || [];
+
+  useEffect(() => { loadAlerts(); }, []);
 
   const totalJournals = selectedJournals.length + customFeeds.length;
 
@@ -113,13 +120,6 @@ export default function PapersPage() {
         setSelectedJournals(alertList[0].journals);
         setCustomFeeds((alertList[0] as any).customFeeds || []);
       }
-    } catch {}
-  }
-
-  async function loadResults() {
-    try {
-      const data = await getPaperAlertResults();
-      setResults(data.results || data.data || []);
     } catch {}
   }
 
@@ -145,7 +145,7 @@ export default function PapersPage() {
       setCrawlStep(1); // RSS 수집 + 키워드 매칭
       await runPaperCrawl();
       setCrawlStep(2); // 결과 로드
-      await loadResults();
+      await refreshResults();
       setCrawlStep(3); // 완료
     } catch (err: any) { setError(err.message); }
     finally { setCrawling(false); setCrawlStep(0); }
@@ -225,7 +225,7 @@ export default function PapersPage() {
     setPdfUploading(true);
     try {
       await uploadPaperPdf(file);
-      await loadResults();
+      await refreshResults();
     } catch (err: any) { setError(err.message); }
     finally { setPdfUploading(false); if (pdfInputRef.current) pdfInputRef.current.value = ''; }
   }
@@ -424,7 +424,7 @@ export default function PapersPage() {
                             </p>
                           )}
                           {!paper.read && (
-                            <button onClick={() => { markPaperRead(paper.id); setResults(p => p.map(r => r.id === paper.id ? {...r, read: true} : r)); }}
+                            <button onClick={() => { markPaperRead(paper.id); refreshResults((prev: any) => prev ? (prev as PaperAlertResult[]).map((r: PaperAlertResult) => r.id === paper.id ? {...r, read: true} : r) : prev, { revalidate: false }); }}
                               className="text-xs text-primary hover:underline">확인 완료</button>
                           )}
                         </div>

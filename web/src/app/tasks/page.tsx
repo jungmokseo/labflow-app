@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   getCaptures, createCapture, updateCapture, deleteCapture, deleteCompletedCaptures,
   type Capture,
 } from '@/lib/api';
+import { useApiData } from '@/lib/use-api';
 import { SkeletonCard } from '@/components/Skeleton';
 import { CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic, X } from 'lucide-react';
 
@@ -31,8 +32,6 @@ const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
 };
 
 export default function TasksPage() {
-  const [captures, setCaptures] = useState<Capture[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [sortBy, setSortBy] = useState<SortBy>('newest');
@@ -40,24 +39,21 @@ export default function TasksPage() {
   const [newInput, setNewInput] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
-  const [meta, setMeta] = useState<any>(null);
 
-  useEffect(() => { loadCaptures(); }, [tab, statusFilter, sortBy]);
-
-  async function loadCaptures() {
-    setLoading(true);
-    try {
+  const { data: capturesData, isLoading: loading, mutate: refreshCaptures } = useApiData(
+    `captures-${tab}-${statusFilter}-${sortBy}`,
+    async () => {
       const res = await getCaptures({
         category: tab === 'all' ? undefined : tab,
         completed: statusFilter === 'completed' ? 'true' : 'false',
         sort: sortBy,
         limit: 100,
       });
-      setCaptures(res.data || []);
-      setMeta(res.meta || null);
-    } catch { setError('데이터를 불러올 수 없습니다'); }
-    finally { setLoading(false); }
-  }
+      return res;
+    }
+  );
+  const captures = capturesData?.data || [];
+  const meta = capturesData?.meta || null;
 
   async function handleAdd() {
     if (!newInput.trim()) return;
@@ -66,9 +62,12 @@ export default function TasksPage() {
     setNewInput('');
     try {
       const res = await createCapture(inputText);
-      // 서버 응답으로 목록에 추가 (전체 재조회 없이)
-      if (res.data) setCaptures(prev => [res.data, ...prev]);
-      else await loadCaptures();
+      // 서버 응답으로 목록에 추가 (낙관적 업데이트)
+      if (res.data) {
+        refreshCaptures((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
+      } else {
+        await refreshCaptures();
+      }
     } catch (err: any) { setError(err.message); }
     finally { setAdding(false); }
   }
@@ -76,35 +75,31 @@ export default function TasksPage() {
   async function handleToggleComplete(c: Capture) {
     // 낙관적 업데이트: UI 먼저 반영
     const newCompleted = !c.completed;
-    setCaptures(prev => prev.map(cap =>
-      cap.id === c.id ? { ...cap, completed: newCompleted } : cap
-    ));
+    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, completed: newCompleted } : cap) } : prev, { revalidate: false });
     try {
       await updateCapture(c.id, { completed: newCompleted });
-    } catch { loadCaptures(); } // 실패 시 원복
+    } catch { refreshCaptures(); } // 실패 시 원복
   }
 
   async function handleReview(c: Capture) {
-    setCaptures(prev => prev.map(cap =>
-      cap.id === c.id ? { ...cap, reviewed: true } : cap
-    ));
+    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, reviewed: true } : cap) } : prev, { revalidate: false });
     try {
       await updateCapture(c.id, { reviewed: true });
-    } catch { loadCaptures(); }
+    } catch { refreshCaptures(); }
   }
 
   async function handleDelete(id: string) {
-    setCaptures(prev => prev.filter(cap => cap.id !== id));
+    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== id) } : prev, { revalidate: false });
     try {
       await deleteCapture(id);
-    } catch { loadCaptures(); }
+    } catch { refreshCaptures(); }
   }
 
   async function handleClearCompleted() {
-    setCaptures(prev => prev.filter(cap => !cap.completed));
+    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => !cap.completed) } : prev, { revalidate: false });
     try {
       await deleteCompletedCaptures();
-    } catch { loadCaptures(); }
+    } catch { refreshCaptures(); }
   }
 
   // Client-side search filter
