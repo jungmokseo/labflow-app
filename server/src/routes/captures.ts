@@ -18,6 +18,8 @@ import { classify } from '../services/gemini-classifier.js';
 import { transcribeAndClassify } from '../services/voice-transcriber.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { CaptureCategory, Priority, Prisma } from '@prisma/client';
+import { embedAndStore } from '../services/rag-engine.js';
+import { basePrismaClient } from '../config/prisma.js';
 
 // ── Zod 스키마 ──────────────────────────────────────
 const createCaptureSchema = z.object({
@@ -105,6 +107,13 @@ export async function captureRoutes(app: FastifyInstance) {
         modelUsed: classification.modelUsed,
       },
     });
+
+    // 비동기 임베딩 (LightRAG 연동)
+    embedAndStore(basePrismaClient, {
+      sourceType: 'capture' as any, sourceId: capture.id, userId: user.id,
+      title: classification.summary, content: body.content,
+      tags: classification.tags, source: 'capture',
+    }).catch((err: any) => console.error('[background] capture embedAndStore:', err.message || err));
 
     return reply.code(201).send({
       success: true,
@@ -345,6 +354,13 @@ export async function captureRoutes(app: FastifyInstance) {
         },
       });
 
+      // 비동기 임베딩 (LightRAG 연동)
+      embedAndStore(basePrismaClient, {
+        sourceType: 'capture' as any, sourceId: capture.id, userId: user.id,
+        title: result.summary, content: result.transcription,
+        tags: result.tags, source: 'capture-voice',
+      }).catch((err: any) => console.error('[background] capture embedAndStore:', err.message || err));
+
       return reply.code(201).send({
         success: true,
         data: {
@@ -353,7 +369,7 @@ export async function captureRoutes(app: FastifyInstance) {
         },
       });
     } catch (error: any) {
-      console.error('🎤 음성 캡처 실패:', error);
+      console.error('[voice-capture] 음성 캡처 실패:', error);
       return reply.code(500).send({
         error: '음성 처리 중 오류가 발생했습니다',
         details: error.message,

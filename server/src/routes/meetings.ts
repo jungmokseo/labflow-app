@@ -26,6 +26,8 @@ import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { embedAndStore } from '../services/rag-engine.js';
+import { basePrismaClient } from '../config/prisma.js';
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -711,6 +713,13 @@ export async function meetingRoutes(app: FastifyInstance) {
           modelUsed: result.modelUsed,
         },
       });
+
+      // 비동기 임베딩 (LightRAG 연동)
+      const embText = [result.title, result.summary || '', ...result.agenda, ...result.actionItems].filter(Boolean).join('\n');
+      embedAndStore(basePrismaClient, {
+        sourceType: 'meeting' as any, sourceId: meeting.id, userId: user.id,
+        title: result.title, content: embText, source: 'meeting',
+      }).catch((err: any) => console.error('[background] meeting embedAndStore:', err.message || err));
 
       // 비동기 지식 그래프 관계 추출
       const graphText = [

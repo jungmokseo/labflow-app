@@ -121,11 +121,23 @@ async function main() {
   }));
   const r4 = await backfillTable('KnowledgeNode', nodeRecords, 'knowledge_node');
 
+  // 5. Capture
+  const captures = await prisma.capture.findMany();
+  const captureRecords = captures.map(c => ({
+    id: c.id,
+    text: [c.summary, c.content].filter(Boolean).join('\n'),
+    title: c.summary || undefined,
+    userId: c.userId,
+    labId: c.labId,
+  }));
+  const r5 = await backfillTable('Capture', captureRecords, 'capture');
+
   console.log('\n=== Backfill Summary ===');
   console.log(`ChannelSummary: ${r1.success} embedded, ${r1.skipped} skipped, ${r1.failed} failed`);
   console.log(`Memo: ${r2.success} embedded, ${r2.skipped} skipped, ${r2.failed} failed`);
   console.log(`Meeting: ${r3.success} embedded, ${r3.skipped} skipped, ${r3.failed} failed`);
   console.log(`KnowledgeNode: ${r4.success} embedded, ${r4.skipped} skipped, ${r4.failed} failed`);
+  console.log(`Capture: ${r5.success} embedded, ${r5.skipped} skipped, ${r5.failed} failed`);
 
   await prisma.$disconnect();
 }
