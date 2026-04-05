@@ -1,12 +1,27 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#6366f1',
+};
 
 export const metadata: Metadata = {
   title: 'LabFlow — Research Lab AI OS',
   description: 'AI-powered research lab management dashboard',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'LabFlow',
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -17,6 +32,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="ko" className="dark">
       <body className="min-h-screen bg-bg text-text-main antialiased">
         <AuthInit />
+        <ServiceWorkerRegister />
         {user ? (
           <div className="flex h-screen">
             <Sidebar />
