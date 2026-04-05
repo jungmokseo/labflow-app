@@ -61,13 +61,16 @@ function buildEmbeddableText(record: EmbeddableRecord): string {
   if (record.title) parts.push(record.title);
   if (record.content) parts.push(record.content);
   if (record.tags?.length) parts.push(`태그: ${record.tags.join(', ')}`);
-  return parts.join('\n').slice(0, 8000);
+  return parts.join('\n');
 }
 
 /**
- * 텍스트를 의미 단위 청크로 분할 (긴 메모의 검색 정밀도 향상)
- * - 500자 이하: 단일 청크
- * - 500자 초과: 단락 기반 분할 + 제목/태그 컨텍스트 프리픽스
+ * 문서 유형별 스마트 청킹
+ * - 규정/매뉴얼: 조항 단위 (제X조, X항, X.X.)
+ * - 논문: 섹션 단위 (Abstract, Introduction, Methods, Results, Discussion, References)
+ * - 엑셀/데이터: 행 그룹 단위
+ * - 회의록: 안건 단위
+ * - 일반: 단락 기반 500자
  */
 function chunkRecord(record: EmbeddableRecord): Array<{ index: number; text: string }> {
   const fullText = buildEmbeddableText(record);
@@ -76,34 +79,81 @@ function chunkRecord(record: EmbeddableRecord): Array<{ index: number; text: str
     return [{ index: 0, text: fullText }];
   }
 
-  // 컨텍스트 프리픽스: 모든 청크에 제목+태그를 포함 (검색 시 맥락 유지)
+  // Context prefix for all chunks
   const prefix = [
     record.source ? `[${record.source}]` : '',
     record.title || '',
     record.tags?.length ? `태그: ${record.tags.join(', ')}` : '',
   ].filter(Boolean).join(' | ');
-
   const prefixStr = prefix ? `${prefix}\n` : '';
-  const maxChunkSize = 450 - prefixStr.length;
 
-  // 단락 기반 분할
-  const paragraphs = record.content.split(/\n\n+|\n(?=[■•\-\d]+\.?\s)/);
+  // Detect document type and choose strategy
+  const content = record.content;
+  const isRegulation = /제\d+조|제\d+항|\d+\.\d+\.\d+|조항|규정|시행세칙|매뉴얼/i.test(content);
+  const isPaper = /abstract|introduction|method|result|discussion|conclusion|references|초록|서론|방법|결과|논의|결론|참고문헌/i.test(content);
+  const isMeeting = /안건|논의 내용|액션 아이템|다음 미팅|다음 할 일/i.test(content);
+  const isExcel = record.tags?.includes('excel') || (record.source === 'file-upload' && record.tags?.includes('excel'));
+
+  let sections: string[];
+
+  if (isRegulation) {
+    // Split by article/section markers
+    sections = content.split(/(?=제\d+조|제\d+항|\n\d+\.\d+[\.\s]|\n[①②③④⑤⑥⑦⑧⑨⑩])/);
+  } else if (isPaper) {
+    // Split by section headers
+    sections = content.split(/(?=\n(?:Abstract|Introduction|Method|Result|Discussion|Conclusion|Reference|초록|서론|방법|결과|논의|결론|참고문헌)[s]?\b)/i);
+  } else if (isMeeting) {
+    // Split by agenda items
+    sections = content.split(/(?=\n(?:##?\s|안건|논의|액션|다음))/);
+  } else {
+    // Default: paragraph-based
+    sections = content.split(/\n\n+|\n(?=[■•\-\d]+\.?\s)/);
+  }
+
+  // Build chunks with max size, merging small sections
+  const maxChunkSize = 800 - prefixStr.length;
   const chunks: Array<{ index: number; text: string }> = [];
   let currentChunk = '';
   let idx = 0;
 
-  for (const para of paragraphs) {
-    if (currentChunk.length + para.length > maxChunkSize && currentChunk.length > 0) {
+  for (const section of sections) {
+    const trimmed = section.trim();
+    if (!trimmed) continue;
+
+    // If a single section is too large, sub-split by paragraphs
+    if (trimmed.length > maxChunkSize) {
+      if (currentChunk.trim()) {
+        chunks.push({ index: idx++, text: `${prefixStr}${currentChunk.trim()}` });
+        currentChunk = '';
+      }
+      // Sub-split large section
+      const subParts = trimmed.split(/\n\n+/);
+      let subChunk = '';
+      for (const sub of subParts) {
+        if (subChunk.length + sub.length > maxChunkSize && subChunk.length > 0) {
+          chunks.push({ index: idx++, text: `${prefixStr}${subChunk.trim()}` });
+          subChunk = '';
+        }
+        subChunk += sub + '\n';
+      }
+      if (subChunk.trim()) {
+        chunks.push({ index: idx++, text: `${prefixStr}${subChunk.trim()}` });
+      }
+      continue;
+    }
+
+    if (currentChunk.length + trimmed.length > maxChunkSize && currentChunk.length > 0) {
       chunks.push({ index: idx++, text: `${prefixStr}${currentChunk.trim()}` });
       currentChunk = '';
     }
-    currentChunk += para + '\n';
+    currentChunk += trimmed + '\n\n';
   }
+
   if (currentChunk.trim()) {
     chunks.push({ index: idx, text: `${prefixStr}${currentChunk.trim()}` });
   }
 
-  return chunks.length > 0 ? chunks : [{ index: 0, text: fullText }];
+  return chunks.length > 0 ? chunks : [{ index: 0, text: fullText.slice(0, 1500) }];
 }
 
 export async function embedAndStore(
@@ -515,5 +565,59 @@ export async function isRagReady(prisma: any): Promise<boolean> {
     return (result as any[])[0]?.cnt > 0;
   } catch {
     return false;
+  }
+}
+
+// ── 8. Similar Document Detection ──────────────────
+
+export interface SimilarDocument {
+  sourceId: string;
+  sourceType: string;
+  title: string | null;
+  similarity: number;
+  chunkText: string;
+}
+
+/**
+ * 업로드된 문서와 유사한 기존 문서를 검색
+ * 문서의 첫 1500자를 임베딩하여 기존 데이터와 비교
+ */
+export async function findSimilarDocuments(
+  prisma: any,
+  text: string,
+  userId: string,
+  labId: string | null,
+  options?: { threshold?: number; limit?: number },
+): Promise<SimilarDocument[]> {
+  const threshold = options?.threshold ?? 0.82;
+  const limit = options?.limit ?? 5;
+
+  try {
+    // Embed first 1500 chars (representative sample)
+    const sampleText = text.slice(0, 1500);
+    const { embedding } = await generateEmbedding(sampleText);
+    const vectorStr = `[${embedding.join(',')}]`;
+
+    const results = await prisma.$queryRawUnsafe(`
+      SELECT DISTINCT ON (source_id)
+        source_id, source_type, title, chunk_text,
+        1 - (embedding <=> $1::vector) as similarity
+      FROM memo_embeddings
+      WHERE (user_id = $2 OR lab_id = $3)
+        AND 1 - (embedding <=> $1::vector) > $4
+      ORDER BY source_id, similarity DESC
+      LIMIT $5
+    `, vectorStr, userId, labId, threshold, limit);
+
+    return (results as any[]).map(r => ({
+      sourceId: r.source_id,
+      sourceType: r.source_type,
+      title: r.title,
+      similarity: Number(Number(r.similarity).toFixed(3)),
+      chunkText: r.chunk_text?.slice(0, 200) || '',
+    }));
+  } catch (err) {
+    console.warn('[findSimilarDocuments] failed:', err);
+    return [];
   }
 }

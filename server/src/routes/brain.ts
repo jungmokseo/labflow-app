@@ -1405,16 +1405,38 @@ export async function brainRoutes(app: FastifyInstance) {
       data_review: `[데이터] 데이터 파일이 업로드되었습니다 (${result.metadata?.rowCount || 0}행)\n\n어떻게 처리할지 알려주세요.`,
     };
 
+    // Similar document detection
+    let similarDocs: Array<{ title: string; similarity: number; sourceId: string }> = [];
+    try {
+      const { findSimilarDocuments } = await import('../services/rag-engine.js');
+      const similar = await findSimilarDocuments(basePrismaClient, result.text, userId, lab?.id || null);
+      // Filter out the just-created memo itself
+      similarDocs = similar
+        .filter(s => s.sourceId !== memo.id)
+        .map(s => ({ title: s.title || '(제목 없음)', similarity: s.similarity, sourceId: s.sourceId }));
+    } catch {}
+
+    // Build message with similarity info
+    let finalMessage = actionMessages[result.suggestedAction] || `파일이 업로드되었습니다: ${result.filename}`;
+
+    if (similarDocs.length > 0) {
+      const simList = similarDocs.map(s =>
+        `- "${s.title}" (유사도 ${Math.round(s.similarity * 100)}%)`
+      ).join('\n');
+      finalMessage += `\n\n---\n**유사한 기존 문서가 발견되었습니다:**\n${simList}\n\n기존 문서를 업데이트하려면 "업데이트해줘"라고, 별도로 보관하려면 "별도 보관"이라고 말씀해주세요.`;
+    }
+
     return reply.send({
       success: true,
       fileId: memo.id,
       type: result.type,
       filename: result.filename,
       suggestedAction: result.suggestedAction,
-      message: actionMessages[result.suggestedAction] || `파일이 업로드되었습니다: ${result.filename}`,
+      message: finalMessage,
       preview: result.text.slice(0, 500),
       structured: result.structured,
       metadata: result.metadata,
+      similarDocs,
     });
   });
 
@@ -1843,6 +1865,37 @@ ${calData.htmlLink ? `[Google Calendar에서 보기](${calData.htmlLink})` : ''}
       // 캘린더는 응답이 짧으므로 그대로 저장
       saveShadowMessage(shadowChannelId, message, toolResult.response).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
       shadowResult = toolResult.response;
+    }
+
+    // Handle document update/replace request
+    if (/업데이트|교체|대체|replace/i.test(message) && !dbResult) {
+      const prevMsg = contextMessages.find((m: any) => m.role === 'assistant' && m.content?.includes('유사한 기존 문서'));
+      if (prevMsg) {
+        const recentUpload = await prisma.memo.findFirst({
+          where: { userId, source: 'file-upload' },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (recentUpload) {
+          const { findSimilarDocuments } = await import('../services/rag-engine.js');
+          const similar = await findSimilarDocuments(basePrismaClient, recentUpload.content.slice(0, 1500), userId, lab?.id || null);
+          const toArchive = similar.filter(s => s.sourceId !== recentUpload.id);
+
+          let archivedCount = 0;
+          for (const doc of toArchive) {
+            try {
+              await prisma.memo.update({
+                where: { id: doc.sourceId },
+                data: { source: 'archived' },
+              });
+              archivedCount++;
+            } catch {}
+          }
+
+          if (archivedCount > 0) {
+            dbResult = `기존 유사 문서 ${archivedCount}건을 보관 처리하고, 새 문서("${recentUpload.title}")로 업데이트했습니다. 보관된 문서는 삭제되지 않았으며 필요시 복구 가능합니다.`;
+          }
+        }
+      }
     }
 
     if (lab && !isActionIntent) {
