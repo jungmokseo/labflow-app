@@ -1371,18 +1371,25 @@ export async function brainRoutes(app: FastifyInstance) {
     const { processUploadedFile } = await import('../services/file-processor.js');
     const result = await processUploadedFile(buffer, data.filename || 'upload', data.mimetype || 'application/octet-stream');
 
-    // 처리 결과를 Memo에 임시 저장 (chat에서 참조)
+    // 처리 결과를 Memo에 전문 저장 (잘리지 않음 — PostgreSQL text 타입 제한 없음)
     const lab = await prisma.lab.findUnique({ where: { ownerId: userId } });
     const memo = await prisma.memo.create({
       data: {
         userId,
         labId: lab?.id || undefined,
         title: `[첨부] ${result.filename}`,
-        content: result.text.slice(0, 10000),
+        content: result.text,
         tags: ['file-upload', result.type],
         source: 'file-upload',
       },
     });
+
+    // LightRAG 벡터 임베딩 (청킹 후 저장 — 긴 문서도 전문 검색 가능)
+    embedAndStore(basePrismaClient, {
+      sourceType: 'memo', sourceId: memo.id, labId: lab?.id || null, userId,
+      title: `[첨부] ${result.filename}`, content: result.text,
+      tags: ['file-upload', result.type], source: 'file-upload',
+    }).catch((err: any) => console.error('[background] file-upload embedAndStore:', err.message || err));
 
     // 파일 타입에 따른 안내 메시지 생성
     const actionMessages: Record<string, string> = {

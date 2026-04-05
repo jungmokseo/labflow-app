@@ -43,10 +43,10 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
         role: 'user',
         parts: [
           { inlineData: { data: buffer.toString('base64'), mimeType: 'application/pdf' } },
-          { text: '이 PDF의 전체 텍스트를 추출하세요. 제목, 저자, 초록, 본문 순서로 정리하세요. 텍스트만 출력:' },
+          { text: '이 PDF의 전체 텍스트를 빠짐없이 추출하세요. 제목, 저자, 초록, 본문, 참고문헌 순서로 정리하세요. 내용을 요약하거나 생략하지 말고 원문 그대로 추출하세요. 텍스트만 출력:' },
         ],
       }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 65536 },
     });
     return result.response.text().trim();
   } catch (err) {
@@ -87,7 +87,7 @@ async function parseExcel(buffer: Buffer): Promise<{ text: string; structured: a
 [JSON]` },
         ],
       }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 65536 },
     });
 
     const output = result.response.text().trim();
@@ -192,7 +192,7 @@ export async function processUploadedFile(
     }
 
     case 'text': {
-      const text = buffer.toString('utf-8').slice(0, 10000);
+      const text = buffer.toString('utf-8');
       return { type, filename, text, suggestedAction: 'text_process' };
     }
 
