@@ -356,6 +356,70 @@ export async function brainChat(message: string, channelId?: string, fileId?: st
   });
 }
 
+export type BrainChatResult = { response: string; channelId: string; intent: string; isNewSession?: boolean; autoCaptured?: any };
+
+/**
+ * SSE 스트리밍 Brain Chat — 실시간 진행 표시 지원
+ * onProgress 콜백으로 각 처리 단계를 전달받고, 최종 결과를 Promise로 반환
+ */
+export async function brainChatStream(
+  message: string,
+  onProgress: (step: string) => void,
+  channelId?: string,
+  fileId?: string,
+  newSession?: boolean,
+): Promise<BrainChatResult> {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const authHeaders = await getAuthHeaders();
+
+  const res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
+    method: 'POST',
+    headers: { ...authHeaders },
+    body: JSON.stringify({ message, channelId, fileId, newSession, stream: true }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `API Error: ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('ReadableStream not supported');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // Parse SSE events from buffer
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';   // keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const event = JSON.parse(line.slice(6));
+        if (event.type === 'progress') {
+          onProgress(event.step);
+        } else if (event.type === 'done') {
+          return event as BrainChatResult;
+        } else if (event.type === 'error') {
+          throw new Error(event.error || '처리 중 오류가 발생했습니다');
+        }
+      } catch (e) {
+        if (e instanceof SyntaxError) continue;   // partial JSON, skip
+        throw e;
+      }
+    }
+  }
+
+  throw new Error('스트림이 예기치 않게 종료되었습니다');
+}
+
 export interface UploadResult {
   success: boolean;
   fileId: string;

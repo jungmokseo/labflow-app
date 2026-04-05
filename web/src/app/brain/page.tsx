@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  brainChat, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel, searchBrainMemory,
+  brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel, searchBrainMemory,
   type BrainMessage, type UploadResult,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
@@ -55,6 +55,7 @@ export default function BrainPage() {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -193,7 +194,19 @@ export default function BrainPage() {
     }
 
     try {
-      const result = await brainChat(msg, channelIdAtSend || undefined, currentFileId, isNewSession ? true : undefined);
+      setThinkingSteps([]);
+      const result = await brainChatStream(
+        msg,
+        (step) => setThinkingSteps(prev => {
+          // Avoid duplicate consecutive steps
+          if (prev.length > 0 && prev[prev.length - 1] === step) return prev;
+          return [...prev, step];
+        }),
+        channelIdAtSend || undefined,
+        currentFileId,
+        isNewSession ? true : undefined,
+      );
+      setThinkingSteps([]);
       const assistantMsg: BrainMessage = {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -222,6 +235,7 @@ export default function BrainPage() {
         setLocalNewMessages(prev => [...prev, assistantMsg]);
       }
     } catch (err: any) {
+      setThinkingSteps([]);
       const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
@@ -519,13 +533,36 @@ export default function BrainPage() {
                 ))}
                 {loading && (
                   <div className="flex justify-start">
-                    <div className="text-sm text-text-muted flex items-center gap-1.5">
-                      <span>생각 중</span>
-                      <span className="flex gap-0.5">
-                        <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </span>
+                    <div className="text-sm text-text-muted space-y-1">
+                      {thinkingSteps.length > 0 ? (
+                        <>
+                          {thinkingSteps.map((step, i) => (
+                            <div key={i} className={`flex items-center gap-1.5 transition-opacity duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
+                              {i < thinkingSteps.length - 1 ? (
+                                <span className="w-3.5 h-3.5 flex items-center justify-center text-green-400">
+                                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
+                                </span>
+                              ) : (
+                                <span className="flex gap-0.5 w-3.5 justify-center">
+                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                </span>
+                              )}
+                              <span>{step}</span>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <span>생각 중</span>
+                          <span className="flex gap-0.5">
+                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
