@@ -15,7 +15,7 @@ export function SkeletonLine({ width = 'w-full' }: { width?: string }) {
 // 카드 (회의, 논문, 태스크 등 목록 아이템)
 export function SkeletonCard() {
   return (
-    <div className="bg-bg-card rounded-xl border border-bg-input/50 p-4 space-y-3">
+    <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
       <div className="flex items-center gap-3">
         <SkeletonBlock className="w-10 h-10 rounded-full flex-shrink-0" />
         <div className="flex-1 space-y-2">
@@ -78,7 +78,7 @@ export function SkeletonPage({ cards = 4 }: { cards?: number }) {
 // 설정/폼 스켈레톤
 export function SkeletonForm({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
+    <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="space-y-2">
           <SkeletonLine width="w-24" />
@@ -105,15 +105,15 @@ export function StepProgress({
         return (
           <div key={i} className="flex items-center gap-3">
             {isDone ? (
-              <span className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs flex-shrink-0">✓</span>
+              <span className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-text-heading text-xs flex-shrink-0">✓</span>
             ) : isCurrent ? (
               <div className="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center flex-shrink-0">
                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
               </div>
             ) : (
-              <div className="w-5 h-5 rounded-full border-2 border-bg-input flex-shrink-0" />
+              <div className="w-5 h-5 rounded-full border-2 border-border flex-shrink-0" />
             )}
-            <span className={`text-sm ${isCurrent ? 'text-white font-medium' : isDone ? 'text-green-400' : 'text-text-muted'}`}>
+            <span className={`text-sm ${isCurrent ? 'text-text-heading font-medium' : isDone ? 'text-green-400' : 'text-text-muted'}`}>
               {label}
             </span>
           </div>

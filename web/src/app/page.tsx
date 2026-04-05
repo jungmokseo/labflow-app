@@ -38,7 +38,7 @@ export default function DashboardPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">오늘의 대시보드</h2>
+          <h2 className="text-2xl font-bold text-text-heading">오늘의 대시보드</h2>
           <p className="text-text-muted mt-1">
             {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
           </p>
@@ -48,32 +48,32 @@ export default function DashboardPage() {
 
       {/* 바로가기 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <a href="/brain" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
+        <a href="/brain" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <Brain className="w-7 h-7 text-primary" />
-          <h3 className="text-sm font-medium text-white mt-3">Brain</h3>
+          <h3 className="text-sm font-medium text-text-heading mt-3">Brain</h3>
           <p className="text-xs text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
         </a>
-        <a href="/tasks" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
+        <a href="/tasks" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <ClipboardList className="w-7 h-7 text-blue-400" />
-          <h3 className="text-sm font-medium text-white mt-3">Tasks & Ideas</h3>
+          <h3 className="text-sm font-medium text-text-heading mt-3">Tasks & Ideas</h3>
           <p className="text-xs text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
         </a>
-        <a href="/papers" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
+        <a href="/papers" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <BookOpen className="w-7 h-7 text-green-400" />
-          <h3 className="text-sm font-medium text-white mt-3">연구동향</h3>
+          <h3 className="text-sm font-medium text-text-heading mt-3">연구동향</h3>
           <p className="text-xs text-text-muted mt-1">주간 자동 논문 모니터링</p>
         </a>
-        <a href="/meetings" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
+        <a href="/meetings" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <Mic className="w-7 h-7 text-yellow-400" />
-          <h3 className="text-sm font-medium text-white mt-3">회의 노트</h3>
+          <h3 className="text-sm font-medium text-text-heading mt-3">회의 노트</h3>
           <p className="text-xs text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
         </a>
       </div>
 
       {/* 최근 회의 */}
-      <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
+      <div className="bg-bg-card rounded-xl border border-border p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-white flex items-center gap-2"><Mic className="w-4 h-4 text-yellow-400" /> 최근 회의</h3>
+          <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-yellow-400" /> 최근 회의</h3>
           <a href="/meetings" className="text-xs text-primary hover:underline">모두 보기 →</a>
         </div>
         {meetings.length === 0 ? (
@@ -81,8 +81,8 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-3">
             {meetings.map((m) => (
-              <div key={m.id} className="p-3 rounded-lg bg-bg/50 hover:bg-bg-input/30 transition-colors">
-                <p className="text-sm font-medium text-white">{m.title}</p>
+              <div key={m.id} className="p-3 rounded-lg bg-bg-input hover:bg-bg-hover/30 transition-colors">
+                <p className="text-sm font-medium text-text-heading">{m.title}</p>
                 {m.summary && (
                   <p className="text-xs text-text-muted mt-1 line-clamp-2">{m.summary}</p>
                 )}
@@ -124,12 +124,12 @@ function SummaryCard({ icon, title, value, subtitle, color }: {
   color: string;
 }) {
   return (
-    <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
+    <div className="bg-bg-card rounded-xl border border-border p-5">
       <div className="flex items-center justify-between">
         <span>{icon}</span>
         <span className={`text-2xl font-bold ${color}`}>{value}</span>
       </div>
-      <h3 className="text-sm font-medium text-white mt-3">{title}</h3>
+      <h3 className="text-sm font-medium text-text-heading mt-3">{title}</h3>
       <p className="text-xs text-text-muted mt-1">{subtitle}</p>
     </div>
   );

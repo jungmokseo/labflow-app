@@ -249,10 +249,10 @@ export default function MeetingsPage() {
     >
       {/* Drag overlay */}
       {dragOver && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm pointer-events-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)] backdrop-blur-sm pointer-events-none">
           <div className="border-2 border-dashed border-primary rounded-2xl p-12 text-center">
             <Music className="w-12 h-12 text-primary mx-auto mb-4" />
-            <p className="text-xl text-white font-semibold">오디오 파일을 여기에 놓으세요</p>
+            <p className="text-xl text-text-heading font-semibold">오디오 파일을 여기에 놓으세요</p>
             <p className="text-sm text-text-muted mt-2">webm, mp3, m4a, wav</p>
           </div>
         </div>
@@ -261,12 +261,12 @@ export default function MeetingsPage() {
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
+          <h2 className="text-2xl font-bold text-text-heading flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
           <p className="text-text-muted mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
         </div>
 
         {/* Recording / Upload Card */}
-        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-6">
+        <div className="bg-bg-card rounded-xl border border-border p-6">
           {/* Idle state — big mic button */}
           {recordingState === 'idle' && (
             <div className="flex flex-col items-center gap-4">
@@ -275,7 +275,7 @@ export default function MeetingsPage() {
                 className="w-24 h-24 rounded-full bg-primary hover:bg-primary-hover transition-all duration-200 flex items-center justify-center text-5xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-105 active:scale-95"
                 title="녹음 시작"
               >
-                <Mic className="w-10 h-10 text-white" />
+                <Mic className="w-10 h-10 text-text-heading" />
               </button>
               <p className="text-sm text-text-muted">탭하여 녹음 시작</p>
 
@@ -288,7 +288,7 @@ export default function MeetingsPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-bg-input/50 hover:bg-bg-input text-text-muted hover:text-white rounded-lg text-sm transition-colors border border-bg-input/50 hover:border-primary/30"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-bg-input/50 hover:bg-bg-hover text-text-muted hover:text-text-heading rounded-lg text-sm transition-colors border border-border hover:border-primary/30"
                 >
                   <Paperclip className="w-4 h-4" /> 파일 첨부
                 </button>
@@ -314,7 +314,7 @@ export default function MeetingsPage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
                   <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500" />
                 </span>
-                <span className="text-3xl font-mono text-white font-semibold tracking-wider">
+                <span className="text-3xl font-mono text-text-heading font-semibold tracking-wider">
                   {formatTime(elapsed)}
                 </span>
               </div>
@@ -324,7 +324,7 @@ export default function MeetingsPage() {
                 className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 transition-all duration-200 flex items-center justify-center shadow-lg shadow-red-500/30 hover:scale-105 active:scale-95"
                 title="녹음 중지"
               >
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-text-heading" fill="currentColor" viewBox="0 0 24 24">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
                 </svg>
               </button>
@@ -346,7 +346,7 @@ export default function MeetingsPage() {
                   className="w-12 h-12 rounded-full bg-primary hover:bg-primary-hover transition-colors flex items-center justify-center flex-shrink-0"
                   title="재생"
                 >
-                  <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-text-heading ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </button>
@@ -370,20 +370,20 @@ export default function MeetingsPage() {
                 value={audioTitle}
                 onChange={(e) => setAudioTitle(e.target.value)}
                 placeholder="회의 제목 (선택, 비워두면 자동 생성)"
-                className="w-full bg-bg-input/50 border border-bg-input rounded-lg px-4 py-3 text-sm text-white placeholder-text-muted focus:outline-none focus:border-primary"
+                className="w-full bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-sm text-text-heading placeholder-text-muted focus:outline-none focus:border-primary"
               />
 
               {/* Action buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={handleSubmit}
-                  className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-colors"
+                  className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-semibold transition-colors"
                 >
                   <Mic className="w-4 h-4 inline mr-1" /> 회의록 생성
                 </button>
                 <button
                   onClick={resetRecording}
-                  className="px-4 py-3 bg-bg-input/50 text-text-muted hover:text-white rounded-lg text-sm transition-colors"
+                  className="px-4 py-3 bg-bg-input/50 text-text-muted hover:text-text-heading rounded-lg text-sm transition-colors"
                 >
                   취소
                 </button>
@@ -396,7 +396,7 @@ export default function MeetingsPage() {
             <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center justify-between gap-3">
               <p className="text-sm text-red-400">{error}</p>
               {recordingState === 'stopped' && (
-                <button onClick={resetRecording} className="text-xs text-text-muted hover:text-white whitespace-nowrap px-3 py-1.5 rounded-lg bg-bg-input/50">
+                <button onClick={resetRecording} className="text-xs text-text-muted hover:text-text-heading whitespace-nowrap px-3 py-1.5 rounded-lg bg-bg-input/50">
                   새 녹음
                 </button>
               )}
@@ -409,13 +409,13 @@ export default function MeetingsPage() {
           <div className="space-y-2">
             {processingQueue.map(job => (
               <div key={job.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-                job.status === 'error' ? 'bg-red-500/5 border-red-500/20' : job.status === 'done' ? 'bg-green-500/5 border-green-500/20' : 'bg-bg-card border-bg-input/50'
+                job.status === 'error' ? 'bg-red-500/5 border-red-500/20' : job.status === 'done' ? 'bg-green-500/5 border-green-500/20' : 'bg-bg-card border-border'
               }`}>
                 {job.status === 'uploading' && <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0" />}
                 {job.status === 'done' && <span className="text-green-400 flex-shrink-0">✓</span>}
                 {job.status === 'error' && <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{job.title}</p>
+                  <p className="text-sm text-text-heading truncate">{job.title}</p>
                   <p className="text-xs text-text-muted">
                     {job.status === 'uploading' && '회의록 생성 중...'}
                     {job.status === 'done' && '완료!'}
@@ -423,7 +423,7 @@ export default function MeetingsPage() {
                   </p>
                 </div>
                 {job.status === 'error' && (
-                  <button onClick={() => setProcessingQueue(prev => prev.filter(j => j.id !== job.id))} className="text-xs text-text-muted hover:text-white px-2 py-1">닫기</button>
+                  <button onClick={() => setProcessingQueue(prev => prev.filter(j => j.id !== job.id))} className="text-xs text-text-muted hover:text-text-heading px-2 py-1">닫기</button>
                 )}
               </div>
             ))}
@@ -464,14 +464,14 @@ export default function MeetingsPage() {
               return (
                 <div
                   key={m.id}
-                  className="bg-bg-card rounded-xl border border-bg-input/50 overflow-hidden hover:border-primary/30 transition-colors"
+                  className="bg-bg-card rounded-xl border border-border overflow-hidden hover:border-primary/30 transition-colors"
                 >
                   <div
                     className="p-4 flex items-center justify-between cursor-pointer"
                     onClick={() => setExpandedId(expanded ? null : m.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white">{m.title}</p>
+                      <p className="text-sm font-medium text-text-heading">{m.title}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-xs text-text-muted">
                           {new Date(m.createdAt).toLocaleDateString('ko-KR', {
@@ -497,7 +497,7 @@ export default function MeetingsPage() {
                   </div>
 
                   {expanded && (
-                    <div className="px-4 pb-4 border-t border-bg-input/50 pt-4">
+                    <div className="px-4 pb-4 border-t border-border pt-4">
                       {/* Notion 스타일 회의록 렌더링 */}
                       {m.summary && (
                         <div className="notion-note">
@@ -506,7 +506,7 @@ export default function MeetingsPage() {
                       )}
 
                       {/* 공유/액션 버튼 */}
-                      <div className="pt-4 mt-4 border-t border-bg-input/30 flex items-center gap-3">
+                      <div className="pt-4 mt-4 border-t border-border/30 flex items-center gap-3">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

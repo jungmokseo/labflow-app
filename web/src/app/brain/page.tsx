@@ -416,12 +416,12 @@ export default function BrainPage() {
       {/* Sidebar (hidden on mobile) */}
       <div className="hidden md:flex w-60 bg-bg-card rounded-xl flex-col overflow-hidden">
         <div className="p-4 pb-2">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-lg font-bold text-text-heading flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" /> Brain
           </h2>
           <div className="flex gap-1 mt-3">
-            <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>채팅</button>
-            <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>검색</button>
+            <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-text-heading' : 'bg-bg-input text-text-muted'}`}>채팅</button>
+            <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-text-heading' : 'bg-bg-input text-text-muted'}`}>검색</button>
           </div>
         </div>
 
@@ -429,14 +429,14 @@ export default function BrainPage() {
           <div className="pt-3 pb-2">
             <button
               onClick={handleNewSession}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 font-medium"
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary-light text-primary rounded-lg text-sm hover:bg-primary/30 font-medium"
             >
               <Plus className="w-4 h-4" /> 새 대화
             </button>
           </div>
 
           {!activeChannelId && (
-            <div className="px-3 py-2 rounded-lg text-sm bg-primary/10 text-primary flex items-center gap-2">
+            <div className="px-3 py-2 rounded-lg text-sm bg-primary-light text-primary flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
               <span className="text-xs font-medium">새 대화</span>
             </div>
@@ -482,7 +482,7 @@ export default function BrainPage() {
           <div className="absolute inset-0 z-50 bg-bg-card/90 border-2 border-dashed border-primary rounded-xl flex items-center justify-center">
             <div className="text-center">
               <Paperclip className="w-10 h-10 text-primary mx-auto mb-3" />
-              <p className="text-white font-medium text-lg">파일을 여기에 놓으세요</p>
+              <p className="text-text-heading font-medium text-lg">파일을 여기에 놓으세요</p>
               <p className="text-text-muted text-sm mt-1">PDF, 이미지, 엑셀, 워드 등</p>
             </div>
           </div>
@@ -490,25 +490,25 @@ export default function BrainPage() {
         {tab === 'chat' ? (
           <>
             {/* Header */}
-            <div className="p-4 border-b border-bg-input/50">
+            <div className="p-4 border-b border-border">
               <div className="flex items-center gap-2">
                 {/* Mobile session toggle */}
                 <button
                   onClick={() => setShowMobileSessions(true)}
-                  className="md:hidden p-1.5 rounded-lg bg-bg-input text-text-muted hover:text-white transition-colors"
+                  className="md:hidden p-1.5 rounded-lg bg-bg-input text-text-muted hover:text-text-heading transition-colors"
                 >
                   <MessageSquare className="w-4 h-4" />
                 </button>
                 <Brain className="w-5 h-5 text-primary" />
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-medium text-sm">Brain</h3>
+                  <h3 className="text-text-heading font-medium text-sm">Brain</h3>
                   <p className="text-[11px] text-text-muted truncate">
                     이메일, 일정, 메모, 연구실 정보 -- 무엇이든 물어보세요
                   </p>
                 </div>
                 <button
                   onClick={handleNewSession}
-                  className="md:hidden p-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+                  className="md:hidden p-1.5 rounded-lg bg-primary-light text-primary hover:bg-primary/30 transition-colors"
                   title="새 대화"
                 >
                   <Plus className="w-4 h-4" />
@@ -519,16 +519,16 @@ export default function BrainPage() {
             {/* Mobile sessions drawer */}
             {showMobileSessions && (
               <>
-                <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setShowMobileSessions(false)} />
+                <div className="fixed inset-0 bg-[var(--color-overlay)] z-40 md:hidden" onClick={() => setShowMobileSessions(false)} />
                 <div className="fixed inset-y-0 left-0 w-72 bg-bg-card z-50 md:hidden animate-in slide-in-from-left duration-200 shadow-2xl flex flex-col">
-                  <div className="p-4 border-b border-bg-input/50 flex items-center justify-between">
-                    <h3 className="text-white font-medium">대화 목록</h3>
-                    <button onClick={() => setShowMobileSessions(false)} className="p-1 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                  <div className="p-4 border-b border-border flex items-center justify-between">
+                    <h3 className="text-text-heading font-medium">대화 목록</h3>
+                    <button onClick={() => setShowMobileSessions(false)} className="p-1 text-text-muted hover:text-text-heading"><X className="w-5 h-5" /></button>
                   </div>
                   <div className="flex-1 overflow-y-auto p-3 space-y-1">
                     <button
                       onClick={() => { handleNewSession(); setShowMobileSessions(false); }}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 font-medium mb-2"
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary-light text-primary rounded-lg text-sm hover:bg-primary/30 font-medium mb-2"
                     >
                       <Plus className="w-4 h-4" /> 새 대화
                     </button>
@@ -537,7 +537,7 @@ export default function BrainPage() {
                         key={ch.id}
                         onClick={() => { handleSelectSession(ch); setShowMobileSessions(false); }}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                          activeChannelId === ch.id ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input'
+                          activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover'
                         }`}
                       >
                         <div className="truncate">{ch.name || `대화 #${ch.id.slice(-4)}`}</div>
@@ -559,7 +559,7 @@ export default function BrainPage() {
                     <p className="text-sm mt-2">무엇이든 물어보세요. 이메일, 일정, 논문, 메모 -- 자연어로 요청하면 됩니다.</p>
                     <div className="mt-6 grid grid-cols-2 gap-3 max-w-md mx-auto">
                       {['이메일 브리핑 해줘', '오늘 일정 뭐야?', '이거 메모해줘: 내일 장비 예약', '학생 명단 보여줘'].map(q => (
-                        <button key={q} onClick={() => setInput(q)} className="px-3 py-2 bg-bg-input rounded-lg text-xs text-text-muted hover:text-white hover:bg-bg-input/80 transition-colors">
+                        <button key={q} onClick={() => setInput(q)} className="px-3 py-2 bg-bg-input rounded-lg text-xs text-text-muted hover:text-text-heading hover:bg-bg-hover/80 transition-colors">
                           {q}
                         </button>
                       ))}
@@ -571,14 +571,14 @@ export default function BrainPage() {
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
                       <div className="flex justify-end">
-                        <div className="bg-blue-600 text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap shadow-lg shadow-blue-600/10">
+                        <div className="bg-blue-600 text-text-heading rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap shadow-lg shadow-blue-600/10">
                           {msg.content}
                         </div>
                       </div>
                     ) : (
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
-                        <div className="prose prose-invert prose-sm max-w-none text-white/90 leading-relaxed">
+                        <div className="prose prose-invert prose-sm max-w-none text-text-heading/90 leading-relaxed">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {stripEmoji(msg.content)}
                           </ReactMarkdown>
@@ -587,7 +587,7 @@ export default function BrainPage() {
                         <div className="absolute -top-2 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200">
                           <button
                             onClick={() => handleCopyMessage(msg.id, msg.content)}
-                            className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-white hover:bg-bg-input transition-colors"
+                            className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
                             title="복사"
                           >
                             <Copy className="w-3.5 h-3.5" />
@@ -603,7 +603,7 @@ export default function BrainPage() {
                 {/* Token streaming: show response as it arrives */}
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
-                    <div className="prose prose-invert prose-sm max-w-none text-white/90 leading-relaxed">
+                    <div className="prose prose-invert prose-sm max-w-none text-text-heading/90 leading-relaxed">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
@@ -652,7 +652,7 @@ export default function BrainPage() {
             </div>
 
             {/* Input area */}
-            <div className="border-t border-bg-input/50">
+            <div className="border-t border-border">
               {uploadedFile && (
                 <div className="px-4 pt-3 flex items-center gap-2">
                   <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
@@ -669,7 +669,7 @@ export default function BrainPage() {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="px-3 py-3 bg-bg-input text-text-muted rounded-xl hover:text-white hover:bg-bg-input/80 transition-colors disabled:opacity-50"
+                  className="px-3 py-3 bg-bg-input text-text-muted rounded-xl hover:text-text-heading hover:bg-bg-hover/80 transition-colors disabled:opacity-50"
                   title="파일 업로드"
                 >
                   {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
@@ -679,15 +679,15 @@ export default function BrainPage() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="메시지를 입력하세요..."
-                  className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all"
+                  className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all"
                 />
                 {/* Voice input button */}
                 <button
                   onClick={isRecording ? stopRecording : startRecording}
                   className={`px-3 py-3 rounded-xl transition-colors ${
                     isRecording
-                      ? 'bg-red-500 text-white animate-pulse'
-                      : 'bg-bg-input text-text-muted hover:text-white hover:bg-bg-input/80'
+                      ? 'bg-red-500 text-text-heading animate-pulse'
+                      : 'bg-bg-input text-text-muted hover:text-text-heading hover:bg-bg-hover/80'
                   }`}
                   title={isRecording ? `녹음 중지 (${formatRecordingTime(recordingTime)})` : '음성 입력'}
                 >
@@ -703,7 +703,7 @@ export default function BrainPage() {
                 <button
                   onClick={handleSend}
                   disabled={loading || !input.trim()}
-                  className="px-5 py-3 bg-primary text-white rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-primary/90"
+                  className="px-5 py-3 bg-primary text-text-heading rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-primary/90"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -713,7 +713,7 @@ export default function BrainPage() {
         ) : (
           /* Search tab */
           <div className="p-6">
-            <h3 className="text-white font-medium text-lg mb-4 flex items-center gap-2">
+            <h3 className="text-text-heading font-medium text-lg mb-4 flex items-center gap-2">
               <Search className="w-5 h-5 text-primary" /> Lab Memory 검색
             </h3>
             <div className="flex gap-2 mb-6">
@@ -722,9 +722,9 @@ export default function BrainPage() {
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="검색어를 입력하세요 (과제, 논문, 구성원, 메모...)"
-                className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <button onClick={handleSearch} className="px-6 py-3 bg-primary text-white rounded-xl text-sm font-medium">검색</button>
+              <button onClick={handleSearch} className="px-6 py-3 bg-primary text-text-heading rounded-xl text-sm font-medium">검색</button>
             </div>
             {searchResults && (
               <div className="space-y-4">
@@ -740,7 +740,7 @@ export default function BrainPage() {
                       </h4>
                       {items.map((item: any) => (
                         <div key={item.id} className="bg-bg-input p-3 rounded-lg mb-2">
-                          <p className="text-white text-sm font-medium">{item.name || item.title || item.content?.slice(0, 100)}</p>
+                          <p className="text-text-heading text-sm font-medium">{item.name || item.title || item.content?.slice(0, 100)}</p>
                           <p className="text-text-muted text-xs">{item.funder || item.journal || item.role || item.tags?.join(', ') || ''}</p>
                         </div>
                       ))}
@@ -762,7 +762,7 @@ import { ClipboardList, BookOpen, User } from 'lucide-react';
 function SessionButton({ ch, isActive, onClick, onDelete, isStreaming }: { ch: any; isActive: boolean; onClick: () => void; onDelete: () => void; isStreaming?: boolean }) {
   return (
     <div className={`group w-full flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
-      isActive ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input hover:text-white'
+      isActive ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
     }`}>
       <button onClick={onClick} className="flex-1 flex items-center gap-2 min-w-0">
         {isStreaming ? <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" /> : isActive ? <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" /> : null}

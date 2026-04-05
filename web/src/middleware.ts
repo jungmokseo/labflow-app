@@ -15,6 +15,11 @@ function isPublicRoute(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // 로컬 개발 시 인증 우회 (npm run dev)
+  if (process.env.NODE_ENV === 'development' && request.nextUrl.hostname === 'localhost') {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

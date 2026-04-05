@@ -1,4 +1,4 @@
-const CACHE_NAME = 'labflow-v1';
+const CACHE_NAME = 'researchflow-v2';
 const STATIC_ASSETS = [
   '/',
   '/brain',

@@ -1,5 +1,5 @@
 /**
- * LabFlow Web API 클라이언트
+ * Research Flow Web API 클라이언트
  *
  * Supabase Auth 토큰을 자동으로 첨부합니다.
  */

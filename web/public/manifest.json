@@ -1,11 +1,11 @@
 {
-  "name": "LabFlow — Research Lab AI OS",
-  "short_name": "LabFlow",
+  "name": "Research Flow — Research Lab AI OS",
+  "short_name": "Research Flow",
   "description": "AI-powered research lab management",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#6366f1",
+  "background_color": "#FAFAFA",
+  "theme_color": "#2563EB",
   "orientation": "portrait-primary",
   "icons": [
     {

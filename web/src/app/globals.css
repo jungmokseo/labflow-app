@@ -2,31 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design System: Stitch "Soft Professional" ── */
+:root {
+  /* Primary */
+  --color-primary: #2563EB;
+  --color-primary-hover: #1D4ED8;
+  --color-primary-light: #EFF6FF;
+
+  /* Background */
+  --color-bg: #FAFAFA;
+  --color-bg-card: #FFFFFF;
+  --color-bg-input: #F3F4F6;
+  --color-bg-hover: #F0F0F0;
+
+  /* Text */
+  --color-text-heading: #111827;
+  --color-text-main: #1F2937;
+  --color-text-muted: #6B7280;
+
+  /* Border */
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-strong: rgba(0, 0, 0, 0.12);
+
+  /* Accent */
+  --color-accent: #10B981;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* Skeleton */
+  --shimmer-from: rgba(0, 0, 0, 0.03);
+  --shimmer-via: rgba(0, 0, 0, 0.06);
+
+  /* Focus ring */
+  --color-focus: rgba(37, 99, 235, 0.4);
+
+  /* Misc */
+  --color-overlay: rgba(0, 0, 0, 0.4);
+  --color-badge-bg: rgba(37, 99, 235, 0.08);
+}
+
+[data-theme="dark"] {
+  /* Primary */
+  --color-primary: #3B82F6;
+  --color-primary-hover: #2563EB;
+  --color-primary-light: rgba(59, 130, 246, 0.12);
+
+  /* Background */
+  --color-bg: #0a0a0a;
+  --color-bg-card: #141414;
+  --color-bg-input: #1E1E1E;
+  --color-bg-hover: #252525;
+
+  /* Text */
+  --color-text-heading: #FAFAFA;
+  --color-text-main: #E5E7EB;
+  --color-text-muted: #9CA3AF;
+
+  /* Border */
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-strong: rgba(255, 255, 255, 0.10);
+
+  /* Accent */
+  --color-accent: #4ADE80;
+
+  /* Shadows */
+  --shadow-card: none;
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  /* Skeleton */
+  --shimmer-from: rgba(255, 255, 255, 0.03);
+  --shimmer-via: rgba(255, 255, 255, 0.08);
+
+  /* Focus ring */
+  --color-focus: rgba(59, 130, 246, 0.5);
+
+  /* Misc */
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-badge-bg: rgba(59, 130, 246, 0.15);
+}
+
 body {
-  background-color: #0a0a0f;
-  color: #e0e0e0;
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* ── Notion-style Meeting Notes ── */
 .notion-note {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
   line-height: 1.7;
-  color: #e0e0e0;
+  color: var(--color-text-main);
 }
 
 .notion-note h1 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--color-text-heading);
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .notion-note h2 {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--color-text-heading);
   margin-top: 2rem;
   margin-bottom: 0.5rem;
 }
@@ -34,7 +117,7 @@ body {
 .notion-note h3 {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #d0d0e0;
+  color: var(--color-text-main);
   margin-top: 1.25rem;
   margin-bottom: 0.4rem;
 }
@@ -42,7 +125,7 @@ body {
 .notion-note p {
   margin: 0.3rem 0;
   font-size: 0.875rem;
-  color: #a0a0b8;
+  color: var(--color-text-muted);
 }
 
 .notion-note ul {
@@ -67,7 +150,7 @@ body {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #6C63FF;
+  background: var(--color-primary);
 }
 
 /* Checkbox items (- [ ]) */
@@ -82,7 +165,7 @@ body {
   appearance: none;
   width: 16px;
   height: 16px;
-  border: 2px solid #4a4a6a;
+  border: 2px solid var(--color-border-strong);
   border-radius: 3px;
   margin-right: 0.5rem;
   vertical-align: middle;
@@ -92,17 +175,17 @@ body {
 }
 
 .notion-note input[type="checkbox"]:checked {
-  background: #6C63FF;
-  border-color: #6C63FF;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 .notion-note strong {
-  color: #ffffff;
+  color: var(--color-text-heading);
   font-weight: 600;
 }
 
 .notion-note a {
-  color: #6C63FF;
+  color: var(--color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -113,7 +196,7 @@ body {
 .notion-note > p:nth-of-type(3),
 .notion-note > p:nth-of-type(4) {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--color-text-muted);
   margin: 0.15rem 0;
 }
 
@@ -140,10 +223,11 @@ main > * {
 /* ── Card hover lift ── */
 .card-hover {
   transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+  box-shadow: var(--shadow-card);
 }
 .card-hover:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-card-hover);
 }
 
 /* ── Checkbox bounce ── */
@@ -174,7 +258,7 @@ main > * {
   100% { background-position: 200% 0; }
 }
 .skeleton-shimmer {
-  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background: linear-gradient(90deg, var(--shimmer-from) 25%, var(--shimmer-via) 50%, var(--shimmer-from) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
 }
@@ -188,9 +272,13 @@ main > * {
 /* ── Focus ring utility ── */
 .focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5);
-  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 0 2px var(--color-focus);
+  border-color: var(--color-primary);
 }
+
+/* ── Scrollbar hide ── */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Mobile responsive */
 @media (max-width: 640px) {

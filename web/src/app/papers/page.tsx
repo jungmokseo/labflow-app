@@ -235,7 +235,7 @@ export default function PapersPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> 연구동향</h1>
+          <h1 className="text-2xl font-bold text-text-heading flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> 연구동향</h1>
           <p className="text-text-muted text-sm mt-1">
             {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
           </p>
@@ -243,15 +243,15 @@ export default function PapersPage() {
         <div className="flex gap-2">
           <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" />
           <button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}
-            className="px-4 py-2 bg-bg-card text-text-muted border border-bg-input/50 rounded-lg text-sm hover:text-white">
+            className="px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading">
             {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드
           </button>
           <button onClick={handleCrawl} disabled={crawling}
-            className="px-4 py-2 bg-bg-card text-text-muted border border-bg-input/50 rounded-lg text-sm hover:text-white disabled:opacity-50">
+            className="px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
             {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 수집</>}
           </button>
           <button onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
-            className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-bg-input/50 hover:text-white'}`}>
+            className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-text-heading' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
             <Settings className="w-4 h-4 inline mr-1" /> 설정
           </button>
         </div>
@@ -259,7 +259,7 @@ export default function PapersPage() {
 
       {/* 수집 진행 상태 */}
       {crawling && (
-        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
+        <div className="bg-bg-card rounded-xl border border-border p-5">
           <StepProgress
             steps={['설정 저장', 'RSS 수집 + 키워드 매칭', '결과 정리', '완료']}
             currentStep={crawlStep}
@@ -271,16 +271,16 @@ export default function PapersPage() {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-5">
+        <div className="bg-bg-card rounded-xl border border-border p-5 space-y-5">
           <div className="flex items-center justify-between">
-            <h3 className="text-white font-semibold">저널 & 키워드 설정</h3>
+            <h3 className="text-text-heading font-semibold">저널 & 키워드 설정</h3>
             <span className="text-xs text-text-muted">{totalJournals}/{MAX_JOURNALS}</span>
           </div>
 
           {/* Current journals */}
           <div className="flex flex-wrap gap-2">
             {selectedJournals.map(j => (
-              <span key={j} className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-xs">
+              <span key={j} className="flex items-center gap-1 px-3 py-1.5 bg-primary-light text-primary rounded-full text-xs">
                 {j} <button onClick={() => toggleJournal(j)} className="text-primary/50 hover:text-primary ml-1"><X className="w-3 h-3 inline" /></button>
               </span>
             ))}
@@ -294,9 +294,9 @@ export default function PapersPage() {
             <input value={addInput} onChange={e => setAddInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleAddJournal()}
               placeholder="저널명 또는 RSS URL..."
-              className="flex-1 bg-bg-input text-white px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              className="flex-1 bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             <button onClick={handleAddJournal} disabled={addLoading}
-              className="px-5 py-2.5 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
+              className="px-5 py-2.5 bg-primary text-text-heading rounded-lg text-sm disabled:opacity-50">
               {addLoading ? '...' : '추가'}
             </button>
           </div>
@@ -307,8 +307,8 @@ export default function PapersPage() {
                   if (j.source === 'built-in') { toggleJournal(j.name); }
                   else if (j.rssUrl) { await addCustomJournal({ name: j.name, rssUrl: j.rssUrl, publisher: j.publisher }); setCustomFeeds(prev => [...prev, { name: j.name, rssUrl: j.rssUrl }]); }
                   setSearchResultsJ([]); setAddInput('');
-                }} className="w-full flex items-center justify-between bg-bg/50 hover:bg-bg-input/50 rounded-lg p-3 text-left">
-                  <div><p className="text-sm text-white">{j.name}</p><p className="text-xs text-text-muted">{j.publisher || ''}</p></div>
+                }} className="w-full flex items-center justify-between bg-bg-input hover:bg-bg-hover rounded-lg p-3 text-left">
+                  <div><p className="text-sm text-text-heading">{j.name}</p><p className="text-xs text-text-muted">{j.publisher || ''}</p></div>
                   <span className="text-xs text-primary">+ 추가</span>
                 </button>
               ))}
@@ -319,17 +319,17 @@ export default function PapersPage() {
           <div className="flex flex-wrap gap-2">
             {allFields.map(field => (
               <button key={field} onClick={() => setExpandedField(expandedField === field ? null : field)}
-                className={`px-3 py-1.5 rounded-lg text-xs border ${expandedField === field ? 'bg-primary text-white border-primary' : 'bg-bg-input text-text-muted border-bg-input/50 hover:text-white'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs border ${expandedField === field ? 'bg-primary text-text-heading border-primary' : 'bg-bg-input text-text-muted border-border hover:text-text-heading'}`}>
                 {field}
               </button>
             ))}
           </div>
           {expandedField && fieldData[expandedField] && (
-            <div className="bg-bg/50 rounded-lg p-4 grid grid-cols-2 gap-1.5">
+            <div className="bg-bg-input rounded-lg p-4 grid grid-cols-2 gap-1.5">
               {fieldData[expandedField].map(j => (
-                <label key={j.name} className={`flex items-center gap-2 text-xs cursor-pointer px-2 py-1.5 rounded hover:bg-bg-input/30 ${!j.hasRss ? 'opacity-50' : ''}`}>
+                <label key={j.name} className={`flex items-center gap-2 text-xs cursor-pointer px-2 py-1.5 rounded hover:bg-bg-hover/30 ${!j.hasRss ? 'opacity-50' : ''}`}>
                   <input type="checkbox" checked={selectedJournals.includes(j.name)} onChange={() => toggleJournal(j.name)} disabled={!j.hasRss} className="accent-primary rounded" />
-                  <span className="text-white">{j.name}</span>
+                  <span className="text-text-heading">{j.name}</span>
                 </label>
               ))}
             </div>
@@ -340,7 +340,7 @@ export default function PapersPage() {
             <p className="text-xs text-text-muted mb-2">연구 키워드 (쉼표 구분)</p>
             <textarea value={keywords} onChange={e => setKeywords(e.target.value)} rows={2}
               placeholder="biosensor, flexible electronics, hydrogel..."
-              className="w-full bg-bg-input text-white px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+              className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
           </div>
 
           <button onClick={() => {
@@ -348,22 +348,22 @@ export default function PapersPage() {
             setShowSettings(false);
             const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
             if (kws.length > 0) savePaperAlert({ keywords: kws, journals: selectedJournals }).catch(() => setShowSettings(true));
-          }} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">설정 저장</button>
+          }} className="w-full py-2.5 bg-primary text-text-heading rounded-lg text-sm font-medium">설정 저장</button>
         </div>
       )}
 
       {/* ── 주차별 논문 대시보드 ── */}
       {results.length === 0 ? (
-        <div className="bg-bg-card rounded-xl border border-bg-input/50 p-12 text-center">
+        <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
           <BookOpen className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
-          <p className="text-white font-medium">수집된 논문이 없습니다</p>
+          <p className="text-text-heading font-medium">수집된 논문이 없습니다</p>
           <p className="text-text-muted text-sm mt-2">설정에서 저널과 키워드를 설정한 후 수집을 실행하세요</p>
         </div>
       ) : weekGroups.map(week => (
         <div key={week.label} className="space-y-4">
           {/* 주차 헤더 */}
-          <div className="border-t border-bg-input/30 pt-6">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> {week.label}</h2>
+          <div className="border-t border-border/30 pt-6">
+            <h2 className="text-lg font-bold text-text-heading flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> {week.label}</h2>
             <p className="text-text-muted text-sm mt-1">
               총 {week.papers.length}편 선별
               {' · '}
@@ -373,7 +373,7 @@ export default function PapersPage() {
 
           {/* 테마별 섹션 */}
           {Array.from(week.themes.entries()).map(([theme, papers]) => (
-            <div key={theme} className="bg-bg-card rounded-xl border border-bg-input/50 p-5">
+            <div key={theme} className="bg-bg-card rounded-xl border border-border p-5">
               <h3 className="text-primary font-semibold text-sm mb-2 flex items-center gap-1.5">
                 {getThemeIcon(theme)} {theme} ({papers.length}편)
               </h3>
@@ -390,17 +390,17 @@ export default function PapersPage() {
                       {/* 닫힘 상태: 한 줄 */}
                       <button
                         onClick={() => togglePaper(paper.id)}
-                        className="w-full flex items-center gap-2 text-left py-2 px-3 rounded-lg hover:bg-bg-input/30 transition-colors"
+                        className="w-full flex items-center gap-2 text-left py-2 px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
                       >
                         {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />}
-                        <span className="flex-1 text-sm text-white truncate">{paper.title}</span>
+                        <span className="flex-1 text-sm text-text-heading truncate">{paper.title}</span>
                         <span className="text-xs text-text-muted flex-shrink-0">({paper.journal})</span>
                         <span className={`text-xs flex-shrink-0 flex items-center gap-0.5 ${si.color}`}><StarRating count={si.stars} /> {si.label}</span>
                       </button>
 
                       {/* 열림 상태: 상세 */}
                       {isOpen && (
-                        <div className="ml-7 mb-3 pl-4 border-l-2 border-bg-input/50 space-y-2">
+                        <div className="ml-7 mb-3 pl-4 border-l-2 border-border space-y-2">
                           <p className="text-xs text-text-muted">
                             <span className="font-medium">저널</span>: {paper.journal}
                             {(paper as any).pubDate && <> | <span className="font-medium">발행일</span>: {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}

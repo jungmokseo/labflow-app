@@ -128,7 +128,7 @@ export default function TasksPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Tasks & Ideas</h1>
+          <h1 className="text-2xl font-bold text-text-heading">Tasks & Ideas</h1>
           <p className="text-text-muted text-sm mt-1">
             {unreviewed > 0 && <span className="text-red-400 mr-3">NEW {unreviewed}</span>}
             {pendingTasks > 0 && <span className="mr-3">{pendingTasks} tasks pending</span>}
@@ -154,12 +154,12 @@ export default function TasksPage() {
             onChange={e => setNewInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !adding && handleAdd()}
             placeholder="할일, 아이디어, 메모를 입력하세요... (AI가 자동 분류)"
-            className="flex-1 bg-bg-input/50 border border-bg-input rounded-lg px-4 py-3 text-white placeholder:text-text-muted focus:outline-none focus:border-primary/50"
+            className="flex-1 bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-text-heading placeholder:text-text-muted focus:outline-none focus:border-primary/50"
           />
           <button
             onClick={handleAdd}
             disabled={adding || !newInput.trim()}
-            className="bg-primary text-white px-5 py-3 rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
+            className="bg-primary text-text-heading px-5 py-3 rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
           >
             {adding ? '...' : '추가'}
           </button>
@@ -168,13 +168,13 @@ export default function TasksPage() {
 
       {/* Tab Filters */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex bg-bg-input/30 rounded-lg p-0.5 gap-0.5">
+        <div className="flex bg-bg-input rounded-lg p-0.5 gap-0.5">
           {([['all', '전체'], ['TASK', '할일'], ['IDEA', '아이디어'], ['MEMO', '메모']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
               className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                tab === key ? 'bg-primary text-white' : 'text-text-muted hover:text-white'
+                tab === key ? 'bg-primary text-text-heading' : 'text-text-muted hover:text-text-heading'
               }`}
             >
               {label}
@@ -185,13 +185,13 @@ export default function TasksPage() {
           ))}
         </div>
 
-        <div className="flex bg-bg-input/30 rounded-lg p-0.5 gap-0.5 ml-auto">
+        <div className="flex bg-bg-input rounded-lg p-0.5 gap-0.5 ml-auto">
           {([['active', 'Active'], ['completed', 'Done']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setStatusFilter(key)}
               className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                statusFilter === key ? 'bg-bg-input text-white' : 'text-text-muted hover:text-white'
+                statusFilter === key ? 'bg-bg-input text-text-heading' : 'text-text-muted hover:text-text-heading'
               }`}
             >
               {label}
@@ -202,7 +202,7 @@ export default function TasksPage() {
         <select
           value={sortBy}
           onChange={e => setSortBy(e.target.value as SortBy)}
-          className="bg-bg-input/50 border border-bg-input rounded-lg px-2 py-1.5 text-sm text-text-muted"
+          className="bg-bg-input/50 border border-border rounded-lg px-2 py-1.5 text-sm text-text-muted"
         >
           <option value="newest">최신순</option>
           <option value="oldest">오래된순</option>
@@ -216,7 +216,7 @@ export default function TasksPage() {
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="검색..."
-        className="w-full bg-bg-input/30 border border-bg-input/50 rounded-lg px-4 py-2 text-sm text-white placeholder:text-text-muted mb-4 focus:outline-none focus:border-primary/30"
+        className="w-full bg-bg-input border border-border rounded-lg px-4 py-2 text-sm text-text-heading placeholder:text-text-muted mb-4 focus:outline-none focus:border-primary/30"
       />
 
       {/* Error */}
@@ -229,7 +229,7 @@ export default function TasksPage() {
 
       {/* Subtle revalidation indicator */}
       {isValidating && captures.length > 0 && (
-        <div className="h-0.5 bg-primary/20 rounded-full mb-2 overflow-hidden">
+        <div className="h-0.5 bg-primary-light rounded-full mb-2 overflow-hidden">
           <div className="h-full bg-primary/60 rounded-full animate-pulse w-1/2" />
         </div>
       )}
@@ -238,7 +238,7 @@ export default function TasksPage() {
       {filtered.length === 0 ? (
         <div className="text-center py-20">
           <div className="mb-3 flex justify-center">{tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> : tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> : <ClipboardList className="w-10 h-10 text-text-muted" />}</div>
-          <h3 className="text-white font-medium mb-1">
+          <h3 className="text-text-heading font-medium mb-1">
             {isValidating ? '불러오는 중...' : statusFilter === 'completed' ? '완료된 항목이 없습니다' : '아직 항목이 없습니다'}
           </h3>
           {!isValidating && (
@@ -258,7 +258,7 @@ export default function TasksPage() {
                 className={`bg-bg-card rounded-xl border p-4 card-hover cursor-pointer animate-msg-in ${
                   !c.reviewed && !c.completed
                     ? 'border-primary/30 bg-primary/5'
-                    : 'border-bg-input/50 hover:border-primary/20'
+                    : 'border-border hover:border-primary/20'
                 } ${c.completed ? 'opacity-60' : ''}`}
                 onClick={() => { if (!c.reviewed && !c.completed) handleReview(c); }}
               >
@@ -268,8 +268,8 @@ export default function TasksPage() {
                     onClick={(e) => { e.stopPropagation(); handleToggleComplete(c); }}
                     className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 ${
                       c.completed
-                        ? 'bg-green-500 border-green-500 text-white check-bounce'
-                        : 'border-bg-input hover:border-primary hover:scale-110'
+                        ? 'bg-green-500 border-green-500 text-text-heading check-bounce'
+                        : 'border-border hover:border-primary hover:scale-110'
                     }`}
                   >
                     {c.completed && <span className="text-xs">✓</span>}
@@ -287,7 +287,7 @@ export default function TasksPage() {
                       {/* Category */}
                       {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
                       {/* Summary */}
-                      <span className={`text-sm font-medium ${c.completed ? 'line-through text-text-muted' : 'text-white'}`}>
+                      <span className={`text-sm font-medium ${c.completed ? 'line-through text-text-muted' : 'text-text-heading'}`}>
                         {c.summary || c.content.substring(0, 60)}
                       </span>
                     </div>

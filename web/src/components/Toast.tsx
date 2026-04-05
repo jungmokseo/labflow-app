@@ -64,8 +64,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border backdrop-blur-sm shadow-lg ${BG[t.type]} ${t.leaving ? 'toast-out' : 'toast-in'}`}
           >
             {ICONS[t.type]}
-            <span className="text-sm text-white">{t.message}</span>
-            <button onClick={() => removeToast(t.id)} className="ml-2 text-text-muted hover:text-white transition-colors">
+            <span className="text-sm text-text-heading">{t.message}</span>
+            <button onClick={() => removeToast(t.id)} className="ml-2 text-text-muted hover:text-text-heading transition-colors">
               <X className="w-3.5 h-3.5" />
             </button>
           </div>

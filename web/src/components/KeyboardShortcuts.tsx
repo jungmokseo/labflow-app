@@ -54,17 +54,17 @@ export function KeyboardShortcuts() {
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-[9990] backdrop-blur-sm" onClick={() => setOpen(false)} />
+      <div className="fixed inset-0 bg-[var(--color-overlay)] z-[9990] backdrop-blur-sm" onClick={() => setOpen(false)} />
       <div className="fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-md z-[9991] animate-msg-in">
-        <div className="bg-bg-card border border-bg-input/50 rounded-xl shadow-2xl overflow-hidden">
-          <div className="flex items-center gap-3 p-4 border-b border-bg-input/50">
+        <div className="bg-bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+          <div className="flex items-center gap-3 p-4 border-b border-border">
             <Search className="w-5 h-5 text-text-muted flex-shrink-0" />
             <input
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="이동할 페이지를 검색하세요..."
-              className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder:text-text-muted"
+              className="flex-1 bg-transparent text-text-heading text-sm focus:outline-none placeholder:text-text-muted"
               onKeyDown={e => {
                 if (e.key === 'Enter' && filtered.length > 0) navigate(filtered[0].path);
               }}
@@ -76,7 +76,7 @@ export function KeyboardShortcuts() {
               <button
                 key={s.key}
                 onClick={() => navigate(s.path)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-text-muted hover:bg-bg-input hover:text-white transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-text-muted hover:bg-bg-hover hover:text-text-heading transition-colors"
               >
                 <s.icon className="w-4 h-4 flex-shrink-0" />
                 <span className="flex-1 text-left">{s.label}</span>

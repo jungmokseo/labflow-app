@@ -67,18 +67,18 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
+        <h2 className="text-2xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
         <p className="text-text-muted mt-1">연구실 설정 및 프로필 관리</p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-bg-input/50">
+      <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border">
         {TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors
-              ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-white hover:bg-bg-input/50'}`}
+              ${tab === t.key ? 'bg-primary text-text-heading' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
           >
             {TAB_ICONS[t.key]} {t.label}
           </button>
@@ -106,8 +106,8 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">시스템 상태</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">시스템 상태</h3>
         <div className="grid grid-cols-2 gap-4">
           <StatusItem label="API 서버" status={health === true ? 'healthy' : 'error'} detail="Railway" />
           <StatusItem label="Gmail" status={emailConnected ? 'healthy' : 'disconnected'} detail={emailConnected ? '연동됨' : '미연동'} />
@@ -115,12 +115,12 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
         {!emailConnected && (
-          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
+          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-medium">
             Gmail 연동하기
           </button>
         )}
         {!lab && (
-          <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
+          <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-medium">
             온보딩 시작
           </a>
         )}
@@ -161,10 +161,10 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
 
   if (!lab) {
     return (
-      <div className="bg-bg-card rounded-xl border border-bg-input/50 p-12 text-center">
+      <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
         <FlaskConical className="w-12 h-12 text-text-muted/40 mx-auto mb-3" />
-        <h3 className="text-lg font-semibold text-white mb-2">연구실이 등록되지 않았습니다</h3>
-        <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-white rounded-lg font-medium mt-4">온보딩 시작</a>
+        <h3 className="text-lg font-semibold text-text-heading mb-2">연구실이 등록되지 않았습니다</h3>
+        <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-text-heading rounded-lg font-medium mt-4">온보딩 시작</a>
       </div>
     );
   }
@@ -229,9 +229,9 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
   return (
     <div className="space-y-4">
       {/* Lab Info */}
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-white text-sm">연구실 정보</h3>
+          <h3 className="font-semibold text-text-heading text-sm">연구실 정보</h3>
           <button onClick={() => setEditing(!editing)} className="text-xs text-primary hover:text-primary-hover">
             {editing ? '취소' : '편집'}
           </button>
@@ -241,24 +241,24 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             <SInput label="연구실 이름" value={name} onChange={setName} />
             <SInput label="소속 기관" value={institution} onChange={setInstitution} />
             <SInput label="학과" value={department} onChange={setDepartment} />
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm font-medium disabled:opacity-50">
               {saving ? '저장 중...' : '저장'}
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-text-muted">이름:</span> <span className="text-white">{lab.name}</span></div>
-            <div><span className="text-text-muted">기관:</span> <span className="text-white">{lab.institution || '-'}</span></div>
-            <div><span className="text-text-muted">학과:</span> <span className="text-white">{lab.department || '-'}</span></div>
+            <div><span className="text-text-muted">이름:</span> <span className="text-text-heading">{lab.name}</span></div>
+            <div><span className="text-text-muted">기관:</span> <span className="text-text-heading">{lab.institution || '-'}</span></div>
+            <div><span className="text-text-muted">학과:</span> <span className="text-text-heading">{lab.department || '-'}</span></div>
             <div><span className="text-text-muted">온보딩:</span> <span className={lab.onboardingDone ? 'text-green-400' : 'text-yellow-400'}>{lab.onboardingDone ? '완료' : '미완료'}</span></div>
           </div>
         )}
       </section>
 
       {/* Research Themes — 독립 편집 */}
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-white text-sm">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
+          <h3 className="font-semibold text-text-heading text-sm">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
           {!editing && (
             <button onClick={() => setEditing(true)} className="text-xs text-primary hover:text-primary-hover">
               편집
@@ -269,7 +269,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           <div className="text-center py-6">
             <p className="text-text-muted text-sm mb-3">연구 테마가 등록되지 않았습니다</p>
             <button onClick={() => { setEditing(true); setThemes([{ name: '', keywords: '', journals: '' }]); }}
-              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
+              className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm font-medium">
               + 연구 테마 추가
             </button>
           </div>
@@ -277,7 +277,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
         {(editing ? themes : (lab.researchThemes || []).map(t => ({
           name: t.name, keywords: t.keywords.join(', '), journals: (t.journals || []).join(', ')
         }))).map((theme, i) => (
-          <div key={i} className="bg-bg/50 rounded-lg p-3 space-y-2">
+          <div key={i} className="bg-bg-input rounded-lg p-3 space-y-2">
             {editing ? (
               <>
                 <SInput label={`테마 ${i+1}`} value={theme.name} onChange={v => { const n = [...themes]; n[i].name = v; setThemes(n); }} />
@@ -287,7 +287,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
               </>
             ) : (
               <>
-                <p className="text-sm font-medium text-white">{theme.name}</p>
+                <p className="text-sm font-medium text-text-heading">{theme.name}</p>
                 <p className="text-xs text-text-muted">키워드: {theme.keywords}</p>
                 {theme.journals && <p className="text-xs text-text-muted">저널: {theme.journals}</p>}
               </>
@@ -297,7 +297,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
         {editing && (
           <div className="flex items-center gap-3">
             <button onClick={() => setThemes([...themes, { name: '', keywords: '', journals: '' }])} className="text-xs text-primary">+ 테마 추가</button>
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium disabled:opacity-50 ml-auto">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-xs font-medium disabled:opacity-50 ml-auto">
               {saving ? '저장 중...' : '저장'}
             </button>
           </div>
@@ -305,10 +305,10 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       </section>
 
       {/* Instructions (claude.md 스타일) */}
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-white text-sm">AI 지침</h3>
+            <h3 className="font-semibold text-text-heading text-sm">AI 지침</h3>
             <p className="text-xs text-text-muted mt-0.5">Brain 응답 시 항상 참조되는 사용자 지침 (claude.md 방식)</p>
           </div>
           <button
@@ -325,7 +325,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
               } finally { setSavingInstructions(false); }
             }}
             disabled={savingInstructions}
-            className="text-xs px-3 py-1.5 bg-primary text-white rounded-lg disabled:opacity-50"
+            className="text-xs px-3 py-1.5 bg-primary text-text-heading rounded-lg disabled:opacity-50"
           >
             {savingInstructions ? '저장 중...' : '저장'}
           </button>
@@ -335,17 +335,17 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           onChange={e => setInstructions(e.target.value)}
           rows={8}
           placeholder={`예시:\n- 한국어로 답변해줘\n- 논문 요약은 3문장 이내로\n- 학생 이름은 존칭 없이\n- 과제 정보 물어보면 사사 문구도 같이 알려줘\n- 이메일 브리핑은 긴급한 것만 먼저`}
-          className="w-full px-4 py-3 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50 focus:border-primary outline-none placeholder:text-text-muted/50 resize-none font-mono"
+          className="w-full px-4 py-3 bg-bg-input rounded-lg text-text-heading text-sm border border-border focus:border-primary outline-none placeholder:text-text-muted resize-none font-mono"
         />
       </section>
 
       {/* Members */}
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">팀원 ({members.length}명)</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">팀원 ({members.length}명)</h3>
         {members.map(m => (
-          <div key={m.id} className="flex items-center justify-between bg-bg/50 rounded-lg p-3">
+          <div key={m.id} className="flex items-center justify-between bg-bg-input rounded-lg p-3">
             <div>
-              <span className="text-sm text-white font-medium">{m.name}</span>
+              <span className="text-sm text-text-heading font-medium">{m.name}</span>
               <span className="text-xs text-text-muted ml-2">{m.role}</span>
               {m.email && <span className="text-xs text-primary ml-2">{m.email}</span>}
             </div>
@@ -353,9 +353,9 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           </div>
         ))}
         <div className="flex gap-2">
-          <input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-white border border-bg-input/50" />
-          <input value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} placeholder="이메일" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-white border border-bg-input/50" />
-          <button onClick={handleAddMember} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
+          <input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
+          <input value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} placeholder="이메일" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
+          <button onClick={handleAddMember} className="px-3 py-1.5 bg-primary text-text-heading rounded text-sm">추가</button>
         </div>
       </section>
     </div>
@@ -413,15 +413,15 @@ function EmailTab({ connected }: { connected: boolean }) {
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">기관별 분류 그룹</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">기관별 분류 그룹</h3>
         <p className="text-xs text-text-muted">발신자 이메일 도메인 기반으로 기관별 자동 분류</p>
         {groups.map((g, i) => (
           <div key={i} className="grid grid-cols-[3rem_1fr_2fr] gap-2 items-end">
             <div>
               <label className="block text-xs text-text-muted mb-1">이모지</label>
               <input value={g.emoji} onChange={e => { const n = [...groups]; n[i].emoji = e.target.value; setGroups(n); }}
-                className="w-full px-2 py-1.5 bg-bg-input rounded text-sm text-white text-center border border-bg-input/50" />
+                className="w-full px-2 py-1.5 bg-bg-input rounded text-sm text-text-heading text-center border border-border" />
             </div>
             <SInput label="기관명" value={g.name} onChange={v => { const n = [...groups]; n[i].name = v; setGroups(n); }} />
             <SInput label="도메인 (쉼표)" value={g.domains} onChange={v => { const n = [...groups]; n[i].domains = v; setGroups(n); }} />
@@ -430,16 +430,16 @@ function EmailTab({ connected }: { connected: boolean }) {
         <button onClick={() => setGroups([...groups, { name: '', domains: '', emoji: '🏫' }])} className="text-xs text-primary">+ 기관 추가</button>
       </section>
 
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">중요도 상향 키워드</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">중요도 상향 키워드</h3>
         <p className="text-xs text-text-muted">이 키워드가 이메일 제목/내용에 포함되면 중요도 1단계 상향</p>
         <SInput label="키워드 (쉼표 구분)" value={keywords} onChange={setKeywords} />
       </section>
 
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">시간대</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">시간대</h3>
         <select value={timezone} onChange={e => setTimezone(e.target.value)}
-          className="px-3 py-2 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50">
+          className="px-3 py-2 bg-bg-input rounded-lg text-text-heading text-sm border border-border">
           <option value="America/New_York">미국 동부 (EDT/EST)</option>
           <option value="America/Los_Angeles">미국 서부 (PDT/PST)</option>
           <option value="Asia/Seoul">한국 (KST)</option>
@@ -449,7 +449,7 @@ function EmailTab({ connected }: { connected: boolean }) {
       </section>
 
       <button onClick={handleSave} disabled={saving}
-        className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium disabled:opacity-50">
+        className="w-full py-3 bg-primary hover:bg-primary-hover text-text-heading rounded-lg font-medium disabled:opacity-50">
         {saving ? '저장 중...' : '이메일 설정 저장'}
       </button>
     </div>
@@ -492,17 +492,17 @@ function DictionaryTab() {
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-bg-input/50 p-5 space-y-4">
-        <h3 className="font-semibold text-white text-sm">기술 용어 사전 ({entries.length}개)</h3>
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+        <h3 className="font-semibold text-text-heading text-sm">기술 용어 사전 ({entries.length}개)</h3>
         <p className="text-xs text-text-muted">미팅 노트 교정, 논문 교정에서 공유되는 도메인 용어 사전</p>
 
         <div className="flex gap-2">
           <input value={newWrong} onChange={e => setNewWrong(e.target.value)} placeholder="잘못된 표기"
-            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-white border border-bg-input/50" />
+            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
           <span className="text-text-muted self-center">→</span>
           <input value={newCorrect} onChange={e => setNewCorrect(e.target.value)} placeholder="올바른 표기"
-            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-white border border-bg-input/50" />
-          <button onClick={handleAdd} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
+            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
+          <button onClick={handleAdd} className="px-3 py-1.5 bg-primary text-text-heading rounded text-sm">추가</button>
         </div>
 
         {loading ? (
@@ -512,7 +512,7 @@ function DictionaryTab() {
         ) : (
           <div className="max-h-80 overflow-y-auto space-y-1">
             {entries.map(e => (
-              <div key={e.id} className="flex items-center justify-between bg-bg/50 rounded px-3 py-2">
+              <div key={e.id} className="flex items-center justify-between bg-bg-input rounded px-3 py-2">
                 <span className="text-sm">
                   <span className="text-red-400 line-through">{e.wrongForm}</span>
                   <span className="text-text-muted mx-2">→</span>
@@ -534,10 +534,10 @@ function StatusItem({ label, status, detail }: { label: string; status: string; 
     healthy: 'bg-green-400', error: 'bg-red-400', disconnected: 'bg-gray-500', info: 'bg-blue-400',
   };
   return (
-    <div className="flex items-center gap-3 bg-bg/50 rounded-lg p-3">
+    <div className="flex items-center gap-3 bg-bg-input rounded-lg p-3">
       <span className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-gray-400'}`} />
       <div>
-        <p className="text-xs font-medium text-white">{label}</p>
+        <p className="text-xs font-medium text-text-heading">{label}</p>
         <p className="text-[10px] text-text-muted">{detail}</p>
       </div>
     </div>
@@ -549,7 +549,7 @@ function SInput({ label, value, onChange, placeholder }: { label: string; value:
     <div>
       <label className="block text-xs text-text-muted mb-1">{label}</label>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-1.5 bg-bg-input rounded-lg text-white text-sm border border-bg-input/50 focus:border-primary outline-none placeholder:text-text-muted/50" />
+        className="w-full px-3 py-1.5 bg-bg-input rounded-lg text-text-heading text-sm border border-border focus:border-primary outline-none placeholder:text-text-muted" />
     </div>
   );
 }

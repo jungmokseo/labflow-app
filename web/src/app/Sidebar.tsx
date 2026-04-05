@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
@@ -11,7 +11,7 @@ import {
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
-  FlaskConical, Settings, Loader2,
+  FlaskConical, Settings, Loader2, Sun, Moon,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 
@@ -33,6 +33,28 @@ const NAV_ITEMS = [
   { href: '/settings', icon: Settings, label: '설정' },
 ];
 
+function useTheme() {
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    setDark(document.documentElement.getAttribute('data-theme') === 'dark');
+  }, []);
+
+  const toggle = useCallback(() => {
+    const next = !dark;
+    setDark(next);
+    if (next) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [dark]);
+
+  return { dark, toggle };
+}
+
 function NavContent({ pathname, onNavigate, user, onSignOut }: {
   pathname: string;
   onNavigate?: () => void;
@@ -41,14 +63,15 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
 }) {
   const { tasks } = useBackgroundTasks();
   const runningTasks = tasks.filter(t => t.status === 'running');
+  const { dark, toggle } = useTheme();
 
   return (
     <>
       <div className="p-6">
-        <h1 className="text-xl font-bold text-white">
-          <FlaskConical className="w-5 h-5 text-primary inline-block" /> <span className="text-primary">LabFlow</span>
+        <h1 className="text-xl font-bold text-text-heading">
+          <FlaskConical className="w-5 h-5 text-primary inline-block" /> <span className="text-primary">Research Flow</span>
         </h1>
-        <p className="text-xs text-text-muted mt-1">Research Lab AI OS</p>
+        <p className="text-xs text-text-muted mt-1">연구실 AI 비서</p>
       </div>
 
       <nav className="flex-1 px-3 space-y-1">
@@ -62,8 +85,8 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
               onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 focus-ring ${
                 active
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-text-muted hover:bg-bg-input/50 hover:text-white'
+                  ? 'bg-primary-light text-primary font-medium'
+                  : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
               }`}
             >
               <item.icon className="w-4 h-4" />
@@ -71,16 +94,17 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
             </Link>
           );
         })}
-        {/* Cmd+K shortcut hint */}
-        <div className="mt-4 px-3 hidden md:block">
-          <kbd className="text-[10px] text-text-muted/50 bg-bg-input/30 px-2 py-1 rounded border border-bg-input/50">
-            ⌘K 빠른 이동
-          </kbd>
-        </div>
       </nav>
 
+      {/* Cmd+K shortcut hint */}
+      <div className="px-6 hidden md:block">
+        <kbd className="text-[10px] text-text-muted bg-bg-input px-2 py-1 rounded border border-border">
+          ⌘K 빠른 이동
+        </kbd>
+      </div>
+
       {runningTasks.length > 0 && (
-        <div className="px-4 py-2 border-t border-bg-input/50">
+        <div className="px-4 py-2 border-t border-border">
           {runningTasks.map(task => (
             <div key={task.id} className="flex items-center gap-2 text-xs text-text-muted py-1">
               <Loader2 className="w-3 h-3 animate-spin text-primary" />
@@ -90,28 +114,35 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
         </div>
       )}
 
-      <div className="p-4 border-t border-bg-input/50">
+      <div className="p-4 border-t border-border">
         <div className="flex items-center gap-3">
           <button
             onClick={onSignOut}
-            className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-sm font-bold hover:bg-primary/30 transition-colors"
+            className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center text-sm font-bold hover:bg-primary-light transition-colors"
             title="로그아웃"
           >
             {user?.email?.charAt(0).toUpperCase() || '?'}
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-white truncate">
+            <p className="text-sm font-medium text-text-heading truncate">
               {user?.user_metadata?.name || user?.email || '...'}
             </p>
             <p className="text-xs text-text-muted truncate">
               {user?.email || ''}
             </p>
           </div>
+          <button
+            onClick={toggle}
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+            title={dark ? '라이트 모드' : '다크 모드'}
+          >
+            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
         </div>
-        <div className="mt-3 flex gap-2 text-[10px] text-text-muted/60">
-          <a href="/legal/terms.html" className="hover:text-text-muted transition-colors">이용약관</a>
+        <div className="mt-3 flex gap-2 text-[10px] text-text-muted">
+          <a href="/legal/terms.html" className="hover:text-text-main transition-colors">이용약관</a>
           <span>·</span>
-          <a href="/legal/privacy.html" className="hover:text-text-muted transition-colors">개인정보처리방침</a>
+          <a href="/legal/privacy.html" className="hover:text-text-main transition-colors">개인정보처리방침</a>
         </div>
       </div>
     </>
@@ -150,14 +181,14 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 flex-col bg-bg-card border-r border-bg-input/50">
+      <aside className="hidden md:flex w-64 flex-col bg-bg-card border-r border-border">
         <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} />
       </aside>
 
       {/* Mobile hamburger button */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-bg-card/80 backdrop-blur border border-bg-input/50 text-white"
+        className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-bg-card/80 backdrop-blur border border-border text-text-heading"
         aria-label="메뉴 열기"
       >
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
@@ -169,13 +200,13 @@ export function Sidebar() {
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative w-72 flex flex-col bg-bg-card border-r border-bg-input/50 animate-in slide-in-from-left duration-200">
+          <aside className="relative w-72 flex flex-col bg-bg-card border-r border-border animate-in slide-in-from-left duration-200">
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-4 p-1 text-text-muted hover:text-white"
+              className="absolute top-4 right-4 p-1 text-text-muted hover:text-text-heading"
               aria-label="메뉴 닫기"
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
