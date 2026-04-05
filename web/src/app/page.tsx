@@ -48,22 +48,22 @@ export default function DashboardPage() {
 
       {/* 바로가기 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <a href="/brain" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
+        <a href="/brain" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
           <Brain className="w-7 h-7 text-primary" />
           <h3 className="text-sm font-medium text-white mt-3">Brain</h3>
           <p className="text-xs text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
         </a>
-        <a href="/tasks" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
+        <a href="/tasks" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
           <ClipboardList className="w-7 h-7 text-blue-400" />
           <h3 className="text-sm font-medium text-white mt-3">Tasks & Ideas</h3>
           <p className="text-xs text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
         </a>
-        <a href="/papers" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
+        <a href="/papers" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
           <BookOpen className="w-7 h-7 text-green-400" />
           <h3 className="text-sm font-medium text-white mt-3">연구동향</h3>
           <p className="text-xs text-text-muted mt-1">주간 자동 논문 모니터링</p>
         </a>
-        <a href="/meetings" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 hover:border-primary/30 transition-colors">
+        <a href="/meetings" className="bg-bg-card rounded-xl border border-bg-input/50 p-5 card-hover hover:border-primary/30">
           <Mic className="w-7 h-7 text-yellow-400" />
           <h3 className="text-sm font-medium text-white mt-3">회의 노트</h3>
           <p className="text-xs text-text-muted mt-1">{meetings.length}건의 회의 기록</p>

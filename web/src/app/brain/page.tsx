@@ -56,6 +56,9 @@ export default function BrainPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [isTokenStreaming, setIsTokenStreaming] = useState(false);
+  const [showMobileSessions, setShowMobileSessions] = useState(false);
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -68,6 +71,16 @@ export default function BrainPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const dragCounter = useRef(0);
+
+  // Auto-save input to localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('brain-draft');
+    if (saved) setInput(saved);
+  }, []);
+  useEffect(() => {
+    if (input) localStorage.setItem('brain-draft', input);
+    else localStorage.removeItem('brain-draft');
+  }, [input]);
 
   // Conversations store
   const { conversations, setMessages: storeMessages, addMessage: storeAddMessage, setStreaming } = useConversationsStore();
@@ -195,18 +208,25 @@ export default function BrainPage() {
 
     try {
       setThinkingSteps([]);
+      setStreamingContent('');
+      setIsTokenStreaming(false);
       const result = await brainChatStream(
         msg,
         (step) => setThinkingSteps(prev => {
-          // Avoid duplicate consecutive steps
           if (prev.length > 0 && prev[prev.length - 1] === step) return prev;
           return [...prev, step];
         }),
+        (token) => {
+          setIsTokenStreaming(true);
+          setStreamingContent(prev => prev + token);
+        },
         channelIdAtSend || undefined,
         currentFileId,
         isNewSession ? true : undefined,
       );
       setThinkingSteps([]);
+      setStreamingContent('');
+      setIsTokenStreaming(false);
       const assistantMsg: BrainMessage = {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -236,6 +256,8 @@ export default function BrainPage() {
       }
     } catch (err: any) {
       setThinkingSteps([]);
+      setStreamingContent('');
+      setIsTokenStreaming(false);
       const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
@@ -470,15 +492,62 @@ export default function BrainPage() {
             {/* Header */}
             <div className="p-4 border-b border-bg-input/50">
               <div className="flex items-center gap-2">
+                {/* Mobile session toggle */}
+                <button
+                  onClick={() => setShowMobileSessions(true)}
+                  className="md:hidden p-1.5 rounded-lg bg-bg-input text-text-muted hover:text-white transition-colors"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                </button>
                 <Brain className="w-5 h-5 text-primary" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <h3 className="text-white font-medium text-sm">Brain</h3>
-                  <p className="text-[11px] text-text-muted">
+                  <p className="text-[11px] text-text-muted truncate">
                     이메일, 일정, 메모, 연구실 정보 -- 무엇이든 물어보세요
                   </p>
                 </div>
+                <button
+                  onClick={handleNewSession}
+                  className="md:hidden p-1.5 rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+                  title="새 대화"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
             </div>
+
+            {/* Mobile sessions drawer */}
+            {showMobileSessions && (
+              <>
+                <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setShowMobileSessions(false)} />
+                <div className="fixed inset-y-0 left-0 w-72 bg-bg-card z-50 md:hidden animate-in slide-in-from-left duration-200 shadow-2xl flex flex-col">
+                  <div className="p-4 border-b border-bg-input/50 flex items-center justify-between">
+                    <h3 className="text-white font-medium">대화 목록</h3>
+                    <button onClick={() => setShowMobileSessions(false)} className="p-1 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3 space-y-1">
+                    <button
+                      onClick={() => { handleNewSession(); setShowMobileSessions(false); }}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary/20 text-primary rounded-lg text-sm hover:bg-primary/30 font-medium mb-2"
+                    >
+                      <Plus className="w-4 h-4" /> 새 대화
+                    </button>
+                    {sessions.map((ch: any) => (
+                      <button
+                        key={ch.id}
+                        onClick={() => { handleSelectSession(ch); setShowMobileSessions(false); }}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                          activeChannelId === ch.id ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-bg-input'
+                        }`}
+                      >
+                        <div className="truncate">{ch.name || `대화 #${ch.id.slice(-4)}`}</div>
+                        <div className="text-[10px] text-text-muted mt-0.5">{timeAgo(ch.lastMessageAt || ch.createdAt)}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Messages area — Claude-style */}
             <div className="flex-1 overflow-y-auto p-4">
@@ -498,11 +567,11 @@ export default function BrainPage() {
                   </div>
                 )}
                 {activeMessages.map(msg => (
-                  <div key={msg.id}>
+                  <div key={msg.id} className="animate-msg-in">
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
                       <div className="flex justify-end">
-                        <div className="bg-blue-600 text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
+                        <div className="bg-blue-600 text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap shadow-lg shadow-blue-600/10">
                           {msg.content}
                         </div>
                       </div>
@@ -515,29 +584,41 @@ export default function BrainPage() {
                           </ReactMarkdown>
                         </div>
                         {/* Hover action: copy */}
-                        <div className="absolute -top-2 right-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute -top-2 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200">
                           <button
                             onClick={() => handleCopyMessage(msg.id, msg.content)}
-                            className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-white transition-colors"
+                            className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-white hover:bg-bg-input transition-colors"
                             title="복사"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           {copiedId === msg.id && (
-                            <span className="absolute -top-6 right-0 text-[10px] text-green-400 bg-bg-card px-2 py-0.5 rounded">복사됨</span>
+                            <span className="absolute -top-6 right-0 text-[10px] text-green-400 bg-bg-card px-2 py-0.5 rounded shadow-sm">복사됨</span>
                           )}
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
-                {loading && (
-                  <div className="flex justify-start">
+                {/* Token streaming: show response as it arrives */}
+                {loading && streamingContent && (
+                  <div className="group relative animate-msg-in">
+                    <div className="prose prose-invert prose-sm max-w-none text-white/90 leading-relaxed">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {stripEmoji(streamingContent)}
+                      </ReactMarkdown>
+                      <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
+                    </div>
+                  </div>
+                )}
+                {/* Thinking steps (before tokens arrive) */}
+                {loading && !streamingContent && (
+                  <div className="flex justify-start animate-msg-in">
                     <div className="text-sm text-text-muted space-y-1">
                       {thinkingSteps.length > 0 ? (
                         <>
                           {thinkingSteps.map((step, i) => (
-                            <div key={i} className={`flex items-center gap-1.5 transition-opacity duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
+                            <div key={i} className={`flex items-center gap-1.5 transition-all duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
                               {i < thinkingSteps.length - 1 ? (
                                 <span className="w-3.5 h-3.5 flex items-center justify-center text-green-400">
                                   <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
@@ -598,7 +679,7 @@ export default function BrainPage() {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="메시지를 입력하세요..."
-                  className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="flex-1 bg-bg-input text-white px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all"
                 />
                 {/* Voice input button */}
                 <button

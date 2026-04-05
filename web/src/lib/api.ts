@@ -63,28 +63,49 @@ export function clearTokenCache() {
   tokenExpiresAt = 0;
 }
 
-async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2): Promise<T> {
   const url = `${API_BASE}${path}`;
   const authHeaders = await getAuthHeaders();
 
-  // body 없는 POST/PATCH에서 Content-Type: application/json이 빈 body 에러를 유발하므로 제거
   const headers = { ...authHeaders, ...options.headers } as Record<string, string>;
   if (!options.body && headers['Content-Type'] === 'application/json') {
     delete headers['Content-Type'];
   }
 
-  const res = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    const details = err.details ? ` (${JSON.stringify(err.details).slice(0, 200)})` : '';
-    throw new Error((err.error || `API Error: ${res.status}`) + details);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const res = await fetch(url, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        const details = err.details ? ` (${JSON.stringify(err.details).slice(0, 200)})` : '';
+        throw new Error((err.error || `API Error: ${res.status}`) + details);
+      }
+
+      return res.json();
+    } catch (err: any) {
+      lastError = err;
+      // Don't retry POST/PATCH/DELETE (non-idempotent) or 4xx client errors
+      const method = (options.method || 'GET').toUpperCase();
+      const isClientError = err.message?.includes('API Error: 4');
+      if (method !== 'GET' || isClientError || attempt === retries) break;
+      // Exponential backoff: 1s, 3s
+      await new Promise(r => setTimeout(r, (attempt + 1) * 1500));
+    }
   }
 
-  return res.json();
+  throw lastError || new Error('Request failed');
 }
 
 // ── 캡처 ──────────────────────────────────────────
@@ -365,6 +386,7 @@ export type BrainChatResult = { response: string; channelId: string; intent: str
 export async function brainChatStream(
   message: string,
   onProgress: (step: string) => void,
+  onToken?: (token: string) => void,
   channelId?: string,
   fileId?: string,
   newSession?: boolean,
@@ -405,6 +427,8 @@ export async function brainChatStream(
         const event = JSON.parse(line.slice(6));
         if (event.type === 'progress') {
           onProgress(event.step);
+        } else if (event.type === 'token') {
+          onToken?.(event.content);
         } else if (event.type === 'done') {
           return event as BrainChatResult;
         } else if (event.type === 'error') {

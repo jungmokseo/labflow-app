@@ -8,6 +8,7 @@ import {
 import { useApiData } from '@/lib/use-api';
 import { SkeletonCard, SkeletonPage } from '@/components/Skeleton';
 import { CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic, X } from 'lucide-react';
+import { useToast } from '@/components/Toast';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
 type StatusFilter = 'active' | 'completed';
@@ -39,8 +40,9 @@ export default function TasksPage() {
   const [newInput, setNewInput] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
+  const { toast } = useToast();
 
-  const { data: capturesData, isLoading: loading, mutate: refreshCaptures } = useApiData(
+  const { data: capturesData, isLoading, isValidating, mutate: refreshCaptures } = useApiData(
     `captures-${tab}-${statusFilter}-${sortBy}`,
     async () => {
       const res = await getCaptures({
@@ -62,23 +64,25 @@ export default function TasksPage() {
     setNewInput('');
     try {
       const res = await createCapture(inputText);
-      // 서버 응답으로 목록에 추가 (낙관적 업데이트)
       if (res.data) {
         refreshCaptures((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
+        const label = res.data.category === 'task' ? '할일' : res.data.category === 'idea' ? '아이디어' : '메모';
+        toast(`${label} 저장됨: "${res.data.summary || inputText.slice(0, 30)}"`, 'success');
       } else {
         await refreshCaptures();
+        toast('저장되었습니다', 'success');
       }
-    } catch (err: any) { setError(err.message); }
+    } catch (err: any) { setError(err.message); toast('저장 실패', 'error'); }
     finally { setAdding(false); }
   }
 
   async function handleToggleComplete(c: Capture) {
-    // 낙관적 업데이트: UI 먼저 반영
     const newCompleted = !c.completed;
     refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, completed: newCompleted } : cap) } : prev, { revalidate: false });
     try {
       await updateCapture(c.id, { completed: newCompleted });
-    } catch { refreshCaptures(); } // 실패 시 원복
+      toast(newCompleted ? '완료 처리됨' : '미완료로 변경됨', 'success');
+    } catch { refreshCaptures(); toast('변경 실패. 다시 시도해 주세요.', 'error'); }
   }
 
   async function handleReview(c: Capture) {
@@ -92,7 +96,8 @@ export default function TasksPage() {
     refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== id) } : prev, { revalidate: false });
     try {
       await deleteCapture(id);
-    } catch { refreshCaptures(); }
+      toast('삭제됨', 'info');
+    } catch { refreshCaptures(); toast('삭제 실패', 'error'); }
   }
 
   async function handleClearCompleted() {
@@ -113,8 +118,10 @@ export default function TasksPage() {
 
   const unreviewed = captures.filter(c => !c.reviewed && !c.completed).length;
   const pendingTasks = meta?.taskStats?.pending || 0;
+  // Only show full skeleton on very first load (no data at all)
+  const firstLoad = isLoading && !capturesData;
 
-  if (loading && captures.length === 0) return <SkeletonPage cards={5} />;
+  if (firstLoad) return <SkeletonPage cards={5} />;
 
   return (
     <div className="min-h-screen bg-bg p-6 max-w-4xl mx-auto">
@@ -220,20 +227,25 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* List */}
-      {loading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
+      {/* Subtle revalidation indicator */}
+      {isValidating && captures.length > 0 && (
+        <div className="h-0.5 bg-primary/20 rounded-full mb-2 overflow-hidden">
+          <div className="h-full bg-primary/60 rounded-full animate-pulse w-1/2" />
         </div>
-      ) : filtered.length === 0 ? (
+      )}
+
+      {/* List */}
+      {filtered.length === 0 ? (
         <div className="text-center py-20">
           <div className="mb-3 flex justify-center">{tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> : tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> : <ClipboardList className="w-10 h-10 text-text-muted" />}</div>
           <h3 className="text-white font-medium mb-1">
-            {statusFilter === 'completed' ? '완료된 항목이 없습니다' : '아직 항목이 없습니다'}
+            {isValidating ? '불러오는 중...' : statusFilter === 'completed' ? '완료된 항목이 없습니다' : '아직 항목이 없습니다'}
           </h3>
-          <p className="text-text-muted text-sm">
-            위 입력창에 할일이나 아이디어를 입력하거나, Brain 채팅에서 자연스럽게 말하면 자동으로 저장됩니다.
-          </p>
+          {!isValidating && (
+            <p className="text-text-muted text-sm">
+              위 입력창에 할일이나 아이디어를 입력하거나, Brain 채팅에서 자연스럽게 말하면 자동으로 저장됩니다.
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -243,21 +255,21 @@ export default function TasksPage() {
             return (
               <div
                 key={c.id}
-                className={`bg-bg-card rounded-xl border p-4 transition-colors cursor-pointer ${
+                className={`bg-bg-card rounded-xl border p-4 card-hover cursor-pointer animate-msg-in ${
                   !c.reviewed && !c.completed
                     ? 'border-primary/30 bg-primary/5'
-                    : 'border-bg-input/50'
+                    : 'border-bg-input/50 hover:border-primary/20'
                 } ${c.completed ? 'opacity-60' : ''}`}
                 onClick={() => { if (!c.reviewed && !c.completed) handleReview(c); }}
               >
                 <div className="flex items-start gap-3">
                   {/* Complete toggle */}
                   <button
-                    onClick={() => handleToggleComplete(c)}
-                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                    onClick={(e) => { e.stopPropagation(); handleToggleComplete(c); }}
+                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 ${
                       c.completed
-                        ? 'bg-green-500 border-green-500 text-white'
-                        : 'border-bg-input hover:border-primary'
+                        ? 'bg-green-500 border-green-500 text-white check-bounce'
+                        : 'border-bg-input hover:border-primary hover:scale-110'
                     }`}
                   >
                     {c.completed && <span className="text-xs">✓</span>}

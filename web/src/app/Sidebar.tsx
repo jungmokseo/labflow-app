@@ -60,7 +60,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
               href={item.href}
               onClick={onNavigate}
               onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 focus-ring ${
                 active
                   ? 'bg-primary/10 text-primary font-medium'
                   : 'text-text-muted hover:bg-bg-input/50 hover:text-white'
@@ -71,6 +71,12 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
             </Link>
           );
         })}
+        {/* Cmd+K shortcut hint */}
+        <div className="mt-4 px-3 hidden md:block">
+          <kbd className="text-[10px] text-text-muted/50 bg-bg-input/30 px-2 py-1 rounded border border-bg-input/50">
+            ⌘K 빠른 이동
+          </kbd>
+        </div>
       </nav>
 
       {runningTasks.length > 0 && (
