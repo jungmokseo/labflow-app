@@ -243,11 +243,12 @@ export default function TasksPage() {
             return (
               <div
                 key={c.id}
-                className={`bg-bg-card rounded-xl border p-4 transition-colors ${
+                className={`bg-bg-card rounded-xl border p-4 transition-colors cursor-pointer ${
                   !c.reviewed && !c.completed
                     ? 'border-primary/30 bg-primary/5'
                     : 'border-bg-input/50'
                 } ${c.completed ? 'opacity-60' : ''}`}
+                onClick={() => { if (!c.reviewed && !c.completed) handleReview(c); }}
               >
                 <div className="flex items-start gap-3">
                   {/* Complete toggle */}
@@ -316,15 +317,6 @@ export default function TasksPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {!c.reviewed && !c.completed && (
-                      <button
-                        onClick={() => handleReview(c)}
-                        className="text-xs text-primary hover:text-primary/80 px-2 py-1 rounded hover:bg-primary/10"
-                        title="확인"
-                      >
-                        확인
-                      </button>
-                    )}
                     <button
                       onClick={() => handleDelete(c.id)}
                       className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10"
