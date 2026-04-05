@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getMeetings, checkHealth, Meeting } from '@/lib/api';
+import { SkeletonPage } from '@/components/Skeleton';
 import { Brain, ClipboardList, BookOpen, Mic } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -29,14 +30,7 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-text-muted">대시보드 로딩 중...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonPage cards={4} />;
   }
 
   return (

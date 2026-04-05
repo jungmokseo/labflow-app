@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { setAuthTokenGetter } from '@/lib/api';
+import { setAuthTokenGetter, clearTokenCache } from '@/lib/api';
 import { createClient } from '@/lib/supabase';
 
 /**
@@ -26,6 +26,9 @@ export function AuthInit() {
 
     supabase.auth.onAuthStateChange((_event, session) => {
       cachedToken = session?.access_token ?? null;
+      if (!session) {
+        clearTokenCache();
+      }
     });
 
     setAuthTokenGetter(async () => {

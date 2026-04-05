@@ -5,11 +5,23 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { mutate } from 'swr';
+import {
+  getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
+} from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
+
+// Prefetch data on hover — warms SWR cache before navigation
+const PREFETCH_MAP: Record<string, () => void> = {
+  '/tasks': () => mutate('captures-all-active-newest', () => getCaptures({ sort: 'newest' }), { revalidate: false }),
+  '/brain': () => mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : []), { revalidate: false }),
+  '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
+  '/papers': () => mutate('paper-results', () => getPaperAlertResults().then(r => r.results || r.data || []).catch(() => null), { revalidate: false }),
+};
 
 const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
@@ -47,6 +59,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
               key={item.href}
               href={item.href}
               onClick={onNavigate}
+              onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 active
                   ? 'bg-primary/10 text-primary font-medium'

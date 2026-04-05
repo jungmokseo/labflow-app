@@ -13,15 +13,27 @@ export function setAuthTokenGetter(fn: () => Promise<string | null>) {
   tokenGetter = fn;
 }
 
+// ── Auth token cache — avoid repeated async lookups ──
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0;
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
 
+  // Use cached token if valid (refresh 60s before expiry)
+  if (cachedToken && Date.now() < tokenExpiresAt - 60000) {
+    headers['Authorization'] = `Bearer ${cachedToken}`;
+    return headers;
+  }
+
   // tokenGetter가 설정되어 있으면 사용
   if (tokenGetter) {
     const token = await tokenGetter();
     if (token) {
+      cachedToken = token;
+      tokenExpiresAt = Date.now() + 3600000; // 1 hour default
       headers['Authorization'] = `Bearer ${token}`;
       return headers;
     }
@@ -34,12 +46,21 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
+        cachedToken = session.access_token;
+        // Use actual expiry if available
+        tokenExpiresAt = session.expires_at ? session.expires_at * 1000 : Date.now() + 3600000;
         headers['Authorization'] = `Bearer ${session.access_token}`;
       }
     } catch { /* ignore */ }
   }
 
   return headers;
+}
+
+// Export for AuthInit to invalidate on auth state change
+export function clearTokenCache() {
+  cachedToken = null;
+  tokenExpiresAt = 0;
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -3,6 +3,7 @@ import './globals.css';
 import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { DataPrefetch } from '@/components/DataPrefetch';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const viewport: Viewport = {
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-bg text-text-main antialiased">
         <AuthInit />
         <ServiceWorkerRegister />
+        <DataPrefetch />
         {user ? (
           <div className="flex h-screen">
             <Sidebar />

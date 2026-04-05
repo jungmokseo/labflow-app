@@ -6,7 +6,7 @@ import {
   type Capture,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-import { SkeletonCard } from '@/components/Skeleton';
+import { SkeletonCard, SkeletonPage } from '@/components/Skeleton';
 import { CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic, X } from 'lucide-react';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
@@ -114,7 +114,7 @@ export default function TasksPage() {
   const unreviewed = captures.filter(c => !c.reviewed && !c.completed).length;
   const pendingTasks = meta?.taskStats?.pending || 0;
 
-  if (loading && captures.length === 0) return null;
+  if (loading && captures.length === 0) return <SkeletonPage cards={5} />;
 
   return (
     <div className="min-h-screen bg-bg p-6 max-w-4xl mx-auto">
