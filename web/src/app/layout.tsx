@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { DataPrefetch } from '@/components/DataPrefetch';
+import { GlobalProgress } from '@/components/GlobalProgress';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const viewport: Viewport = {
@@ -32,6 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ko" className="dark">
       <body className="min-h-screen bg-bg text-text-main antialiased">
+        <GlobalProgress />
         <AuthInit />
         <ServiceWorkerRegister />
         <DataPrefetch />
