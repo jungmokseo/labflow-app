@@ -503,11 +503,17 @@ function extractBody(payload: any): string {
 }
 
 // ── 헬퍼: User 확인/생성 ─────────────────────────────
-async function ensureUser(clerkId: string) {
-  let user = await prisma.user.findFirst({ where: { clerkId } });
+async function ensureUser(userId: string) {
+  // userId는 DB의 id 필드 (authMiddleware가 resolveSupabaseUser로 반환한 값)
+  let user = await prisma.user.findFirst({ where: { id: userId } });
   if (!user) {
+    // id로 못 찾으면 clerkId(Supabase UUID)로 시도
+    user = await prisma.user.findFirst({ where: { clerkId: userId } });
+  }
+  if (!user) {
+    // 둘 다 없으면 새로 생성 (비정상 경로)
     user = await prisma.user.create({
-      data: { clerkId, email: `${clerkId}@dev.labflow.app`, name: 'Dev User' },
+      data: { clerkId: userId, email: `${userId}@dev.labflow.app`, name: 'User' },
     });
   }
   return user;
