@@ -394,15 +394,19 @@ export async function brainChatStream(
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
   const body = JSON.stringify({ message, channelId, fileId, newSession, stream: true });
 
-  // Retry once on network failure (handles Railway cold start)
+  // Retry with progressive backoff (handles Railway cold start)
   let res: Response | null = null;
   let lastError: Error | null = null;
+  const RETRY_DELAYS = [0, 2500, 5000]; // 3 attempts: immediate, 2.5s, 5s
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    // Refresh token on retry to handle stale cache
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // On retry: wake up server with lightweight ping, then wait
     if (attempt > 0) {
       clearTokenCache();
-      await new Promise(r => setTimeout(r, 1500));
+      // Wake-up ping (fire-and-forget, don't wait for response)
+      fetch(`${API_BASE_URL}/health`, { method: 'GET' }).catch(() => {});
+      await new Promise(r => setTimeout(r, RETRY_DELAYS[attempt]));
+      onProgress(`서버에 다시 연결하고 있습니다... (${attempt}/2)`);
     }
     const authHeaders = await getAuthHeaders();
 
@@ -411,7 +415,7 @@ export async function brainChatStream(
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
 
     try {
       res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
@@ -428,10 +432,10 @@ export async function brainChatStream(
         throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
       }
       lastError = fetchErr;
-      if (attempt === 1) {
+      if (attempt === 2) {
         throw new Error(`서버 연결 실패: ${fetchErr.message}`);
       }
-      // first attempt failed — retry
+      // attempt failed — retry
     }
   }
 

@@ -960,21 +960,65 @@ ${weekAlerts.map(a => `- ${'★'.repeat(a.stars || 1)} ${a.title}`).join('\n') |
 [Knowledge Graph 성장] +${newNodes} 노드, +${newEdges} 관계
 `.trim();
 
+  const weeklyPrompt = `다음 데이터를 바탕으로 주간 리뷰를 작성하세요.
+
+## 출력 포맷 (정확히 따르세요)
+
+**주간 리뷰** — ${weekAgo.toLocaleDateString('ko-KR')} ~ ${new Date().toLocaleDateString('ko-KR')}
+
+### 이번 주 요약
+- 핵심 활동 3-5줄, 각 항목 별도 줄
+
+### 미완료 사항
+- 아직 처리 안 된 액션아이템이나 태스크
+- 항목별 별도 줄, 마감일 있으면 **볼드**
+
+### 이번 주 하이라이트
+- 가장 의미 있었던 활동 1-2건
+
+### 다음 주 제안
+- 데이터 기반으로 다음 주에 집중할 것 2-3개 제안
+- 구체적 액션 포함
+
+### Knowledge Graph 성장
+- 새 노드/관계 수치와 의미
+
+## 규칙
+- 한국어로 작성
+- 마크다운 서식(볼드 **, 불릿 -, 수평선 ---) 적극 활용
+- 각 항목은 반드시 별도의 줄에 작성. 한 줄에 여러 항목을 절대 나열하지 마라.
+- 키워드, 고유명사, 날짜/마감일은 반드시 **볼드**로 강조
+- 이모지를 사용하지 마라. 마크다운 서식으로만 구조를 표현하라.
+
+${weekData}`;
+
+  // Sonnet으로 주간 리뷰 생성 (품질 우선)
+  try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default;
+    if (env.ANTHROPIC_API_KEY) {
+      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: weeklyPrompt }],
+      });
+      const text = response.content.find(b => b.type === 'text');
+      if (text && text.type === 'text') {
+        return text.text;
+      }
+    }
+  } catch (err) {
+    console.warn('Weekly review Sonnet failed, fallback to Gemini:', err);
+  }
+
+  // Gemini fallback
   try {
     const result = await geminiModel.generateContent({
-      contents: [{ role: 'user', parts: [{ text: `다음 데이터를 바탕으로 주간 리뷰를 작성하세요.
-
-규칙:
-1. "이번 주 요약" — 핵심 활동 3-5줄
-2. "미완료 사항" — 아직 처리 안 된 액션아이템이나 태스크
-3. "이번 주 하이라이트" — 가장 의미 있었던 활동
-4. "다음 주 제안" — 데이터 기반으로 다음 주에 집중할 것 2-3개 제안
-5. 한국어, 이모지, 간결하게
-
-${weekData}` }] }],
+      contents: [{ role: 'user', parts: [{ text: weeklyPrompt }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
-    return `**주간 리뷰**\n\n${sanitizeLlmOutput(result.response.text())}`;
+    return sanitizeLlmOutput(result.response.text());
   } catch {
     return `**주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
       `미팅: ${weekMeetings.length}건 | 캡처: ${weekCaptures.length}건 (완료: ${completedCaptures}건) | 대화: ${weekMessages}회\n` +

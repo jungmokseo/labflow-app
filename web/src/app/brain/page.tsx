@@ -586,6 +586,44 @@ export default function BrainPage() {
                     )}
                   </div>
                 ))}
+                {/* Thinking steps — always visible while loading (even during streaming) */}
+                {loading && thinkingSteps.length > 0 && (
+                  <div className="flex justify-start animate-msg-in">
+                    <div className="text-sm text-text-muted space-y-1">
+                      {thinkingSteps.map((step, i) => (
+                        <div key={i} className={`flex items-center gap-1.5 transition-all duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
+                          {i < thinkingSteps.length - 1 ? (
+                            <span className="w-3.5 h-3.5 flex items-center justify-center text-green-400">
+                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
+                            </span>
+                          ) : (
+                            <span className="flex gap-0.5 w-3.5 justify-center">
+                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                            </span>
+                          )}
+                          <span>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Default spinner when loading with no steps yet */}
+                {loading && thinkingSteps.length === 0 && !streamingContent && (
+                  <div className="flex justify-start animate-msg-in">
+                    <div className="text-sm text-text-muted">
+                      <div className="flex items-center gap-1.5">
+                        <span>생각 중</span>
+                        <span className="flex gap-0.5">
+                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Token streaming: show response as it arrives */}
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
@@ -594,42 +632,6 @@ export default function BrainPage() {
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
                       <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
-                    </div>
-                  </div>
-                )}
-                {/* Thinking steps (before tokens arrive) */}
-                {loading && !streamingContent && (
-                  <div className="flex justify-start animate-msg-in">
-                    <div className="text-sm text-text-muted space-y-1">
-                      {thinkingSteps.length > 0 ? (
-                        <>
-                          {thinkingSteps.map((step, i) => (
-                            <div key={i} className={`flex items-center gap-1.5 transition-all duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
-                              {i < thinkingSteps.length - 1 ? (
-                                <span className="w-3.5 h-3.5 flex items-center justify-center text-green-400">
-                                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
-                                </span>
-                              ) : (
-                                <span className="flex gap-0.5 w-3.5 justify-center">
-                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                                  <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                                </span>
-                              )}
-                              <span>{step}</span>
-                            </div>
-                          ))}
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span>생각 중</span>
-                          <span className="flex gap-0.5">
-                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                            <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
