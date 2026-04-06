@@ -11,6 +11,7 @@ import { useBrainSessionsStore } from '@/store/brain-sessions';
 import { stripEmoji } from '@/lib/strip-emoji';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import {
   Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
   MessageSquare, BarChart3, AlertTriangle, Calendar, CheckSquare,
@@ -564,7 +565,7 @@ export default function BrainPage() {
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
                         <div className="brain-prose max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                             {stripEmoji(msg.content)}
                           </ReactMarkdown>
                         </div>
@@ -589,7 +590,7 @@ export default function BrainPage() {
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
                     <div className="brain-prose max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
                       <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />

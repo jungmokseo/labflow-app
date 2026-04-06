@@ -443,6 +443,13 @@ main > * {
   color: var(--color-text-main);
 }
 
+/* Ensure line breaks render in chat */
+.brain-prose br {
+  display: block;
+  content: '';
+  margin-top: 0.25rem;
+}
+
 /* Dark mode — boost readability */
 [data-theme="dark"] .brain-prose {
   color: #F3F4F6;

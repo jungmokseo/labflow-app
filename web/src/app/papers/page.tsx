@@ -108,11 +108,14 @@ export default function PapersPage() {
 
   // SWR for paper results (keep full response for metadata)
   const { data: resultsResponse, isLoading: resultsLoading, mutate: refreshResults } = useApiData(
-    'paper-results',
+    'paper-results-v2',
     async () => { const data = await getPaperAlertResults(); return data; }
   );
-  const results: PaperAlertResult[] = (resultsResponse as any)?.results || (resultsResponse as any)?.data || [];
-  const apiJournals: string[] = (resultsResponse as any)?.journals || [];
+  // Handle both old cache format (array) and new format (object with results)
+  const results: PaperAlertResult[] = Array.isArray(resultsResponse)
+    ? resultsResponse
+    : (resultsResponse as any)?.results || (resultsResponse as any)?.data || [];
+  const apiJournals: string[] = Array.isArray(resultsResponse) ? [] : ((resultsResponse as any)?.journals || []);
 
   useEffect(() => { loadAlerts(); }, []);
 
