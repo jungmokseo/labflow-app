@@ -1590,7 +1590,7 @@ ${profile.groups.length > 0
         generatedAt: now.toISOString(),
       });
     } catch (error: any) {
-      app.log.error('서사형 이메일 브리핑 실패:', error);
+      console.error(`[email] 서사형 이메일 브리핑 실패: ${error.message || error}`, error.stack?.slice(0, 500) || '');
       if (error.message?.includes('invalid_grant') || error.message?.includes('401')) {
         return reply.code(401).send({ error: 'Gmail 토큰 만료', authUrl: '/api/email/auth/url' });
       }
