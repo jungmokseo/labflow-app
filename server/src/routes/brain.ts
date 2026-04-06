@@ -1096,10 +1096,13 @@ async function getOrCreateShadow(userId: string, shadowType: ShadowType): Promis
  * Shadow에 메시지 저장 + 요약 트리거 (임계값 15)
  */
 async function saveShadowMessage(shadowChannelId: string, userMsg: string, detailResponse: string): Promise<void> {
+  // Shadow channel에서 userId 조회
+  const channel = await prisma.channel.findUnique({ where: { id: shadowChannelId }, select: { userId: true } });
+  const userId = channel?.userId || '';
   await (prisma.message.createMany as any)({
     data: [
-      { channelId: shadowChannelId, role: 'user', content: userMsg },
-      { channelId: shadowChannelId, role: 'assistant', content: detailResponse },
+      { channelId: shadowChannelId, userId, role: 'user', content: userMsg },
+      { channelId: shadowChannelId, userId, role: 'assistant', content: detailResponse },
     ],
   });
   const msgCount = await prisma.message.count({ where: { channelId: shadowChannelId } });
