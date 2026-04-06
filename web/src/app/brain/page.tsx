@@ -2,17 +2,18 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel, searchBrainMemory,
+  brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel,
   type BrainMessage, type UploadResult,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import { useConversationsStore } from '@/store/conversations';
+import { useBrainSessionsStore } from '@/store/brain-sessions';
 import { stripEmoji } from '@/lib/strip-emoji';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
-  Brain, Paperclip, Loader2, Search, X, Copy, Mic, MicOff, Send, Plus, Trash2,
-  MessageSquare, Clock, ChevronDown, ChevronUp,
+  Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
+  MessageSquare,
 } from 'lucide-react';
 
 function timeAgo(dateStr: string): string {
@@ -26,15 +27,6 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 }
 
-function isToday(dateStr: string): boolean {
-  return new Date(dateStr).toDateString() === new Date().toDateString();
-}
-
-function isThisWeek(dateStr: string): boolean {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  return diff < 7 * 24 * 60 * 60 * 1000;
-}
-
 function formatRecordingTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
@@ -44,13 +36,12 @@ function formatRecordingTime(seconds: number): string {
 const MAX_RECORDING_SECONDS = 180; // 3 minutes
 
 export default function BrainPage() {
-  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  // Use shared store for activeChannelId (synced with Sidebar)
+  const { activeChannelId, setActive: setActiveChannelId } = useConversationsStore();
+  const { setSessions } = useBrainSessionsStore();
   const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
-  const [tab, setTab] = useState<'chat' | 'search'>('chat');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -85,13 +76,14 @@ export default function BrainPage() {
   // Conversations store
   const { conversations, setMessages: storeMessages, addMessage: storeAddMessage, setStreaming } = useConversationsStore();
 
-  // SWR for channels list
+  // SWR for channels list — sync to shared store for Sidebar
   const { data: channelsData, mutate: refreshChannels } = useApiData(
     'brain-channels',
     async () => { const res = await getBrainChannels(); return Array.isArray(res.data) ? res.data : []; },
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
   const sessions = channelsData || [];
+  useEffect(() => { setSessions(sessions); }, [sessions, setSessions]);
 
   // Derive messages from store or local state
   const activeMessages = activeChannelId ? (conversations[activeChannelId]?.messages || []) : localNewMessages;
@@ -104,6 +96,13 @@ export default function BrainPage() {
       loadMessages(sessions[0].id);
     }
   }, [sessions]);
+
+  // Load messages when activeChannelId changes (e.g. from Sidebar click)
+  useEffect(() => {
+    if (activeChannelId && !conversations[activeChannelId]?.messages?.length) {
+      loadMessages(activeChannelId);
+    }
+  }, [activeChannelId]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
 
@@ -130,10 +129,6 @@ export default function BrainPage() {
     }
   }
 
-  function handleSelectSession(ch: any) {
-    loadMessages(ch.id);
-  }
-
   function handleNewSession() {
     setActiveChannelId(null);
     setLocalNewMessages([]);
@@ -144,6 +139,7 @@ export default function BrainPage() {
     try {
       await deleteBrainChannel(channelId);
       refreshChannels((prev: any) => prev ? (prev as any[]).filter((s: any) => s.id !== channelId) : prev, { revalidate: false });
+      useBrainSessionsStore.getState().removeSession(channelId);
       if (activeChannelId === channelId) {
         setActiveChannelId(null);
         setLocalNewMessages([]);
@@ -283,16 +279,6 @@ export default function BrainPage() {
     }
   }
 
-  async function handleSearch() {
-    if (!searchQuery.trim()) return;
-    try {
-      const res = await searchBrainMemory(searchQuery);
-      setSearchResults(res.data || res);
-    } catch (err: any) {
-      setSearchResults({ error: err.message });
-    }
-  }
-
   // Voice recording
   async function startRecording() {
     try {
@@ -404,77 +390,9 @@ export default function BrainPage() {
     } finally { setUploading(false); }
   }
 
-  // Group sessions by date
-  const todaySessions = sessions.filter((c: any) => isToday(c.lastMessageAt || c.createdAt));
-  const weekSessions = sessions.filter((c: any) => !isToday(c.lastMessageAt || c.createdAt) && isThisWeek(c.lastMessageAt || c.createdAt));
-  const olderSessions = sessions.filter((c: any) => !isThisWeek(c.lastMessageAt || c.createdAt));
-
-  const searchLabelIcons: Record<string, React.ReactNode> = {
-    projects: <ClipboardList className="w-3.5 h-3.5 inline mr-1" />,
-    publications: <BookOpen className="w-3.5 h-3.5 inline mr-1" />,
-    members: <User className="w-3.5 h-3.5 inline mr-1" />,
-    memos: <MessageSquare className="w-3.5 h-3.5 inline mr-1" />,
-  };
-
   return (
-    <div className="flex h-screen md:h-[calc(100vh-2rem)] md:gap-4 p-0 md:p-4">
-      {/* Sidebar (hidden on mobile) */}
-      <div className="hidden md:flex w-60 bg-bg-card rounded-xl flex-col overflow-hidden">
-        <div className="p-4 pb-2">
-          <h2 className="text-lg font-bold text-text-heading flex items-center gap-2">
-            <Brain className="w-5 h-5 text-primary" /> Brain
-          </h2>
-          <div className="flex gap-1 mt-3">
-            <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>채팅</button>
-            <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>검색</button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
-          <div className="pt-3 pb-2">
-            <button
-              onClick={handleNewSession}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-primary-light text-primary rounded-lg text-sm hover:bg-primary/30 font-medium"
-            >
-              <Plus className="w-4 h-4" /> 새 대화
-            </button>
-          </div>
-
-          {!activeChannelId && (
-            <div className="px-3 py-2 rounded-lg text-sm bg-primary-light text-primary flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-xs font-medium">새 대화</span>
-            </div>
-          )}
-
-          {todaySessions.length > 0 && (
-            <>
-              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
-              {todaySessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
-              ))}
-            </>
-          )}
-          {weekSessions.length > 0 && (
-            <>
-              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
-              {weekSessions.map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
-              ))}
-            </>
-          )}
-          {olderSessions.length > 0 && (
-            <>
-              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
-              {olderSessions.slice(0, 15).map((ch: any) => (
-                <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
-              ))}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Main area */}
+    <div className="flex h-screen md:h-[calc(100vh-2rem)] p-0 md:p-4">
+      {/* Main area — full width (sidebar is in the main nav now) */}
       <div
         className="flex-1 bg-bg-card rounded-xl flex flex-col relative"
         onDragOver={handleDragOver}
@@ -492,7 +410,7 @@ export default function BrainPage() {
             </div>
           </div>
         )}
-        {tab === 'chat' ? (
+        {/* Chat view */}
           <>
             {/* Header */}
             <div className="p-4 border-b border-border">
@@ -540,7 +458,7 @@ export default function BrainPage() {
                     {sessions.map((ch: any) => (
                       <button
                         key={ch.id}
-                        onClick={() => { handleSelectSession(ch); setShowMobileSessions(false); }}
+                        onClick={() => { loadMessages(ch.id); setShowMobileSessions(false); }}
                         className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
                           activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover'
                         }`}
@@ -578,7 +496,7 @@ export default function BrainPage() {
                           {sessions.slice(0, 10).map((ch: any) => (
                             <button
                               key={ch.id}
-                              onClick={() => handleSelectSession(ch)}
+                              onClick={() => loadMessages(ch.id)}
                               className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
                                 activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
                               }`}
@@ -599,20 +517,20 @@ export default function BrainPage() {
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
                       <div className="flex justify-end">
-                        <div className="bg-primary/85 text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
+                        <div className="bg-primary text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
                           {msg.content}
                         </div>
                       </div>
                     ) : (
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
-                        <div className="prose prose-sm max-w-none leading-relaxed [&_*]:text-text-heading/90 [&_a]:text-primary [&_code]:text-text-heading/80 [&_strong]:text-text-heading">
+                        <div className="brain-prose max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {stripEmoji(msg.content)}
                           </ReactMarkdown>
                         </div>
                         {/* Hover action: copy */}
-                        <div className="absolute -top-2 right-0 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                        <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                           <button
                             onClick={() => handleCopyMessage(msg.id, msg.content)}
                             className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
@@ -621,7 +539,7 @@ export default function BrainPage() {
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           {copiedId === msg.id && (
-                            <span className="absolute -top-6 right-0 text-xs text-green-400 bg-bg-card px-2 py-0.5 rounded shadow-sm">복사됨</span>
+                            <span className="text-xs text-green-400">복사됨</span>
                           )}
                         </div>
                       </div>
@@ -631,7 +549,7 @@ export default function BrainPage() {
                 {/* Token streaming: show response as it arrives */}
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
-                    <div className="prose prose-sm max-w-none leading-relaxed [&_*]:text-text-heading/90 [&_a]:text-primary [&_code]:text-text-heading/80 [&_strong]:text-text-heading">
+                    <div className="brain-prose max-w-none">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
@@ -738,76 +656,8 @@ export default function BrainPage() {
               </div>
             </div>
           </>
-        ) : (
-          /* Search tab */
-          <div className="p-6">
-            <h3 className="text-text-heading font-medium text-lg mb-4 flex items-center gap-2">
-              <Search className="w-5 h-5 text-primary" /> Lab Memory 검색
-            </h3>
-            <div className="flex gap-2 mb-6">
-              <input
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="검색어를 입력하세요 (과제, 논문, 구성원, 메모...)"
-                className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <button onClick={handleSearch} className="px-6 py-3 bg-primary text-white rounded-xl text-sm font-medium">검색</button>
-            </div>
-            {searchResults && (
-              <div className="space-y-4">
-                {searchResults.error && <p className="text-red-400">{searchResults.error}</p>}
-                {['projects', 'publications', 'members', 'memos'].map(key => {
-                  const items = searchResults[key];
-                  if (!items?.length) return null;
-                  const labels: Record<string, string> = { projects: '과제', publications: '논문', members: '구성원', memos: '메모' };
-                  return (
-                    <div key={key}>
-                      <h4 className="text-primary font-medium mb-2 flex items-center gap-1.5">
-                        {searchLabelIcons[key]} {labels[key]} ({items.length})
-                      </h4>
-                      {items.map((item: any) => (
-                        <div key={item.id} className="bg-bg-input p-3 rounded-lg mb-2">
-                          <p className="text-text-heading text-sm font-medium">{item.name || item.title || item.content?.slice(0, 100)}</p>
-                          <p className="text-text-muted text-xs">{item.funder || item.journal || item.role || item.tags?.join(', ') || ''}</p>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
 }
 
-// Need to import these for the search labels
-import { ClipboardList, BookOpen, User } from 'lucide-react';
-
-function SessionButton({ ch, isActive, onClick, onDelete, isStreaming }: { ch: any; isActive: boolean; onClick: () => void; onDelete: () => void; isStreaming?: boolean }) {
-  return (
-    <div className={`group w-full flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors ${
-      isActive ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
-    }`}>
-      <button onClick={onClick} className="flex-1 flex items-center gap-2 min-w-0">
-        {isStreaming ? <Loader2 className="w-3 h-3 animate-spin text-primary flex-shrink-0" /> : isActive ? <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" /> : null}
-        <span className="flex-1 text-left truncate text-xs">
-          {ch.name || `대화 #${ch.id.slice(-4)}`}
-        </span>
-        <span className="text-xs text-text-muted flex-shrink-0">
-          {timeAgo(ch.lastMessageAt || ch.createdAt)}
-        </span>
-      </button>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-red-400 flex-shrink-0 p-0.5 transition-opacity"
-        title="삭제"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
-}

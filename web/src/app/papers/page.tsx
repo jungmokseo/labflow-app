@@ -76,6 +76,8 @@ interface WeekGroup {
   papers: PaperAlertResult[];
   themes: Map<string, PaperAlertResult[]>;
   totalFetched?: number;
+  journals: string[];
+  insight: string;
 }
 
 export default function PapersPage() {
@@ -159,7 +161,7 @@ export default function PapersPage() {
     });
   }
 
-  // 주차별 그룹핑
+  // 주차별 그룹핑 (중복 제거: 각 논문은 가장 관련 높은 테마 하나에만 배치)
   const weekGroups: WeekGroup[] = (() => {
     const grouped = new Map<string, PaperAlertResult[]>();
     for (const paper of results) {
@@ -176,16 +178,49 @@ export default function PapersPage() {
         return dateB.getTime() - dateA.getTime();
       })
       .map(([label, papers]) => {
-        // 테마별 분류
+        // 테마별 분류 — 중복 제거: 논문을 첫 번째(가장 관련 높은) 테마에만 배치
         const themes = new Map<string, PaperAlertResult[]>();
-        for (const p of papers) {
+        const assigned = new Set<string>();
+        // 별점 높은 논문 먼저 배치
+        const sorted = [...papers].sort((a, b) => ((b as any).stars || 1) - ((a as any).stars || 1));
+        for (const p of sorted) {
+          if (assigned.has(p.id)) continue;
           const pThemes = ((p as any).themes as string[]) || ['기타'];
-          for (const t of pThemes) {
-            if (!themes.has(t)) themes.set(t, []);
-            themes.get(t)!.push(p);
-          }
+          const primaryTheme = pThemes[0];
+          if (!themes.has(primaryTheme)) themes.set(primaryTheme, []);
+          themes.get(primaryTheme)!.push(p);
+          assigned.add(p.id);
         }
-        return { label, papers, themes };
+
+        // 수집 저널 목록
+        const journalSet = new Set<string>();
+        for (const p of papers) if (p.journal) journalSet.add(p.journal);
+        const journals = Array.from(journalSet).sort();
+
+        // 핵심 시사점 자동 생성
+        const topPapers = sorted.filter(p => ((p as any).stars || 1) >= 3);
+        const themeEntries = Array.from(themes.entries());
+        const largestTheme = themeEntries.sort((a, b) => b[1].length - a[1].length)[0];
+        let insight = '';
+        if (topPapers.length > 0) {
+          const topTitles = topPapers.slice(0, 2).map(p => `${p.title.slice(0, 50)}…(${p.journal})`);
+          insight += `핵심 논문 ${topPapers.length}편 — ${topTitles.join('; ')}. `;
+        }
+        if (largestTheme) {
+          insight += `${largestTheme[0]} 분야가 ${largestTheme[1].length}편으로 가장 활발`;
+          const otherActive = themeEntries.filter(([t, ps]) => t !== largestTheme[0] && ps.length >= 2);
+          if (otherActive.length > 0) {
+            insight += `, ${otherActive.map(([t, ps]) => `${t}(${ps.length}편)`).join('·')}도 주목`;
+          }
+          insight += '.';
+        }
+
+        // 테마 순서를 논문 수 내림차순으로 정렬
+        const sortedThemes = new Map(
+          Array.from(themes.entries()).sort((a, b) => b[1].length - a[1].length)
+        );
+
+        return { label, papers, themes: sortedThemes, journals, insight };
       });
   })();
 
@@ -366,13 +401,24 @@ export default function PapersPage() {
       ) : weekGroups.map(week => (
         <div key={week.label} className="space-y-4">
           {/* 주차 헤더 */}
-          <div className="border-t border-border/30 pt-6">
+          <div className="border-t border-border/30 pt-6 space-y-3">
             <h2 className="text-lg font-bold text-text-heading flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> {week.label}</h2>
-            <p className="text-text-muted text-base mt-1">
-              총 {week.papers.length}편 선별
-              {' · '}
-              {Array.from(week.themes.entries()).map(([t, papers]) => `${t}(${papers.length})`).join(', ')}
-            </p>
+            <div className="text-sm text-text-muted space-y-1">
+              <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
+              <p>
+                <span className="font-medium text-text-heading">필터링 결과</span>: <strong className="text-text-heading">{week.papers.length}편</strong> 관련 논문 선별
+                {' · '}
+                {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
+              </p>
+            </div>
+            {/* 핵심 시사점 */}
+            {week.insight && (
+              <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3">
+                <p className="text-sm text-text-heading leading-relaxed">
+                  <span className="font-semibold text-primary">시사점</span> — {week.insight}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* 테마별 섹션 */}
@@ -397,7 +443,12 @@ export default function PapersPage() {
                         className="w-full flex items-center gap-2 text-left py-2 px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
                       >
                         {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />}
-                        <span className="flex-1 text-base text-text-heading truncate">{paper.title}</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="text-base text-text-heading truncate block">{paper.title}</span>
+                          {(paper as any).matchedKeywords && (paper as any).matchedKeywords.length > 0 && (
+                            <span className="text-xs text-text-muted/70 truncate block">{((paper as any).matchedKeywords as string[]).join(', ')}</span>
+                          )}
+                        </span>
                         <span className="text-xs text-text-muted flex-shrink-0">({paper.journal})</span>
                         <span className={`text-xs flex-shrink-0 flex items-center gap-0.5 ${si.color}`}><StarRating count={si.stars} /> {si.label}</span>
                       </button>

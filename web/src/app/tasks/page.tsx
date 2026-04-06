@@ -6,7 +6,7 @@ import {
   type Capture,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-import { SkeletonPage } from '@/components/Skeleton';
+// Skeleton import removed — using inline spinner
 import {
   CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic,
   X, Pencil, Trash2, ExternalLink, PlayCircle, Send,
@@ -222,7 +222,11 @@ export default function TasksPage() {
   }
 
   const firstLoad = loadingActive && !activeData;
-  if (firstLoad) return <SkeletonPage cards={5} />;
+  if (firstLoad) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">

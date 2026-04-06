@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { getMeetings, checkHealth, Meeting } from '@/lib/api';
-import { SkeletonPage } from '@/components/Skeleton';
 import { Brain, ClipboardList, BookOpen, Mic } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -30,7 +29,11 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return <SkeletonPage cards={4} />;
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+      </div>
+    );
   }
 
   return (

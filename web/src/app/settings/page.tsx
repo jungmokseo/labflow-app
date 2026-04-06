@@ -404,7 +404,11 @@ function EmailTab({ connected }: { connected: boolean }) {
     setSaving(false);
   };
 
-  if (loading) return <div className="text-text-muted text-center py-8">로딩 중...</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center py-12">
+      <div className="w-8 h-8 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -501,7 +505,9 @@ function DictionaryTab() {
         </div>
 
         {loading ? (
-          <p className="text-text-muted text-sm text-center py-4">로딩 중...</p>
+          <div className="flex items-center justify-center py-6">
+            <div className="w-6 h-6 rounded-full border-2 border-border border-t-primary animate-spin" />
+          </div>
         ) : entries.length === 0 ? (
           <p className="text-text-muted text-sm text-center py-4">등록된 용어가 없습니다</p>
         ) : (
