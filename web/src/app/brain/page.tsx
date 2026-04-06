@@ -83,7 +83,7 @@ export default function BrainPage() {
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
   const sessions = channelsData || [];
-  useEffect(() => { setSessions(sessions); }, [sessions, setSessions]);
+  useEffect(() => { if (channelsData) setSessions(channelsData); }, [channelsData]);
 
   // Derive messages from store or local state
   const activeMessages = activeChannelId ? (conversations[activeChannelId]?.messages || []) : localNewMessages;
