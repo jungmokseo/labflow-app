@@ -1,26 +1,11 @@
-const CACHE_NAME = 'researchflow-v2';
-const STATIC_ASSETS = [
-  '/',
-  '/brain',
-  '/tasks',
-  '/papers',
-  '/meetings',
-  '/settings',
-];
+const CACHE_NAME = 'researchflow-v3';
 
-// Install — cache static shell
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch(() => {
-        // Individual failures are OK — pages may require auth
-      });
-    })
-  );
+// Install — skip waiting for immediate activation
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// Activate — clean old caches
+// Activate — clean ALL old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -30,30 +15,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch — network-first strategy (API calls always go to network)
+// Fetch — network-only for everything (Next.js handles its own caching)
+// Only use cache as offline fallback for navigation requests
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // API calls and auth — always network
-  if (url.pathname.startsWith('/api') || url.pathname.includes('auth') || url.pathname.includes('sign-')) {
+  // API calls, auth, _next assets — always network, no interception
+  if (url.pathname.startsWith('/api') || url.pathname.includes('auth') ||
+      url.pathname.startsWith('/_next') || url.pathname.includes('sign-')) {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache successful GET responses
-        if (event.request.method === 'GET' && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(() => {
-        // Offline fallback — serve from cache
-        return caches.match(event.request).then((cached) => {
-          return cached || new Response('Offline', { status: 503 });
-        });
-      })
-  );
+  // Navigation requests only — network-first with offline fallback
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() =>
+        new Response('<html><body><h1>오프라인</h1><p>네트워크 연결을 확인해주세요.</p></body></html>',
+          { headers: { 'Content-Type': 'text/html' } })
+      )
+    );
+    return;
+  }
+
+  // All other requests — don't intercept (let browser handle normally)
 });
