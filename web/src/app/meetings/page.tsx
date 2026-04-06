@@ -261,8 +261,8 @@ export default function MeetingsPage() {
       <div className="p-6 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h2 className="text-2xl font-bold text-text-heading flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
-          <p className="text-text-muted mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
+          <h2 className="text-3xl font-bold text-text-heading flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
+          <p className="text-text-muted text-base mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
         </div>
 
         {/* Recording / Upload Card */}
@@ -277,7 +277,7 @@ export default function MeetingsPage() {
               >
                 <Mic className="w-10 h-10 text-text-heading" />
               </button>
-              <p className="text-sm text-text-muted">탭하여 녹음 시작</p>
+              <p className="text-base text-text-muted">탭하여 녹음 시작</p>
 
               <div className="flex items-center gap-3 mt-2">
                 <div className="h-px flex-1 bg-bg-input/50" />
@@ -415,8 +415,8 @@ export default function MeetingsPage() {
                 {job.status === 'done' && <span className="text-green-400 flex-shrink-0">✓</span>}
                 {job.status === 'error' && <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-text-heading truncate">{job.title}</p>
-                  <p className="text-xs text-text-muted">
+                  <p className="text-base text-text-heading truncate">{job.title}</p>
+                  <p className="text-sm text-text-muted">
                     {job.status === 'uploading' && '회의록 생성 중...'}
                     {job.status === 'done' && '완료!'}
                     {job.status === 'error' && (job.error || '생성 실패')}
@@ -435,8 +435,8 @@ export default function MeetingsPage() {
           <div className="text-center py-16 text-text-muted">
             <Mic className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
             <p className="text-lg mb-2">아직 회의 기록이 없습니다</p>
-            <p className="text-sm">녹음하거나 오디오 파일을 업로드해 보세요.</p>
-            <p className="text-xs mt-4 text-text-muted">
+            <p className="text-base">녹음하거나 오디오 파일을 업로드해 보세요.</p>
+            <p className="text-sm mt-4 text-text-muted">
               음성을 자동으로 텍스트로 변환하고, 요약 및 액션아이템을 생성합니다.
             </p>
           </div>
@@ -455,7 +455,7 @@ export default function MeetingsPage() {
                 const [y, mo] = monthKey.split('-');
                 return (
                   <div key={monthKey}>
-                    <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-3">
+                    <h3 className="text-base font-semibold text-text-muted uppercase tracking-wider mb-3">
                       {y}년 {parseInt(mo)}월 ({monthMeetings.length}건)
                     </h3>
                     <div className="space-y-3">
@@ -471,7 +471,7 @@ export default function MeetingsPage() {
                     onClick={() => setExpandedId(expanded ? null : m.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-text-heading">{m.title}</p>
+                      <p className="text-base font-medium text-text-heading">{m.title}</p>
                       <div className="flex items-center gap-3 mt-1">
                         <span className="text-xs text-text-muted">
                           {new Date(m.createdAt).toLocaleDateString('ko-KR', {

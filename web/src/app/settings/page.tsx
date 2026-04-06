@@ -67,8 +67,8 @@ export default function SettingsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
-        <p className="text-text-muted mt-1">연구실 설정 및 프로필 관리</p>
+        <h2 className="text-3xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
+        <p className="text-text-muted text-base mt-1">연구실 설정 및 프로필 관리</p>
       </div>
 
       {/* Tab Navigation */}
@@ -107,7 +107,7 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
   return (
     <div className="space-y-4">
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">시스템 상태</h3>
+        <h3 className="font-semibold text-text-heading text-base">시스템 상태</h3>
         <div className="grid grid-cols-2 gap-4">
           <StatusItem label="API 서버" status={health === true ? 'healthy' : 'error'} detail="Railway" />
           <StatusItem label="Gmail" status={emailConnected ? 'healthy' : 'disconnected'} detail={emailConnected ? '연동됨' : '미연동'} />
@@ -231,7 +231,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       {/* Lab Info */}
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-text-heading text-sm">연구실 정보</h3>
+          <h3 className="font-semibold text-text-heading text-base">연구실 정보</h3>
           <button onClick={() => setEditing(!editing)} className="text-xs text-primary hover:text-primary-hover">
             {editing ? '취소' : '편집'}
           </button>
@@ -258,7 +258,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       {/* Research Themes — 독립 편집 */}
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-text-heading text-sm">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
+          <h3 className="font-semibold text-text-heading text-base">연구 테마 (이메일 분류 + 논문 모니터링 연동)</h3>
           {!editing && (
             <button onClick={() => setEditing(true)} className="text-xs text-primary hover:text-primary-hover">
               편집
@@ -308,7 +308,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold text-text-heading text-sm">AI 지침</h3>
+            <h3 className="font-semibold text-text-heading text-base">AI 지침</h3>
             <p className="text-xs text-text-muted mt-0.5">Brain 응답 시 항상 참조되는 사용자 지침 (claude.md 방식)</p>
           </div>
           <button
@@ -341,7 +341,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
 
       {/* Members */}
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">팀원 ({members.length}명)</h3>
+        <h3 className="font-semibold text-text-heading text-base">팀원 ({members.length}명)</h3>
         {members.map(m => (
           <div key={m.id} className="flex items-center justify-between bg-bg-input rounded-lg p-3">
             <div>
@@ -414,7 +414,7 @@ function EmailTab({ connected }: { connected: boolean }) {
   return (
     <div className="space-y-4">
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">기관별 분류 그룹</h3>
+        <h3 className="font-semibold text-text-heading text-base">기관별 분류 그룹</h3>
         <p className="text-xs text-text-muted">발신자 이메일 도메인 기반으로 기관별 자동 분류</p>
         {groups.map((g, i) => (
           <div key={i} className="grid grid-cols-[3rem_1fr_2fr] gap-2 items-end">
@@ -431,13 +431,13 @@ function EmailTab({ connected }: { connected: boolean }) {
       </section>
 
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">중요도 상향 키워드</h3>
+        <h3 className="font-semibold text-text-heading text-base">중요도 상향 키워드</h3>
         <p className="text-xs text-text-muted">이 키워드가 이메일 제목/내용에 포함되면 중요도 1단계 상향</p>
         <SInput label="키워드 (쉼표 구분)" value={keywords} onChange={setKeywords} />
       </section>
 
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">시간대</h3>
+        <h3 className="font-semibold text-text-heading text-base">시간대</h3>
         <select value={timezone} onChange={e => setTimezone(e.target.value)}
           className="px-3 py-2 bg-bg-input rounded-lg text-text-heading text-sm border border-border">
           <option value="America/New_York">미국 동부 (EDT/EST)</option>
@@ -493,7 +493,7 @@ function DictionaryTab() {
   return (
     <div className="space-y-4">
       <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-sm">기술 용어 사전 ({entries.length}개)</h3>
+        <h3 className="font-semibold text-text-heading text-base">기술 용어 사전 ({entries.length}개)</h3>
         <p className="text-xs text-text-muted">미팅 노트 교정, 논문 교정에서 공유되는 도메인 용어 사전</p>
 
         <div className="flex gap-2">
@@ -538,7 +538,7 @@ function StatusItem({ label, status, detail }: { label: string; status: string; 
       <span className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-gray-400'}`} />
       <div>
         <p className="text-xs font-medium text-text-heading">{label}</p>
-        <p className="text-[10px] text-text-muted">{detail}</p>
+        <p className="text-xs text-text-muted">{detail}</p>
       </div>
     </div>
   );

@@ -83,6 +83,10 @@
   --color-badge-bg: rgba(59, 130, 246, 0.15);
 }
 
+html {
+  font-size: 16px;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text-main);

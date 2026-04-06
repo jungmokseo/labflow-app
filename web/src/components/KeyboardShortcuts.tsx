@@ -69,7 +69,7 @@ export function KeyboardShortcuts() {
                 if (e.key === 'Enter' && filtered.length > 0) navigate(filtered[0].path);
               }}
             />
-            <kbd className="text-[10px] text-text-muted bg-bg-input px-1.5 py-0.5 rounded">ESC</kbd>
+            <kbd className="text-xs text-text-muted bg-bg-input px-1.5 py-0.5 rounded">ESC</kbd>
           </div>
           <div className="max-h-[300px] overflow-y-auto p-2">
             {filtered.map(s => (
@@ -80,7 +80,7 @@ export function KeyboardShortcuts() {
               >
                 <s.icon className="w-4 h-4 flex-shrink-0" />
                 <span className="flex-1 text-left">{s.label}</span>
-                <kbd className="text-[10px] bg-bg-input px-1.5 py-0.5 rounded">
+                <kbd className="text-xs bg-bg-input px-1.5 py-0.5 rounded">
                   {navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl+'}{s.key.toUpperCase()}
                 </kbd>
               </button>

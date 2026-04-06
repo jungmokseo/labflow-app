@@ -1,95 +1,83 @@
 /**
- * Skeleton loading components — 스피너 대신 콘텐츠 형태의 펄스 애니메이션
+ * Loading components — clean centered spinner (Gemini-style)
  */
 
-// 기본 블록
+// Centered spinner used across all loading states
+function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sizeClasses = {
+    sm: 'w-5 h-5 border-2',
+    md: 'w-8 h-8 border-[3px]',
+    lg: 'w-10 h-10 border-[3px]',
+  };
+  return (
+    <div className={`${sizeClasses[size]} rounded-full border-border border-t-primary animate-spin`} />
+  );
+}
+
+// Full-page centered spinner (main one used across pages)
+export function SkeletonPage({ cards: _cards = 4 }: { cards?: number }) {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Spinner size="lg" />
+    </div>
+  );
+}
+
+// Inline loading block — replaced with small spinner
 export function SkeletonBlock({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-bg-input/40 rounded-lg ${className}`} />;
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <Spinner size="sm" />
+    </div>
+  );
 }
 
-// 텍스트 라인
-export function SkeletonLine({ width = 'w-full' }: { width?: string }) {
-  return <div className={`animate-pulse bg-bg-input/40 rounded h-3.5 ${width}`} />;
+// Text line — replaced with small spinner
+export function SkeletonLine({ width: _width = 'w-full' }: { width?: string }) {
+  return (
+    <div className="flex items-center justify-center py-2">
+      <Spinner size="sm" />
+    </div>
+  );
 }
 
-// 카드 (회의, 논문, 태스크 등 목록 아이템)
+// Card spinner
 export function SkeletonCard() {
   return (
-    <div className="bg-bg-card rounded-xl border border-border p-4 space-y-3">
-      <div className="flex items-center gap-3">
-        <SkeletonBlock className="w-10 h-10 rounded-full flex-shrink-0" />
-        <div className="flex-1 space-y-2">
-          <SkeletonLine width="w-3/4" />
-          <SkeletonLine width="w-1/2" />
-        </div>
-      </div>
+    <div className="flex items-center justify-center py-6">
+      <Spinner size="md" />
     </div>
   );
 }
 
-// 채팅 메시지 스켈레톤
-export function SkeletonMessage({ align = 'left' }: { align?: 'left' | 'right' }) {
+// Chat message spinner
+export function SkeletonMessage({ align: _align = 'left' }: { align?: 'left' | 'right' }) {
   return (
-    <div className={`flex ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
-      <div className={`space-y-2 ${align === 'right' ? 'max-w-[60%]' : 'max-w-[70%] w-full'}`}>
-        <SkeletonBlock className={`h-4 ${align === 'right' ? 'w-48' : 'w-full'} rounded-2xl`} />
-        {align === 'left' && <SkeletonBlock className="h-4 w-3/4 rounded-2xl" />}
-      </div>
+    <div className="flex items-center justify-center py-4">
+      <Spinner size="sm" />
     </div>
   );
 }
 
-// 리스트 아이템 스켈레톤
-export function SkeletonList({ items = 5 }: { items?: number }) {
+// List spinner
+export function SkeletonList({ items: _items = 5 }: { items?: number }) {
   return (
-    <div className="space-y-2">
-      {Array.from({ length: items }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 p-3">
-          <SkeletonBlock className="w-8 h-8 rounded-lg flex-shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <SkeletonLine width="w-3/4" />
-            <SkeletonLine width="w-1/2" />
-          </div>
-        </div>
-      ))}
+    <div className="flex items-center justify-center py-8">
+      <Spinner size="md" />
     </div>
   );
 }
 
-// 페이지 전체 스켈레톤 (헤더 + 카드 N개)
-export function SkeletonPage({ cards = 4 }: { cards?: number }) {
+// Form spinner
+export function SkeletonForm({ rows: _rows = 4 }: { rows?: number }) {
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* 헤더 */}
-      <div className="space-y-2">
-        <SkeletonLine width="w-48" />
-        <SkeletonLine width="w-72" />
-      </div>
-      {/* 카드 목록 */}
-      <div className="space-y-3">
-        {Array.from({ length: cards }).map((_, i) => (
-          <SkeletonCard key={i} />
-        ))}
-      </div>
+    <div className="flex items-center justify-center py-8">
+      <Spinner size="md" />
     </div>
   );
 }
 
-// 설정/폼 스켈레톤
-export function SkeletonForm({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="space-y-2">
-          <SkeletonLine width="w-24" />
-          <SkeletonBlock className="w-full h-10" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// 장시간 작업용 단계별 진행 표시
+// 장시간 작업용 단계별 진행 표시 (kept as-is)
 export function StepProgress({
   steps,
   currentStep,

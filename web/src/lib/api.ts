@@ -394,17 +394,33 @@ export async function brainChatStream(
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
   const authHeaders = await getAuthHeaders();
 
-  const res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
-    method: 'POST',
-    headers: { ...authHeaders },
-    body: JSON.stringify({ message, channelId, fileId, newSession, stream: true }),
-  });
+  // AbortController for timeout (90s for LLM responses)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
+      method: 'POST',
+      headers: { ...authHeaders },
+      body: JSON.stringify({ message, channelId, fileId, newSession, stream: true }),
+      signal: controller.signal,
+    });
+  } catch (fetchErr: any) {
+    clearTimeout(timeoutId);
+    if (fetchErr.name === 'AbortError') {
+      throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
+    }
+    throw new Error(`서버 연결 실패: ${fetchErr.message}`);
+  }
 
   if (!res.ok) {
+    clearTimeout(timeoutId);
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || `API Error: ${res.status}`);
   }
 
+  clearTimeout(timeoutId);
   const reader = res.body?.getReader();
   if (!reader) throw new Error('ReadableStream not supported');
 

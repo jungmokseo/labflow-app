@@ -98,7 +98,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
 
       {/* Cmd+K shortcut hint */}
       <div className="px-6 hidden md:block">
-        <kbd className="text-[10px] text-text-muted bg-bg-input px-2 py-1 rounded border border-border">
+        <kbd className="text-xs text-text-muted bg-bg-input px-2 py-1 rounded border border-border">
           ⌘K 빠른 이동
         </kbd>
       </div>
@@ -139,7 +139,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
             {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
         </div>
-        <div className="mt-3 flex gap-2 text-[10px] text-text-muted">
+        <div className="mt-3 flex gap-2 text-xs text-text-muted">
           <a href="/legal/terms.html" className="hover:text-text-main transition-colors">이용약관</a>
           <span>·</span>
           <a href="/legal/privacy.html" className="hover:text-text-main transition-colors">개인정보처리방침</a>
@@ -185,16 +185,20 @@ export function Sidebar() {
         <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} />
       </aside>
 
-      {/* Mobile hamburger button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-bg-card/80 backdrop-blur border border-border text-text-heading"
-        aria-label="메뉴 열기"
-      >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 5h14M3 10h14M3 15h14" />
-        </svg>
-      </button>
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-3 bg-bg-card/80 backdrop-blur border-b border-border">
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="p-2 rounded-lg text-text-heading"
+          aria-label="메뉴 열기"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 5h14M3 10h14M3 15h14" />
+          </svg>
+        </button>
+        <span className="flex-1 text-center text-base font-semibold text-text-heading">Research Flow</span>
+        <div className="w-9" /> {/* Spacer to center title */}
+      </div>
 
       {/* Mobile drawer overlay */}
       {mobileOpen && (

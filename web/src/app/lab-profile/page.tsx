@@ -388,8 +388,8 @@ export default function LabProfilePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-heading flex items-center gap-2"><FlaskConical className="w-6 h-6 text-primary" /> {lab.name}</h1>
-          <p className="text-text-muted text-sm mt-1">{lab.institution} {lab.department}</p>
+          <h1 className="text-3xl font-bold text-text-heading flex items-center gap-2"><FlaskConical className="w-6 h-6 text-primary" /> {lab.name}</h1>
+          <p className="text-text-muted text-base mt-1">{lab.institution} {lab.department}</p>
         </div>
         <div className="flex gap-2 items-center">
           {completeness && (

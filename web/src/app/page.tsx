@@ -38,8 +38,8 @@ export default function DashboardPage() {
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-text-heading">오늘의 대시보드</h2>
-          <p className="text-text-muted mt-1">
+          <h2 className="text-3xl font-bold text-text-heading">오늘의 대시보드</h2>
+          <p className="text-base text-text-muted mt-1">
             {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
           </p>
         </div>
@@ -50,23 +50,23 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <a href="/brain" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <Brain className="w-7 h-7 text-primary" />
-          <h3 className="text-sm font-medium text-text-heading mt-3">Brain</h3>
-          <p className="text-xs text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
+          <h3 className="text-base font-medium text-text-heading mt-3">Brain</h3>
+          <p className="text-sm text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
         </a>
         <a href="/tasks" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <ClipboardList className="w-7 h-7 text-blue-400" />
-          <h3 className="text-sm font-medium text-text-heading mt-3">Tasks & Ideas</h3>
-          <p className="text-xs text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
+          <h3 className="text-base font-medium text-text-heading mt-3">Tasks & Ideas</h3>
+          <p className="text-sm text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
         </a>
         <a href="/papers" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <BookOpen className="w-7 h-7 text-green-400" />
-          <h3 className="text-sm font-medium text-text-heading mt-3">연구동향</h3>
-          <p className="text-xs text-text-muted mt-1">주간 자동 논문 모니터링</p>
+          <h3 className="text-base font-medium text-text-heading mt-3">연구동향</h3>
+          <p className="text-sm text-text-muted mt-1">주간 자동 논문 모니터링</p>
         </a>
         <a href="/meetings" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <Mic className="w-7 h-7 text-yellow-400" />
-          <h3 className="text-sm font-medium text-text-heading mt-3">회의 노트</h3>
-          <p className="text-xs text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
+          <h3 className="text-base font-medium text-text-heading mt-3">회의 노트</h3>
+          <p className="text-sm text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
         </a>
       </div>
 
@@ -74,23 +74,23 @@ export default function DashboardPage() {
       <div className="bg-bg-card rounded-xl border border-border p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-yellow-400" /> 최근 회의</h3>
-          <a href="/meetings" className="text-xs text-primary hover:underline">모두 보기 →</a>
+          <a href="/meetings" className="text-sm text-primary hover:underline">모두 보기 →</a>
         </div>
         {meetings.length === 0 ? (
-          <p className="text-text-muted text-sm py-8 text-center">아직 회의 기록이 없습니다</p>
+          <p className="text-text-muted text-base py-8 text-center">아직 회의 기록이 없습니다</p>
         ) : (
           <div className="space-y-3">
             {meetings.map((m) => (
               <div key={m.id} className="p-3 rounded-lg bg-bg-input hover:bg-bg-hover/30 transition-colors">
-                <p className="text-sm font-medium text-text-heading">{m.title}</p>
+                <p className="text-base font-medium text-text-heading">{m.title}</p>
                 {m.summary && (
-                  <p className="text-xs text-text-muted mt-1 line-clamp-2">{m.summary}</p>
+                  <p className="text-sm text-text-muted mt-1 line-clamp-2">{m.summary}</p>
                 )}
                 <div className="flex items-center gap-3 mt-2">
                   {m.actionItems.length > 0 && (
-                    <span className="text-[10px] text-yellow-400">{m.actionItems.length} 액션아이템</span>
+                    <span className="text-xs text-yellow-400">{m.actionItems.length} 액션아이템</span>
                   )}
-                  <span className="text-[10px] text-text-muted">
+                  <span className="text-xs text-text-muted">
                     {new Date(m.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
                   </span>
                 </div>
@@ -129,8 +129,8 @@ function SummaryCard({ icon, title, value, subtitle, color }: {
         <span>{icon}</span>
         <span className={`text-2xl font-bold ${color}`}>{value}</span>
       </div>
-      <h3 className="text-sm font-medium text-text-heading mt-3">{title}</h3>
-      <p className="text-xs text-text-muted mt-1">{subtitle}</p>
+      <h3 className="text-base font-medium text-text-heading mt-3">{title}</h3>
+      <p className="text-sm text-text-muted mt-1">{subtitle}</p>
     </div>
   );
 }

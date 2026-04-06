@@ -258,10 +258,15 @@ export default function BrainPage() {
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
+      const errorDetail = err.message?.includes('401') || err.message?.includes('403')
+        ? '인증이 만료되었습니다. 페이지를 새로고침 후 다시 시도해주세요.'
+        : err.message?.includes('fetch') || err.message?.includes('network') || err.message?.includes('Load failed')
+        ? '서버 연결에 실패했습니다. 네트워크를 확인하고 다시 시도해주세요.'
+        : `오류: ${err.message}`;
       const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `오류: ${err.message}`,
+        content: errorDetail,
         createdAt: new Date().toISOString(),
       };
       if (channelIdAtSend) {
@@ -444,7 +449,7 @@ export default function BrainPage() {
 
           {todaySessions.length > 0 && (
             <>
-              <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
+              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">오늘</p>
               {todaySessions.map((ch: any) => (
                 <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
@@ -452,7 +457,7 @@ export default function BrainPage() {
           )}
           {weekSessions.length > 0 && (
             <>
-              <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
+              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이번 주</p>
               {weekSessions.map((ch: any) => (
                 <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
@@ -460,7 +465,7 @@ export default function BrainPage() {
           )}
           {olderSessions.length > 0 && (
             <>
-              <p className="text-[10px] text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
+              <p className="text-xs text-text-muted uppercase tracking-wider px-2 pt-3 pb-1">이전</p>
               {olderSessions.slice(0, 15).map((ch: any) => (
                 <SessionButton key={ch.id} ch={ch} isActive={activeChannelId === ch.id} onClick={() => handleSelectSession(ch)} onDelete={() => handleDeleteSession(ch.id)} isStreaming={conversations[ch.id]?.isStreaming} />
               ))}
@@ -541,7 +546,7 @@ export default function BrainPage() {
                         }`}
                       >
                         <div className="truncate">{ch.name || `대화 #${ch.id.slice(-4)}`}</div>
-                        <div className="text-[10px] text-text-muted mt-0.5">{timeAgo(ch.lastMessageAt || ch.createdAt)}</div>
+                        <div className="text-xs text-text-muted mt-0.5">{timeAgo(ch.lastMessageAt || ch.createdAt)}</div>
                       </button>
                     ))}
                   </div>
@@ -553,17 +558,40 @@ export default function BrainPage() {
             <div className="flex-1 overflow-y-auto p-4">
               <div className="max-w-3xl mx-auto space-y-6">
                 {activeMessages.length === 0 && (
-                  <div className="text-center text-text-muted py-12">
+                  <div className="text-center text-text-muted py-8">
                     <Brain className="w-12 h-12 text-primary/40 mx-auto mb-4" />
-                    <p className="text-lg font-medium">연구실 AI 비서</p>
-                    <p className="text-sm mt-2">무엇이든 물어보세요. 이메일, 일정, 논문, 메모 -- 자연어로 요청하면 됩니다.</p>
+                    <p className="text-lg font-medium text-text-heading">연구실 AI 비서</p>
+                    <p className="text-sm mt-2">무엇이든 물어보세요.</p>
                     <div className="mt-6 grid grid-cols-2 gap-3 max-w-md mx-auto">
                       {['이메일 브리핑 해줘', '오늘 일정 뭐야?', '이거 메모해줘: 내일 장비 예약', '학생 명단 보여줘'].map(q => (
-                        <button key={q} onClick={() => setInput(q)} className="px-3 py-2 bg-bg-input rounded-lg text-xs text-text-muted hover:text-text-heading hover:bg-bg-hover/80 transition-colors">
+                        <button key={q} onClick={() => setInput(q)} className="px-4 py-2.5 bg-bg-input rounded-lg text-sm text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors">
                           {q}
                         </button>
                       ))}
                     </div>
+
+                    {/* 지난 대화 목록 (모바일+데스크톱 공통) */}
+                    {sessions.length > 0 && (
+                      <div className="mt-10 text-left max-w-md mx-auto">
+                        <h4 className="text-sm font-medium text-text-muted mb-3 px-1">지난 대화</h4>
+                        <div className="space-y-1">
+                          {sessions.slice(0, 10).map((ch: any) => (
+                            <button
+                              key={ch.id}
+                              onClick={() => handleSelectSession(ch)}
+                              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                                activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="truncate flex-1">{ch.name || `대화 #${ch.id.slice(-4)}`}</span>
+                                <span className="text-xs text-text-muted ml-2 flex-shrink-0">{timeAgo(ch.lastMessageAt || ch.createdAt)}</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {activeMessages.map(msg => (
@@ -571,14 +599,14 @@ export default function BrainPage() {
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
                       <div className="flex justify-end">
-                        <div className="bg-blue-600 text-text-heading rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap shadow-lg shadow-blue-600/10">
+                        <div className="bg-primary/85 text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
                           {msg.content}
                         </div>
                       </div>
                     ) : (
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
-                        <div className="prose prose-invert prose-sm max-w-none text-text-heading/90 leading-relaxed">
+                        <div className="prose prose-sm max-w-none leading-relaxed [&_*]:text-text-heading/90 [&_a]:text-primary [&_code]:text-text-heading/80 [&_strong]:text-text-heading">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {stripEmoji(msg.content)}
                           </ReactMarkdown>
@@ -593,7 +621,7 @@ export default function BrainPage() {
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           {copiedId === msg.id && (
-                            <span className="absolute -top-6 right-0 text-[10px] text-green-400 bg-bg-card px-2 py-0.5 rounded shadow-sm">복사됨</span>
+                            <span className="absolute -top-6 right-0 text-xs text-green-400 bg-bg-card px-2 py-0.5 rounded shadow-sm">복사됨</span>
                           )}
                         </div>
                       </div>
@@ -603,7 +631,7 @@ export default function BrainPage() {
                 {/* Token streaming: show response as it arrives */}
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
-                    <div className="prose prose-invert prose-sm max-w-none text-text-heading/90 leading-relaxed">
+                    <div className="prose prose-sm max-w-none leading-relaxed [&_*]:text-text-heading/90 [&_a]:text-primary [&_code]:text-text-heading/80 [&_strong]:text-text-heading">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
@@ -769,7 +797,7 @@ function SessionButton({ ch, isActive, onClick, onDelete, isStreaming }: { ch: a
         <span className="flex-1 text-left truncate text-xs">
           {ch.name || `대화 #${ch.id.slice(-4)}`}
         </span>
-        <span className="text-[10px] text-text-muted flex-shrink-0">
+        <span className="text-xs text-text-muted flex-shrink-0">
           {timeAgo(ch.lastMessageAt || ch.createdAt)}
         </span>
       </button>

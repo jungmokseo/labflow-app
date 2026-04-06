@@ -1,29 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   getCaptures, createCapture, updateCapture, deleteCapture, deleteCompletedCaptures,
   type Capture,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-import { SkeletonCard, SkeletonPage } from '@/components/Skeleton';
-import { CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic, X } from 'lucide-react';
+import { SkeletonPage } from '@/components/Skeleton';
+import {
+  CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic,
+  X, Pencil, Trash2, ExternalLink, PlayCircle, Send,
+} from 'lucide-react';
 import { useToast } from '@/components/Toast';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
-type StatusFilter = 'active' | 'completed';
-type SortBy = 'newest' | 'oldest' | 'dueDate';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   task: <CheckCircle className="w-4 h-4 text-green-400" />,
   idea: <Lightbulb className="w-4 h-4 text-yellow-400" />,
   memo: <FileText className="w-4 h-4 text-gray-400" />,
-};
-
-const CATEGORY_INFO: Record<string, { emoji: string; label: string; color: string }> = {
-  task: { emoji: '', label: '할일', color: 'bg-blue-500/10 text-blue-400' },
-  idea: { emoji: '', label: '아이디어', color: 'bg-yellow-500/10 text-yellow-400' },
-  memo: { emoji: '', label: '메모', color: 'bg-gray-500/10 text-gray-400' },
 };
 
 const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
@@ -32,44 +27,102 @@ const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
   low: { label: 'LOW', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20' },
 };
 
+// URL detection
+const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g;
+const YOUTUBE_REGEX = /https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//;
+
+function renderContentWithLinks(text: string) {
+  const parts: (string | JSX.Element)[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(URL_REGEX.source, 'g');
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const url = match[0];
+    const isYoutube = YOUTUBE_REGEX.test(url);
+    const displayUrl = url.length > 50 ? url.slice(0, 47) + '...' : url;
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary underline hover:opacity-80 inline-flex items-center gap-1 break-all"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isYoutube && <PlayCircle className="w-3.5 h-3.5 inline flex-shrink-0" />}
+        {!isYoutube && <ExternalLink className="w-3 h-3 inline flex-shrink-0" />}
+        {displayUrl}
+      </a>
+    );
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length > 0 ? parts : [text];
+}
+
 export default function TasksPage() {
   const [tab, setTab] = useState<TabFilter>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
-  const [sortBy, setSortBy] = useState<SortBy>('newest');
-  const [search, setSearch] = useState('');
   const [newInput, setNewInput] = useState('');
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
-  const { data: capturesData, isLoading, isValidating, mutate: refreshCaptures } = useApiData(
-    `captures-${tab}-${statusFilter}-${sortBy}`,
+  // Fetch active tasks
+  const { data: activeData, isLoading: loadingActive, isValidating: validatingActive, mutate: refreshActive } = useApiData(
+    `captures-${tab}-active`,
     async () => {
-      const res = await getCaptures({
+      return await getCaptures({
         category: tab === 'all' ? undefined : tab,
-        completed: statusFilter === 'completed' ? 'true' : 'false',
-        sort: sortBy,
+        completed: 'false',
+        sort: 'newest',
         limit: 100,
       });
-      return res;
     }
   );
-  const captures = capturesData?.data || [];
-  const meta = capturesData?.meta || null;
+
+  // Fetch completed tasks
+  const { data: completedData, mutate: refreshCompleted } = useApiData(
+    `captures-${tab}-completed`,
+    async () => {
+      return await getCaptures({
+        category: tab === 'all' ? undefined : tab,
+        completed: 'true',
+        sort: 'newest',
+        limit: 20,
+      });
+    }
+  );
+
+  const activeCaptures = activeData?.data || [];
+  const completedCaptures = completedData?.data || [];
+  const meta = activeData?.meta || null;
 
   async function handleAdd() {
     if (!newInput.trim()) return;
     setAdding(true);
     const inputText = newInput.trim();
     setNewInput('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
     try {
       const res = await createCapture(inputText);
       if (res.data) {
-        refreshCaptures((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
+        refreshActive((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
         const label = res.data.category === 'task' ? '할일' : res.data.category === 'idea' ? '아이디어' : '메모';
         toast(`${label} 저장됨: "${res.data.summary || inputText.slice(0, 30)}"`, 'success');
       } else {
-        await refreshCaptures();
+        await refreshActive();
         toast('저장되었습니다', 'success');
       }
     } catch (err: any) { setError(err.message); toast('저장 실패', 'error'); }
@@ -78,269 +131,422 @@ export default function TasksPage() {
 
   async function handleToggleComplete(c: Capture) {
     const newCompleted = !c.completed;
-    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, completed: newCompleted } : cap) } : prev, { revalidate: false });
+    if (newCompleted) {
+      refreshActive((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== c.id) } : prev, { revalidate: false });
+      refreshCompleted((prev: any) => prev ? { ...prev, data: [{ ...c, completed: true }, ...(prev.data || [])] } : prev, { revalidate: false });
+    } else {
+      refreshCompleted((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== c.id) } : prev, { revalidate: false });
+      refreshActive((prev: any) => prev ? { ...prev, data: [{ ...c, completed: false }, ...(prev.data || [])] } : prev, { revalidate: false });
+    }
     try {
       await updateCapture(c.id, { completed: newCompleted });
       toast(newCompleted ? '완료 처리됨' : '미완료로 변경됨', 'success');
-    } catch { refreshCaptures(); toast('변경 실패. 다시 시도해 주세요.', 'error'); }
+    } catch {
+      refreshActive();
+      refreshCompleted();
+      toast('변경 실패. 다시 시도해 주세요.', 'error');
+    }
   }
 
   async function handleReview(c: Capture) {
-    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, reviewed: true } : cap) } : prev, { revalidate: false });
+    refreshActive((prev: any) => prev ? { ...prev, data: (prev.data || []).map((cap: Capture) => cap.id === c.id ? { ...cap, reviewed: true } : cap) } : prev, { revalidate: false });
     try {
       await updateCapture(c.id, { reviewed: true });
-    } catch { refreshCaptures(); }
+    } catch { refreshActive(); }
   }
 
   async function handleDelete(id: string) {
-    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== id) } : prev, { revalidate: false });
+    refreshActive((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== id) } : prev, { revalidate: false });
+    refreshCompleted((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => cap.id !== id) } : prev, { revalidate: false });
     try {
       await deleteCapture(id);
       toast('삭제됨', 'info');
-    } catch { refreshCaptures(); toast('삭제 실패', 'error'); }
+    } catch { refreshActive(); refreshCompleted(); toast('삭제 실패', 'error'); }
   }
 
   async function handleClearCompleted() {
-    refreshCaptures((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((cap: Capture) => !cap.completed) } : prev, { revalidate: false });
+    refreshCompleted((prev: any) => prev ? { ...prev, data: [] } : prev, { revalidate: false });
     try {
       await deleteCompletedCaptures();
-    } catch { refreshCaptures(); }
+      toast('완료 항목 삭제됨', 'info');
+    } catch { refreshCompleted(); }
   }
 
-  // Client-side search filter
-  const filtered = search
-    ? captures.filter(c =>
-        c.content.toLowerCase().includes(search.toLowerCase()) ||
-        c.summary.toLowerCase().includes(search.toLowerCase()) ||
-        c.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
-      )
-    : captures;
+  async function handleSaveEdit(c: Capture) {
+    if (!editContent.trim()) return;
+    const updatedContent = editContent.trim();
+    const updateFn = (prev: any) => prev ? {
+      ...prev,
+      data: (prev.data || []).map((cap: Capture) =>
+        cap.id === c.id ? { ...cap, content: updatedContent } : cap
+      ),
+    } : prev;
+    refreshActive(updateFn, { revalidate: false });
+    refreshCompleted(updateFn, { revalidate: false });
+    setEditingId(null);
+    try {
+      await updateCapture(c.id, { content: updatedContent });
+      toast('수정됨', 'success');
+    } catch {
+      refreshActive();
+      refreshCompleted();
+      toast('수정 실패', 'error');
+    }
+  }
 
-  const unreviewed = captures.filter(c => !c.reviewed && !c.completed).length;
-  const pendingTasks = meta?.taskStats?.pending || 0;
-  // Only show full skeleton on very first load (no data at all)
-  const firstLoad = isLoading && !capturesData;
+  function handleStartEdit(c: Capture) {
+    setEditingId(c.id);
+    setEditContent(c.content);
+  }
 
+  function handleCancelEdit() {
+    setEditingId(null);
+    setEditContent('');
+  }
+
+  function toggleExpand(c: Capture) {
+    if (expandedId === c.id) {
+      setExpandedId(null);
+      setEditingId(null);
+    } else {
+      setExpandedId(c.id);
+      setEditingId(null);
+      if (!c.reviewed && !c.completed) handleReview(c);
+    }
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setNewInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+  }
+
+  const firstLoad = loadingActive && !activeData;
   if (firstLoad) return <SkeletonPage cards={5} />;
 
   return (
-    <div className="min-h-screen bg-bg p-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-heading">Tasks & Ideas</h1>
-          <p className="text-text-muted text-sm mt-1">
-            {unreviewed > 0 && <span className="text-red-400 mr-3">NEW {unreviewed}</span>}
-            {pendingTasks > 0 && <span className="mr-3">{pendingTasks} tasks pending</span>}
-            {meta?.counts?.idea > 0 && <span>{meta.counts.idea} ideas</span>}
-          </p>
-        </div>
-        {statusFilter === 'completed' && captures.length > 0 && (
-          <button
-            onClick={handleClearCompleted}
-            className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 rounded-lg px-3 py-1.5"
-          >
-            Clear All
-          </button>
-        )}
-      </div>
-
-      {/* Quick Input */}
-      <div className="mb-5">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={newInput}
-            onChange={e => setNewInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && !adding && handleAdd()}
-            placeholder="할일, 아이디어, 메모를 입력하세요... (AI가 자동 분류)"
-            className="flex-1 bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-text-heading placeholder:text-text-muted focus:outline-none focus:border-primary/50"
-          />
-          <button
-            onClick={handleAdd}
-            disabled={adding || !newInput.trim()}
-            className="bg-primary text-text-heading px-5 py-3 rounded-lg font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
-          >
-            {adding ? '...' : '추가'}
-          </button>
-        </div>
-      </div>
-
-      {/* Tab Filters */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <div className="flex bg-bg-input rounded-lg p-0.5 gap-0.5">
-          {([['all', '전체'], ['TASK', '할일'], ['IDEA', '아이디어'], ['MEMO', '메모']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                tab === key ? 'bg-primary text-text-heading' : 'text-text-muted hover:text-text-heading'
-              }`}
-            >
-              {label}
-              {key !== 'all' && meta?.counts?.[key.toLowerCase()] > 0 && (
-                <span className="ml-1 opacity-70">{meta.counts[key.toLowerCase()]}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex bg-bg-input rounded-lg p-0.5 gap-0.5 ml-auto">
-          {([['active', 'Active'], ['completed', 'Done']] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                statusFilter === key ? 'bg-bg-input text-text-heading' : 'text-text-muted hover:text-text-heading'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <select
-          value={sortBy}
-          onChange={e => setSortBy(e.target.value as SortBy)}
-          className="bg-bg-input/50 border border-border rounded-lg px-2 py-1.5 text-sm text-text-muted"
-        >
-          <option value="newest">최신순</option>
-          <option value="oldest">오래된순</option>
-          <option value="dueDate">마감일순</option>
-        </select>
-      </div>
-
-      {/* Search */}
-      <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="검색..."
-        className="w-full bg-bg-input border border-border rounded-lg px-4 py-2 text-sm text-text-heading placeholder:text-text-muted mb-4 focus:outline-none focus:border-primary/30"
-      />
-
-      {/* Error */}
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4 text-red-400 text-sm">
-          {error}
-          <button onClick={() => setError('')} className="ml-2 underline">닫기</button>
-        </div>
-      )}
-
-      {/* Subtle revalidation indicator */}
-      {isValidating && captures.length > 0 && (
-        <div className="h-0.5 bg-primary-light rounded-full mb-2 overflow-hidden">
-          <div className="h-full bg-primary/60 rounded-full animate-pulse w-1/2" />
-        </div>
-      )}
-
-      {/* List */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-20">
-          <div className="mb-3 flex justify-center">{tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> : tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> : <ClipboardList className="w-10 h-10 text-text-muted" />}</div>
-          <h3 className="text-text-heading font-medium mb-1">
-            {isValidating ? '불러오는 중...' : statusFilter === 'completed' ? '완료된 항목이 없습니다' : '아직 항목이 없습니다'}
-          </h3>
-          {!isValidating && (
-            <p className="text-text-muted text-sm">
-              위 입력창에 할일이나 아이디어를 입력하거나, Brain 채팅에서 자연스럽게 말하면 자동으로 저장됩니다.
+    <div className="min-h-screen bg-bg flex flex-col">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto pb-36">
+        <div className="max-w-2xl mx-auto px-4 pt-6">
+          {/* Header */}
+          <div className="mb-5">
+            <h1 className="text-2xl font-bold text-text-heading">Tasks & Ideas</h1>
+            <p className="text-text-muted text-sm mt-1">
+              {meta?.taskStats?.pending ? `${meta.taskStats.pending} pending` : ''}
+              {meta?.counts?.idea > 0 && <span className="ml-2">{meta.counts.idea} ideas</span>}
             </p>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map(c => {
-            const cat = CATEGORY_INFO[c.category] || CATEGORY_INFO.memo;
-            const pri = PRIORITY_INFO[c.priority] || PRIORITY_INFO.low;
-            return (
-              <div
-                key={c.id}
-                className={`bg-bg-card rounded-xl border p-4 card-hover cursor-pointer animate-msg-in ${
-                  !c.reviewed && !c.completed
-                    ? 'border-primary/30 bg-primary/5'
-                    : 'border-border hover:border-primary/20'
-                } ${c.completed ? 'opacity-60' : ''}`}
-                onClick={() => { if (!c.reviewed && !c.completed) handleReview(c); }}
+          </div>
+
+          {/* Category tabs */}
+          <div className="flex bg-bg-card rounded-lg p-1 gap-1 mb-5 border border-border">
+            {([['all', '전체'], ['TASK', '할일'], ['IDEA', '아이디어'], ['MEMO', '메모']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  tab === key
+                    ? 'bg-primary text-white'
+                    : 'text-text-muted hover:text-text-heading'
+                }`}
               >
-                <div className="flex items-start gap-3">
-                  {/* Complete toggle */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleToggleComplete(c); }}
-                    className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 ${
-                      c.completed
-                        ? 'bg-green-500 border-green-500 text-text-heading check-bounce'
-                        : 'border-border hover:border-primary hover:scale-110'
-                    }`}
-                  >
-                    {c.completed && <span className="text-xs">✓</span>}
-                  </button>
+                {label}
+                {key !== 'all' && meta?.counts?.[key.toLowerCase()] > 0 && (
+                  <span className="ml-1 text-xs opacity-70">{meta.counts[key.toLowerCase()]}</span>
+                )}
+              </button>
+            ))}
+          </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      {/* NEW badge */}
-                      {!c.reviewed && !c.completed && (
-                        <span className="text-[10px] font-bold bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
-                          NEW
-                        </span>
-                      )}
-                      {/* Category */}
-                      {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
-                      {/* Summary */}
-                      <span className={`text-sm font-medium ${c.completed ? 'line-through text-text-muted' : 'text-text-heading'}`}>
-                        {c.summary || c.content.substring(0, 60)}
-                      </span>
-                    </div>
+          {/* Error */}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4 text-red-400 text-sm flex items-center justify-between">
+              <span>{error}</span>
+              <button onClick={() => setError('')} className="ml-2 text-red-400 hover:text-red-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-                    {/* Full content if different from summary */}
-                    {c.content !== c.summary && c.content.length > 60 && (
-                      <p className="text-xs text-text-muted mb-2 line-clamp-2">{c.content}</p>
-                    )}
+          {/* Revalidation indicator */}
+          {validatingActive && activeCaptures.length > 0 && (
+            <div className="h-0.5 bg-primary/20 rounded-full mb-3 overflow-hidden">
+              <div className="h-full bg-primary/60 rounded-full animate-pulse w-1/2" />
+            </div>
+          )}
 
-                    {/* Meta row */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* Priority */}
-                      {c.category === 'task' && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${pri.color}`}>
-                          {pri.label}
-                        </span>
-                      )}
-                      {/* Due date */}
-                      {c.actionDate && (
-                        <span className="text-[10px] text-text-muted flex items-center gap-0.5">
-                          <Calendar className="w-3 h-3" /> {c.actionDate.split('T')[0]}
-                        </span>
-                      )}
-                      {/* Tags */}
-                      {c.tags.map(t => (
-                        <span key={t} className="text-[10px] bg-bg-input/50 text-text-muted px-1.5 py-0.5 rounded">
-                          #{t}
-                        </span>
-                      ))}
-                      {/* Source */}
-                      {c.sourceType === 'voice' && <Mic className="w-3 h-3 text-text-muted" />}
-                      {c.modelUsed === 'gemini-flash-auto' && <span className="text-[10px] text-text-muted">자동 분류</span>}
-                      {/* Date */}
-                      <span className="text-[10px] text-text-muted ml-auto">
-                        {new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
+          {/* Empty state */}
+          {activeCaptures.length === 0 && completedCaptures.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="mb-3 flex justify-center">
+                {tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> :
+                 tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> :
+                 <ClipboardList className="w-10 h-10 text-text-muted" />}
+              </div>
+              <h3 className="text-text-heading font-medium mb-1">
+                {validatingActive ? '불러오는 중...' : '아직 항목이 없습니다'}
+              </h3>
+              {!validatingActive && (
+                <p className="text-text-muted text-sm">
+                  아래 입력창에 할일이나 아이디어를 입력하세요.<br />
+                  AI가 자동으로 분류합니다.
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Active list */}
+              <div className="space-y-1.5">
+                {activeCaptures.map(c => (
+                  <TaskCard
+                    key={c.id}
+                    capture={c}
+                    expanded={expandedId === c.id}
+                    editing={editingId === c.id}
+                    editContent={editContent}
+                    onToggleExpand={() => toggleExpand(c)}
+                    onToggleComplete={() => handleToggleComplete(c)}
+                    onDelete={() => handleDelete(c.id)}
+                    onStartEdit={() => handleStartEdit(c)}
+                    onSaveEdit={() => handleSaveEdit(c)}
+                    onCancelEdit={handleCancelEdit}
+                    onEditContentChange={setEditContent}
+                  />
+                ))}
+              </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Completed section */}
+              {completedCaptures.length > 0 && (
+                <div className="mt-8">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-text-muted">
+                      완료됨 ({completedCaptures.length})
+                    </h3>
                     <button
-                      onClick={() => handleDelete(c.id)}
-                      className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10"
-                      title="삭제"
+                      onClick={handleClearCompleted}
+                      className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      모두 삭제
                     </button>
                   </div>
+                  <div className="space-y-1.5">
+                    {completedCaptures.map(c => (
+                      <TaskCard
+                        key={c.id}
+                        capture={c}
+                        expanded={expandedId === c.id}
+                        editing={editingId === c.id}
+                        editContent={editContent}
+                        onToggleExpand={() => toggleExpand(c)}
+                        onToggleComplete={() => handleToggleComplete(c)}
+                        onDelete={() => handleDelete(c.id)}
+                        onStartEdit={() => handleStartEdit(c)}
+                        onSaveEdit={() => handleSaveEdit(c)}
+                        onCancelEdit={handleCancelEdit}
+                        onEditContentChange={setEditContent}
+                      />
+                    ))}
+                  </div>
                 </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Fixed bottom input bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-bg-card border-t border-border z-50">
+        <div className="max-w-2xl mx-auto px-4 py-3">
+          <div className="flex items-end gap-2">
+            <button
+              className="flex-shrink-0 p-3 rounded-xl text-text-muted hover:text-text-heading hover:bg-bg-input transition-colors"
+              title="음성 입력"
+            >
+              <Mic className="w-5 h-5" />
+            </button>
+            <textarea
+              ref={inputRef}
+              value={newInput}
+              onChange={handleInputChange}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey && !adding) {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+              placeholder="할일, 아이디어, 메모를 입력하세요..."
+              rows={1}
+              className="flex-1 bg-bg-input border border-border rounded-xl px-4 py-3 text-base text-text-heading placeholder:text-text-muted focus:outline-none focus:border-primary resize-none min-h-[48px] max-h-[120px]"
+            />
+            <button
+              onClick={handleAdd}
+              disabled={adding || !newInput.trim()}
+              className="flex-shrink-0 bg-primary text-white p-3 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
+            >
+              <Send className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="h-[env(safe-area-inset-bottom)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Task Card Component ──────────────────────────────────
+
+interface TaskCardProps {
+  capture: Capture;
+  expanded: boolean;
+  editing: boolean;
+  editContent: string;
+  onToggleExpand: () => void;
+  onToggleComplete: () => void;
+  onDelete: () => void;
+  onStartEdit: () => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onEditContentChange: (val: string) => void;
+}
+
+function TaskCard({
+  capture: c,
+  expanded,
+  editing,
+  editContent,
+  onToggleExpand,
+  onToggleComplete,
+  onDelete,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
+  onEditContentChange,
+}: TaskCardProps) {
+  const pri = PRIORITY_INFO[c.priority] || PRIORITY_INFO.low;
+
+  return (
+    <div
+      className={`bg-bg-card rounded-xl border transition-all duration-200 ${
+        c.completed ? 'border-border opacity-50' : 'border-border hover:border-primary/30'
+      }`}
+    >
+      {/* Compact row */}
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+        onClick={onToggleExpand}
+      >
+        {/* Checkbox */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
+          className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 ${
+            c.completed
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'border-border hover:border-primary hover:scale-110'
+          }`}
+        >
+          {c.completed && <span className="text-xs font-bold">&#10003;</span>}
+        </button>
+
+        {/* Title */}
+        <span className={`flex-1 min-w-0 truncate text-sm ${
+          c.completed ? 'line-through text-text-muted' : 'text-text-heading font-medium'
+        }`}>
+          {c.summary || c.content.substring(0, 60)}
+        </span>
+
+        {/* Right: category icon + date */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
+          {c.actionDate ? (
+            <span className="text-xs text-text-muted flex items-center gap-0.5">
+              <Calendar className="w-3 h-3" />
+              {c.actionDate.split('T')[0].slice(5)}
+            </span>
+          ) : (
+            <span className="text-xs text-text-muted">
+              {new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-4 border-t border-border pt-3 space-y-3 animate-msg-in">
+          {editing ? (
+            <div className="space-y-2">
+              <textarea
+                value={editContent}
+                onChange={(e) => onEditContentChange(e.target.value)}
+                className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted focus:outline-none focus:border-primary resize-none min-h-[80px]"
+                autoFocus
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={onCancelEdit}
+                  className="text-xs text-text-muted hover:text-text-heading px-3 py-1.5 rounded-lg border border-border hover:bg-bg-input transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={onSaveEdit}
+                  className="text-xs text-white bg-primary px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+                >
+                  저장
+                </button>
               </div>
-            );
-          })}
+            </div>
+          ) : (
+            <>
+              {c.content && (
+                <p className="text-sm text-text-heading leading-relaxed whitespace-pre-wrap">
+                  {renderContentWithLinks(c.content)}
+                </p>
+              )}
+            </>
+          )}
+
+          {/* Meta: tags, priority */}
+          {!editing && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {c.category === 'task' && c.priority && (
+                <span className={`text-xs px-2 py-0.5 rounded border ${pri.color}`}>
+                  {pri.label}
+                </span>
+              )}
+              {c.tags.map(t => (
+                <span key={t} className="text-xs bg-bg-input text-text-muted px-2 py-0.5 rounded">
+                  #{t}
+                </span>
+              ))}
+              {c.sourceType === 'voice' && (
+                <span className="text-xs text-text-muted flex items-center gap-1">
+                  <Mic className="w-3 h-3" /> 음성
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {!editing && (
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+                className="text-xs text-text-muted hover:text-text-heading flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-bg-input transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" /> 수정
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="text-xs text-text-muted hover:text-red-400 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> 삭제
+              </button>
+              <span className="ml-auto text-xs text-text-muted">
+                {new Date(c.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
