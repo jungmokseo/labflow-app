@@ -576,7 +576,7 @@ export default function MeetingsPage() {
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
-                              const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+                              const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
                               const res = await fetch(`${API_BASE}/api/meetings/${m.id}/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                               const data = await res.json();
                               if (data.success && data.docUrl) {

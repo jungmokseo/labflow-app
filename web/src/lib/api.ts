@@ -2,9 +2,10 @@
  * Research Flow Web API 클라이언트
  *
  * Supabase Auth 토큰을 자동으로 첨부합니다.
+ * Vercel rewrites가 /api/* → Railway로 프록시하므로 브라우저에서는 같은 origin 사용 (CORS 불필요)
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+const API_BASE = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
 
 // ── 토큰 getter (클라이언트 사이드용) ───────────────
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -291,7 +292,7 @@ export async function uploadMeetingAudio(
   audio: File,
   opts?: { title?: string; duration?: number }
 ): Promise<{ success: boolean; data: Meeting }> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
   const formData = new FormData();
   formData.append('audio', audio);
   if (opts?.title) formData.append('title', opts.title);
@@ -391,7 +392,7 @@ export async function brainChatStream(
   fileId?: string,
   newSession?: boolean,
 ): Promise<BrainChatResult> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const API_BASE_URL = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
   const body = JSON.stringify({ message, channelId, fileId, newSession, stream: true });
 
   // Retry with progressive backoff (handles Railway cold start)
@@ -502,7 +503,7 @@ export interface UploadResult {
 }
 
 export async function brainUpload(file: File): Promise<UploadResult> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
   const formData = new FormData();
   formData.append('file', file);
 
@@ -755,7 +756,7 @@ export async function markPaperRead(resultId: string) {
 }
 
 export async function uploadPaperPdf(file: File): Promise<{ success: boolean; message: string; paperId?: string; title?: string; status?: string }> {
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
+  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
   const formData = new FormData();
   formData.append('file', file);
 
