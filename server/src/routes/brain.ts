@@ -1371,20 +1371,83 @@ ${context}`;
           try { const e = JSON.parse(m.content); return `[대기] ${e.title} (${e.date})`; } catch { return ''; }
         }).filter(Boolean).join('\n');
 
+        // 일정 데이터 구성
+        const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
         const calContext = [
-          todayEvents.length > 0 ? `오늘 일정 (${todayEvents.length}건):\n${todayEvents.map(e => `- ${e.start.includes('T') ? new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '종일'} ${e.title}${e.location ? ` @ ${e.location}` : ''}`).join('\n')}` : '오늘 일정 없음',
-          weekEvents.length > todayEvents.length ? `\n이번주 일정 (${weekEvents.length}건):\n${weekEvents.slice(0, 10).map(e => `- ${e.start.split('T')[0]} ${e.title}`).join('\n')}` : '',
-          pendingInfo ? `\n등록 대기 중 일정:\n${pendingInfo}` : '',
-        ].join('\n');
+          `오늘: ${todayStr}`,
+          todayEvents.length > 0
+            ? `\n[오늘 일정 ${todayEvents.length}건]\n${todayEvents.map(e => {
+                const time = e.start.includes('T') ? new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '종일';
+                return `- ${time} | ${e.title}${e.location ? ` | 장소: ${e.location}` : ''}${e.description ? ` | 메모: ${e.description.slice(0, 100)}` : ''}`;
+              }).join('\n')}`
+            : '\n[오늘 일정 없음]',
+          weekEvents.length > todayEvents.length
+            ? `\n[이번주 일정 ${weekEvents.length}건]\n${weekEvents.slice(0, 15).map(e => {
+                const date = e.start.includes('T')
+                  ? new Date(e.start).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' }) + ' ' + new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+                  : new Date(e.start).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric', weekday: 'short' }) + ' 종일';
+                return `- ${date} | ${e.title}${e.location ? ` | ${e.location}` : ''}`;
+              }).join('\n')}`
+            : '',
+          pendingInfo ? `\n[등록 대기 중 일정]\n${pendingInfo}` : '',
+        ].filter(Boolean).join('\n');
+
+        // 최근 이메일 브리핑에서 일정 관련 맥락 추출
+        let emailContext = '';
+        try {
+          const recentBriefing = await prisma.memo.findFirst({
+            where: { userId, source: 'email-briefing', tags: { has: 'narrative' } },
+            orderBy: { createdAt: 'desc' },
+          });
+          if (recentBriefing) {
+            emailContext = `\n[최근 이메일 브리핑 요약 (일정 관련 참고용)]\n${recentBriefing.content.slice(0, 2000)}`;
+          }
+        } catch {}
+
+        const calSystemPrompt = `당신은 연구실 일정 관리 비서입니다.
+
+## 출력 규칙 (절대 준수)
+1. 각 일정은 반드시 별도 줄에 작성하라. 한 줄에 여러 일정을 절대 나열하지 마라.
+2. 마크다운 서식(볼드 **, 불릿 -, 구분선 ---)을 적극 활용하라.
+3. 시간, 장소, 고유명사는 반드시 **볼드**로 강조하라.
+4. 이메일에서 언급된 관련 맥락이 있으면 일정 설명에 포함하라 (예: "이메일에서 리비전 요청이 있었으므로 이 미팅에서 논의 필요").
+5. 이모지를 절대 사용하지 마라.
+
+## 출력 형식 예시
+
+**오늘 일정** — 2026년 4월 6일 (월)
+
+---
+
+- **14:00** — **웰라인 발표** | 장소: 미정
+  관련: 이메일에서 발표 자료 공유 요청 있었음
+
+- **종일** — **BK21 자격 변동 조사 마감**
+  → 육근영에게 확인 필요 (이메일 4/3 참조)
+
+---
+
+**이번 주 예정**
+
+- **4/7(화) 13:00** — BK21 초청세미나 | 제1공학관 A442호
+- **4/7(화)** — 링크솔루텍 분기별 현황조사 제출 마감
+- **4/8(수) 12:40** — 조기 하교일
+
+---
+
+**참고**
+- 대응 필요 이메일과 연계된 일정이 있으면 여기서 언급
+
+${calContext}${emailContext}`;
 
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const result = await model.generateContent({
+        const calModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const result = await calModel.generateContent({
           contents: [{ role: 'user', parts: [{ text: message }] }],
-          systemInstruction: { role: 'user', parts: [{ text: `당신은 캘린더/일정 관리 비서입니다. 현재 일정 정보를 참고하여 답변하세요.\n\n${calContext}` }] },
+          systemInstruction: { role: 'user', parts: [{ text: calSystemPrompt }] },
         });
-        trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+        trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash'], 'calendar_query');
         return { response: result.response.text(), intent: 'calendar_tool', metadata: { todayCount: todayEvents.length, weekCount: weekEvents.length, pendingCount: pending.length } };
       } catch (err: any) {
         console.error('[brain] calendar tool error:', err.message);
