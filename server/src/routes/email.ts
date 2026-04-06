@@ -595,9 +595,9 @@ export async function emailCallbackRoute(app: FastifyInstance) {
         });
       }
 
-      // 성공: 웹 앱으로 리다이렉트
+      // 성공: 웹 앱 설정 페이지로 리다이렉트
       const frontendUrl = env.NODE_ENV === 'development' ? 'http://localhost:3000' : env.FRONTEND_URL;
-      return reply.redirect(`${frontendUrl}/email`);
+      return reply.redirect(`${frontendUrl}/settings?gmail=connected`);
     } catch (error: any) {
       app.log.error({ err: error }, 'Gmail OAuth callback failed');
       return reply.code(400).send({ error: 'Gmail 연동 실패', details: error.message });
