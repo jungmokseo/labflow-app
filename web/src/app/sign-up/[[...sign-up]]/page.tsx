@@ -96,7 +96,7 @@ export default function SignUpPage() {
           </div>
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button type="submit" disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-text-heading font-medium text-sm transition-colors disabled:opacity-50">
+            className="w-full py-2.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-medium text-sm transition-colors disabled:opacity-50">
             {loading ? '가입 중...' : '가입하기'}
           </button>
         </form>

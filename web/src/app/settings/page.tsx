@@ -7,7 +7,7 @@ import {
   getLabDictionary, addDictEntry, getLabCompleteness,
   updateEmailProfile, LabProfile,
 } from '@/lib/api';
-import { SkeletonForm, SkeletonLine } from '@/components/Skeleton';
+// Skeleton imports removed — using inline spinner
 import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon } from 'lucide-react';
 
 type Tab = 'status' | 'lab' | 'email' | 'dictionary';
@@ -39,13 +39,8 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <SkeletonLine width="w-32" />
-          <SkeletonLine width="w-56" />
-        </div>
-        <SkeletonForm rows={3} />
-        <SkeletonForm rows={2} />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
       </div>
     );
   }
@@ -78,7 +73,7 @@ export default function SettingsPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors
-              ${tab === t.key ? 'bg-primary text-text-heading' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
+              ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
           >
             {TAB_ICONS[t.key]} {t.label}
           </button>
@@ -115,12 +110,12 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
         {!emailConnected && (
-          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-medium">
+          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
             Gmail 연동하기
           </button>
         )}
         {!lab && (
-          <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-medium">
+          <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
             온보딩 시작
           </a>
         )}
@@ -164,7 +159,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
         <FlaskConical className="w-12 h-12 text-text-muted/40 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-text-heading mb-2">연구실이 등록되지 않았습니다</h3>
-        <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-text-heading rounded-lg font-medium mt-4">온보딩 시작</a>
+        <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-white rounded-lg font-medium mt-4">온보딩 시작</a>
       </div>
     );
   }
@@ -241,7 +236,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             <SInput label="연구실 이름" value={name} onChange={setName} />
             <SInput label="소속 기관" value={institution} onChange={setInstitution} />
             <SInput label="학과" value={department} onChange={setDepartment} />
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm font-medium disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">
               {saving ? '저장 중...' : '저장'}
             </button>
           </div>
@@ -269,7 +264,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
           <div className="text-center py-6">
             <p className="text-text-muted text-sm mb-3">연구 테마가 등록되지 않았습니다</p>
             <button onClick={() => { setEditing(true); setThemes([{ name: '', keywords: '', journals: '' }]); }}
-              className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm font-medium">
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
               + 연구 테마 추가
             </button>
           </div>
@@ -297,7 +292,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
         {editing && (
           <div className="flex items-center gap-3">
             <button onClick={() => setThemes([...themes, { name: '', keywords: '', journals: '' }])} className="text-xs text-primary">+ 테마 추가</button>
-            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-xs font-medium disabled:opacity-50 ml-auto">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium disabled:opacity-50 ml-auto">
               {saving ? '저장 중...' : '저장'}
             </button>
           </div>
@@ -325,7 +320,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
               } finally { setSavingInstructions(false); }
             }}
             disabled={savingInstructions}
-            className="text-xs px-3 py-1.5 bg-primary text-text-heading rounded-lg disabled:opacity-50"
+            className="text-xs px-3 py-1.5 bg-primary text-white rounded-lg disabled:opacity-50"
           >
             {savingInstructions ? '저장 중...' : '저장'}
           </button>
@@ -355,7 +350,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
         <div className="flex gap-2">
           <input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
           <input value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} placeholder="이메일" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <button onClick={handleAddMember} className="px-3 py-1.5 bg-primary text-text-heading rounded text-sm">추가</button>
+          <button onClick={handleAddMember} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
         </div>
       </section>
     </div>
@@ -449,7 +444,7 @@ function EmailTab({ connected }: { connected: boolean }) {
       </section>
 
       <button onClick={handleSave} disabled={saving}
-        className="w-full py-3 bg-primary hover:bg-primary-hover text-text-heading rounded-lg font-medium disabled:opacity-50">
+        className="w-full py-3 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium disabled:opacity-50">
         {saving ? '저장 중...' : '이메일 설정 저장'}
       </button>
     </div>
@@ -502,7 +497,7 @@ function DictionaryTab() {
           <span className="text-text-muted self-center">→</span>
           <input value={newCorrect} onChange={e => setNewCorrect(e.target.value)} placeholder="올바른 표기"
             className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <button onClick={handleAdd} className="px-3 py-1.5 bg-primary text-text-heading rounded text-sm">추가</button>
+          <button onClick={handleAdd} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
         </div>
 
         {loading ? (

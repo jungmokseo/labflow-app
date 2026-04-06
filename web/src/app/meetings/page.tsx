@@ -5,7 +5,7 @@ import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/a
 import { useApiData } from '@/lib/use-api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { SkeletonCard, SkeletonLine } from '@/components/Skeleton';
+// Skeleton imports removed — using inline spinner
 import {
   Mic, Paperclip, ClipboardList, FileText, CheckCircle, Music,
   ChevronUp, ChevronDown, Copy, X,
@@ -226,14 +226,8 @@ export default function MeetingsPage() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
-        <div className="space-y-2">
-          <SkeletonLine width="w-40" />
-          <SkeletonLine width="w-64" />
-        </div>
-        <div className="space-y-3">
-          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
-        </div>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
       </div>
     );
   }
@@ -377,7 +371,7 @@ export default function MeetingsPage() {
               <div className="flex gap-3">
                 <button
                   onClick={handleSubmit}
-                  className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-text-heading rounded-lg text-sm font-semibold transition-colors"
+                  className="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold transition-colors"
                 >
                   <Mic className="w-4 h-4 inline mr-1" /> 회의록 생성
                 </button>

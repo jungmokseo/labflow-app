@@ -425,8 +425,8 @@ export default function BrainPage() {
             <Brain className="w-5 h-5 text-primary" /> Brain
           </h2>
           <div className="flex gap-1 mt-3">
-            <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-text-heading' : 'bg-bg-input text-text-muted'}`}>채팅</button>
-            <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-text-heading' : 'bg-bg-input text-text-muted'}`}>검색</button>
+            <button onClick={() => setTab('chat')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'chat' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>채팅</button>
+            <button onClick={() => setTab('search')} className={`flex-1 px-2 py-1 rounded text-xs ${tab === 'search' ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}>검색</button>
           </div>
         </div>
 
@@ -731,7 +731,7 @@ export default function BrainPage() {
                 <button
                   onClick={handleSend}
                   disabled={loading || !input.trim()}
-                  className="px-5 py-3 bg-primary text-text-heading rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-primary/90"
+                  className="px-5 py-3 bg-primary text-white rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-primary/90"
                 >
                   <Send className="w-5 h-5" />
                 </button>
@@ -752,7 +752,7 @@ export default function BrainPage() {
                 placeholder="검색어를 입력하세요 (과제, 논문, 구성원, 메모...)"
                 className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
-              <button onClick={handleSearch} className="px-6 py-3 bg-primary text-text-heading rounded-xl text-sm font-medium">검색</button>
+              <button onClick={handleSearch} className="px-6 py-3 bg-primary text-white rounded-xl text-sm font-medium">검색</button>
             </div>
             {searchResults && (
               <div className="space-y-4">

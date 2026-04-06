@@ -6,7 +6,7 @@ import {
   analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl,
   type Lab,
 } from '@/lib/api';
-import { SkeletonForm, SkeletonLine } from '@/components/Skeleton';
+// Skeleton imports removed — using inline spinner
 import {
   FlaskConical, FileText, BookOpen, Brain, User, Search, CheckCircle,
   RefreshCw, ClipboardList, Lightbulb, PartyPopper, X,
@@ -212,13 +212,8 @@ export default function LabProfilePage() {
   }
 
   if (loading) return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <SkeletonLine width="w-48" />
-        <SkeletonLine width="w-72" />
-      </div>
-      <SkeletonForm rows={4} />
-      <SkeletonForm rows={3} />
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
     </div>
   );
 
@@ -233,7 +228,7 @@ export default function LabProfilePage() {
           {[1, 2, 3, 4].map(s => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                s < step ? 'bg-green-500 text-text-heading' : s === step ? 'bg-primary text-text-heading' : 'bg-bg-input text-text-muted'
+                s < step ? 'bg-green-500 text-white' : s === step ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'
               }`}>{s < step ? '✓' : s}</div>
               {s < 4 && <div className={`w-12 h-0.5 ${s < step ? 'bg-green-500' : 'bg-bg-input'}`} />}
             </div>
@@ -262,7 +257,7 @@ export default function LabProfilePage() {
               <label className="text-text-heading text-sm block mb-1">소속 기관</label>
               <input value={institution} onChange={e => setInstitution(e.target.value)} placeholder="예: 연세대학교 화공생명공학과" className="w-full bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none" />
             </div>
-            <button onClick={handleStep1} disabled={!labName.trim()} className="w-full py-3 bg-primary text-text-heading rounded-lg font-medium disabled:opacity-50">다음: 대표 논문 입력 →</button>
+            <button onClick={handleStep1} disabled={!labName.trim()} className="w-full py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50">다음: 대표 논문 입력 →</button>
           </div>
         )}
 
@@ -283,7 +278,7 @@ export default function LabProfilePage() {
 
             {!seedResult ? (
               <div className="flex gap-2">
-                <button onClick={handleSeedAnalyze} disabled={seedAnalyzing || !seedDoiInput.trim()} className="flex-1 py-3 bg-primary text-text-heading rounded-lg font-medium disabled:opacity-50">
+                <button onClick={handleSeedAnalyze} disabled={seedAnalyzing || !seedDoiInput.trim()} className="flex-1 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
                   {seedAnalyzing ? '분석 중...' : <><Search className="w-4 h-4 inline mr-1" /> 논문 분석</>}
                 </button>
                 <button onClick={() => setStep(3)} className="px-4 py-3 bg-bg-input text-text-muted rounded-lg text-sm">건너뛰기</button>
@@ -324,7 +319,7 @@ export default function LabProfilePage() {
                   </div>
                 )}
 
-                <button onClick={handleApplySeedResults} className="w-full py-3 bg-green-500 text-text-heading rounded-lg font-medium flex items-center justify-center gap-1.5">
+                <button onClick={handleApplySeedResults} className="w-full py-3 bg-green-500 text-white rounded-lg font-medium flex items-center justify-center gap-1.5">
                   <CheckCircle className="w-4 h-4" /> 분석 결과 적용 → 다음
                 </button>
               </div>
@@ -343,7 +338,7 @@ export default function LabProfilePage() {
 
             {!crawlResult ? (
               <div className="flex gap-2">
-                <button onClick={handleCrawlNow} disabled={crawling} className="flex-1 py-3 bg-primary text-text-heading rounded-lg font-medium disabled:opacity-50">
+                <button onClick={handleCrawlNow} disabled={crawling} className="flex-1 py-3 bg-primary text-white rounded-lg font-medium disabled:opacity-50">
                   {crawling ? '크롤링 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 지금 관련 논문 가져오기</>}
                 </button>
                 <button onClick={() => { setShowOnboarding(false); loadProfile(); }} className="px-4 py-3 bg-bg-input text-text-muted rounded-lg text-sm">나중에</button>
@@ -353,7 +348,7 @@ export default function LabProfilePage() {
                 <div className="bg-green-500/10 text-green-400 px-4 py-3 rounded-lg text-sm">
                   {crawlResult.totalFetched}편 수집 → {crawlResult.matched}편 매칭 → {crawlResult.newSaved}편 저장!
                 </div>
-                <button onClick={() => { setStep(4); }} className="w-full py-3 bg-primary text-text-heading rounded-lg font-medium">다음 →</button>
+                <button onClick={() => { setStep(4); }} className="w-full py-3 bg-primary text-white rounded-lg font-medium">다음 →</button>
               </div>
             )}
           </div>
@@ -372,7 +367,7 @@ export default function LabProfilePage() {
               <p className="flex items-center gap-1.5"><User className="w-4 h-4 text-blue-400 flex-shrink-0" /> <span className="text-text-heading">"태영이 이메일 뭐야?"</span> -- 구성원 즉시 조회</p>
             </div>
             <p className="text-text-muted text-xs">구성원, 과제는 대화하면서도 추가 가능해요: "김태영 박사과정 추가해줘"</p>
-            <button onClick={() => { setShowOnboarding(false); loadProfile(); }} className="w-full py-3 bg-primary text-text-heading rounded-lg font-medium">Lab Profile 확인하기</button>
+            <button onClick={() => { setShowOnboarding(false); loadProfile(); }} className="w-full py-3 bg-primary text-white rounded-lg font-medium">Lab Profile 확인하기</button>
           </div>
         )}
       </div>
@@ -418,7 +413,7 @@ export default function LabProfilePage() {
       {/* 탭 */}
       <div className="flex gap-1 bg-bg-card rounded-lg p-1">
         {(['info', 'members', 'projects', 'dict'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 px-3 py-2 rounded text-sm ${tab === t ? 'bg-primary text-text-heading' : 'text-text-muted hover:text-text-heading'}`}>
+          <button key={t} onClick={() => setTab(t)} className={`flex-1 px-3 py-2 rounded text-sm ${tab === t ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading'}`}>
             {t === 'info' ? '기본 정보' : t === 'members' ? `구성원 (${(lab.members || []).length})` : t === 'projects' ? `과제 (${(lab.projects || []).length})` : `교정 사전 (${(lab.domainDict || []).length})`}
           </button>
         ))}
@@ -456,7 +451,7 @@ export default function LabProfilePage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleSaveInfo} disabled={saving} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm disabled:opacity-50">
+                  <button onClick={handleSaveInfo} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
                     {saving ? '저장 중...' : '저장'}
                   </button>
                   <button onClick={() => setEditingInfo(false)} className="px-4 py-2 bg-bg-input text-text-muted rounded-lg text-sm">취소</button>
@@ -494,7 +489,7 @@ export default function LabProfilePage() {
                 {['학부연구생', '석사과정', '박사과정', '포닥', '교수'].map(r => <option key={r}>{r}</option>)}
               </select>
               <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} placeholder="이메일" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <button onClick={handleAddMember} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm">추가</button>
+              <button onClick={handleAddMember} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
             {(lab.members || []).map((m: any) => (
               <div key={m.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
@@ -515,7 +510,7 @@ export default function LabProfilePage() {
             <div className="flex gap-2">
               <input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="과제명" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <input value={newProjectFunder} onChange={e => setNewProjectFunder(e.target.value)} placeholder="지원기관" className="w-40 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <button onClick={handleAddProject} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm">추가</button>
+              <button onClick={handleAddProject} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
             {(lab.projects || []).map((p: any) => (
               <div key={p.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
@@ -537,7 +532,7 @@ export default function LabProfilePage() {
               <input value={newDictWrong} onChange={e => setNewDictWrong(e.target.value)} placeholder="잘못된 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <span className="text-text-muted self-center">→</span>
               <input value={newDictCorrect} onChange={e => setNewDictCorrect(e.target.value)} placeholder="올바른 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <button onClick={handleAddDict} className="px-4 py-2 bg-primary text-text-heading rounded-lg text-sm">추가</button>
+              <button onClick={handleAddDict} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               {(lab.domainDict || []).map((d: any) => (

@@ -9,6 +9,7 @@ const config: Config = {
         'bg-card': 'var(--color-bg-card)',
         'bg-input': 'var(--color-bg-input)',
         'bg-hover': 'var(--color-bg-hover)',
+        'bg-sidebar': 'var(--color-bg-sidebar)',
         primary: 'var(--color-primary)',
         'primary-hover': 'var(--color-primary-hover)',
         'primary-light': 'var(--color-primary-light)',

@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults, markPaperRead,
+  getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults,
   getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
   type PaperAlertResult,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-import { SkeletonCard, SkeletonLine, StepProgress } from '@/components/Skeleton';
+import { StepProgress } from '@/components/Skeleton';
 import {
   BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
   Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight, Upload,
@@ -101,7 +101,7 @@ export default function PapersPage() {
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // SWR for paper results
-  const { data: resultsData, mutate: refreshResults } = useApiData(
+  const { data: resultsData, isLoading: resultsLoading, mutate: refreshResults } = useApiData(
     'paper-results',
     async () => { const data = await getPaperAlertResults(); return data.results || data.data || []; }
   );
@@ -251,7 +251,7 @@ export default function PapersPage() {
             {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 수집</>}
           </button>
           <button onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
-            className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-text-heading' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
+            className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
             <Settings className="w-4 h-4 inline mr-1" /> 설정
           </button>
         </div>
@@ -296,7 +296,7 @@ export default function PapersPage() {
               placeholder="저널명 또는 RSS URL..."
               className="flex-1 bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             <button onClick={handleAddJournal} disabled={addLoading}
-              className="px-5 py-2.5 bg-primary text-text-heading rounded-lg text-sm disabled:opacity-50">
+              className="px-5 py-2.5 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
               {addLoading ? '...' : '추가'}
             </button>
           </div>
@@ -319,7 +319,7 @@ export default function PapersPage() {
           <div className="flex flex-wrap gap-2">
             {allFields.map(field => (
               <button key={field} onClick={() => setExpandedField(expandedField === field ? null : field)}
-                className={`px-3 py-1.5 rounded-lg text-xs border ${expandedField === field ? 'bg-primary text-text-heading border-primary' : 'bg-bg-input text-text-muted border-border hover:text-text-heading'}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs border ${expandedField === field ? 'bg-primary text-white border-primary' : 'bg-bg-input text-text-muted border-border hover:text-text-heading'}`}>
                 {field}
               </button>
             ))}
@@ -348,12 +348,16 @@ export default function PapersPage() {
             setShowSettings(false);
             const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
             if (kws.length > 0) savePaperAlert({ keywords: kws, journals: selectedJournals }).catch(() => setShowSettings(true));
-          }} className="w-full py-2.5 bg-primary text-text-heading rounded-lg text-sm font-medium">설정 저장</button>
+          }} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">설정 저장</button>
         </div>
       )}
 
       {/* ── 주차별 논문 대시보드 ── */}
-      {results.length === 0 ? (
+      {resultsLoading ? (
+        <div className="flex items-center justify-center min-h-[40vh]">
+          <div className="w-8 h-8 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+        </div>
+      ) : results.length === 0 ? (
         <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
           <BookOpen className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
           <p className="text-text-heading font-medium text-base">수집된 논문이 없습니다</p>
@@ -422,10 +426,6 @@ export default function PapersPage() {
                             <p className="text-xs text-text-muted">
                               <span className="font-medium">키워드 매칭</span>: {((paper as any).matchedKeywords || (paper as any).themes || []).join(', ')}
                             </p>
-                          )}
-                          {!paper.read && (
-                            <button onClick={() => { markPaperRead(paper.id); refreshResults((prev: any) => prev ? (prev as PaperAlertResult[]).map((r: PaperAlertResult) => r.id === paper.id ? {...r, read: true} : r) : prev, { revalidate: false }); }}
-                              className="text-xs text-primary hover:underline">확인 완료</button>
                           )}
                         </div>
                       )}

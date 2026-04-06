@@ -96,11 +96,15 @@ function NavContent({ pathname, onNavigate, user, onSignOut }: {
         })}
       </nav>
 
-      {/* Cmd+K shortcut hint */}
-      <div className="px-6 hidden md:block">
-        <kbd className="text-xs text-text-muted bg-bg-input px-2 py-1 rounded border border-border">
-          ⌘K 빠른 이동
-        </kbd>
+      {/* Cmd+K shortcut hint — clickable */}
+      <div className="px-3 mt-4 hidden md:block">
+        <button
+          onClick={() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))}
+          className="w-full flex items-center justify-between px-3 py-2 text-sm text-text-muted bg-bg-input hover:bg-bg-hover rounded-lg border border-border transition-colors cursor-pointer"
+        >
+          <span>빠른 이동...</span>
+          <kbd className="text-xs bg-bg-card px-1.5 py-0.5 rounded border border-border">⌘K</kbd>
+        </button>
       </div>
 
       {runningTasks.length > 0 && (
@@ -181,12 +185,12 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 flex-col bg-bg-card border-r border-border">
+      <aside className="hidden md:flex w-64 flex-col bg-bg-sidebar border-r border-border">
         <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} />
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-3 bg-bg-card/80 backdrop-blur border-b border-border">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-3 bg-bg-sidebar/90 backdrop-blur border-b border-border">
         <button
           onClick={() => setMobileOpen(true)}
           className="p-2 rounded-lg text-text-heading"
