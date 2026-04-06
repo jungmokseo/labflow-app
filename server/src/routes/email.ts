@@ -563,37 +563,28 @@ export async function emailCallbackRoute(app: FastifyInstance) {
         gmailAddress = profile.data.emailAddress || '';
       } catch { /* 이메일 주소 조회 실패 시 빈 문자열 */ }
 
-      // 기존 토큰 중 같은 계정이 있으면 업데이트, 없으면 생성
-      const existingToken = await prisma.gmailToken.findFirst({
-        where: { userId: user.id, email: gmailAddress },
-      });
-      const existingCount = await prisma.gmailToken.count({ where: { userId: user.id } });
+      // 재연동: 기존 토큰 전부 삭제 후 새로 생성 (만료 토큰 잔존 방지)
+      await prisma.gmailToken.deleteMany({ where: { userId: user.id } });
 
       // Encrypt tokens before storing
       const encAccessToken = encryptToken(tokens.access_token!);
       const encRefreshToken = tokens.refresh_token ? encryptToken(tokens.refresh_token) : null;
 
-      if (existingToken) {
-        await prisma.gmailToken.update({
-          where: { id: existingToken.id },
-          data: {
-            accessToken: encAccessToken,
-            refreshToken: encRefreshToken || existingToken.refreshToken,
-            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-          },
-        });
-      } else {
-        await prisma.gmailToken.create({
-          data: {
-            userId: user.id,
-            email: gmailAddress,
-            accessToken: encAccessToken,
-            refreshToken: encRefreshToken,
-            expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-            primary: existingCount === 0, // 첫 번째 계정이면 primary
-          },
-        });
+      if (!encRefreshToken) {
+        console.error('[email] OAuth callback: Google did not return refresh_token. prompt:consent should force it.');
       }
+
+      await prisma.gmailToken.create({
+        data: {
+          userId: user.id,
+          email: gmailAddress,
+          accessToken: encAccessToken,
+          refreshToken: encRefreshToken,
+          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          primary: true,
+        },
+      });
+      console.log(`[email] Gmail token saved for ${gmailAddress || 'unknown'} (refresh_token: ${encRefreshToken ? 'yes' : 'NO'})`);
 
       // 성공: 웹 앱 설정 페이지로 리다이렉트
       const frontendUrl = env.NODE_ENV === 'development' ? 'http://localhost:3000' : env.FRONTEND_URL;
