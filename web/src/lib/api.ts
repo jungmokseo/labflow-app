@@ -853,6 +853,22 @@ export async function createCalendarEventApi(data: { title: string; date: string
   });
 }
 
+// ── AI 비용 요약 ──────────────────────────────────────
+export interface CostSummary {
+  totalCost: number;
+  totalCalls: number;
+  todayCost: number;
+  todayCalls: number;
+  days: number;
+  byService: Record<string, { calls: number; cost: number }>;
+  byDay: Record<string, { calls: number; cost: number }>;
+  byIntent: Record<string, { calls: number; cost: number }>;
+}
+
+export async function getCostSummary(days = 30): Promise<CostSummary> {
+  return apiFetch<CostSummary>(`/api/brain/cost-summary?days=${days}`);
+}
+
 // ── 헬스 체크 ──────────────────────────────────────
 export async function checkHealth() {
   try {

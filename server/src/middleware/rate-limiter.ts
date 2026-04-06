@@ -147,11 +147,14 @@ export async function aiRateLimiter(
 
 // --- Cost Tracking ---
 
-export function trackAICost(userId: string, service: string, estimatedCost: number): void {
+export function trackAICost(userId: string, service: string, estimatedCost: number, intent?: string): void {
   const entry = getCostEntry(userId);
 
   entry.dailyCost += estimatedCost;
   entry.costBreakdown[service] = (entry.costBreakdown[service] ?? 0) + estimatedCost;
+
+  // DB에 영구 저장 (비동기, 실패해도 무시)
+  persistCostLog(userId, service, estimatedCost, intent).catch(() => {});
 
   // Check alert thresholds
   let userAlerts = alertedThresholds.get(userId);
@@ -168,6 +171,14 @@ export function trackAICost(userId: string, service: string, estimatedCost: numb
       );
     }
   }
+}
+
+// DB 영구 저장 (lazy import로 순환 의존 방지)
+async function persistCostLog(userId: string, service: string, cost: number, intent?: string): Promise<void> {
+  const { prisma } = await import('../config/prisma.js');
+  await prisma.aiCostLog.create({
+    data: { userId, service, cost, intent },
+  });
 }
 
 // --- Cost Summary ---

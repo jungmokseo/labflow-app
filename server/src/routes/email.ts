@@ -1471,7 +1471,7 @@ ${profile.groups.length > 0
             }],
           });
 
-          trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
+          trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet'], 'email_briefing');
           const textBlock = response.content.find(b => b.type === 'text');
           markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
         } catch (err: any) {

@@ -502,6 +502,20 @@ model Message {
   @@map("messages")
 }
 
+// ── AI 비용 로그 ────────────────────────────────────────────
+model AiCostLog {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  service   String                        // gemini-flash, claude-sonnet, openai-embedding, etc.
+  cost      Float                         // USD 추정 비용
+  intent    String?                       // brain intent (email_briefing, general_chat, etc.)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("ai_cost_logs")
+}
+
 // ── 채널 요약 ────────────────────────────────────────────
 model ChannelSummary {
   id            String   @id @default(cuid())
