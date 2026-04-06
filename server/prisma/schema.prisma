@@ -424,7 +424,6 @@ model PaperAlert {
   schedule     String    @default("weekly")
   active       Boolean   @default(true)
   lastRunAt    DateTime? @map("last_run_at")
-  metadata     Json?                                // {weeklyInsight, totalFetched, generatedAt}
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 

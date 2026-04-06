@@ -290,11 +290,14 @@ export default function BrainPage() {
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
-      const errorDetail = err.message?.includes('401') || err.message?.includes('403')
-        ? '인증이 만료되었습니다. 페이지를 새로고침 후 다시 시도해주세요.'
-        : err.message?.includes('fetch') || err.message?.includes('network') || err.message?.includes('Load failed')
-        ? '서버 연결에 실패했습니다. 네트워크를 확인하고 다시 시도해주세요.'
-        : `오류: ${err.message}`;
+      const rawMsg = err.message || 'Unknown error';
+      const errorDetail = rawMsg.includes('401') || rawMsg.includes('403')
+        ? '인증이 만료되었습니다. 페이지를 새로고침 후 다시 로그인해주세요.'
+        : rawMsg.includes('AbortError') || rawMsg.includes('시간이 초과')
+        ? '응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.'
+        : rawMsg.includes('Load failed') || rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError')
+        ? '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.'
+        : rawMsg;
       const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',

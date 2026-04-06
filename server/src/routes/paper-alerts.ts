@@ -506,16 +506,11 @@ export async function runPaperCrawl(
   // T_last 업데이트
   await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: new Date() } });
 
-  // 주간 분석 생성 (Sonnet으로 전문 분석)
+  // 주간 분석 생성 (Sonnet으로 전문 분석) — 결과에 포함하여 반환
   let weeklyInsight = '';
   if (scored.length > 0) {
     try {
       weeklyInsight = await generateWeeklyInsight(scored, feeds.map(f => f.name), themes);
-      // DB에 저장 (alert의 metadata에)
-      await (prisma.paperAlert as any).update({
-        where: { id: alert.id },
-        data: { metadata: { weeklyInsight, generatedAt: new Date().toISOString(), totalFetched: allItems.length, matched: scored.length } },
-      });
     } catch (err) {
       console.warn('Weekly insight generation failed:', err);
     }
@@ -772,11 +767,7 @@ export async function paperAlertRoutes(app: FastifyInstance) {
         grouped[t].push(r);
       }
     }
-    // weeklyInsight from alert metadata
-    const weeklyInsight = ((alert as any).metadata as any)?.weeklyInsight || '';
-    const totalFetched = ((alert as any).metadata as any)?.totalFetched || 0;
-
-    return { results, unreadCount, grouped, weeklyInsight, totalFetched, journals: alert.journals };
+    return { results, unreadCount, grouped, journals: alert.journals };
   });
 
   // ── 읽음 표시 ────────────────────────────────────
