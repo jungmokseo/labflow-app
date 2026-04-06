@@ -292,12 +292,13 @@ export default function BrainPage() {
       setStreamingContent('');
       setIsTokenStreaming(false);
       const rawMsg = err.message || 'Unknown error';
+      console.error('[Brain] Chat error:', rawMsg, err);
       const errorDetail = rawMsg.includes('401') || rawMsg.includes('403')
         ? '인증이 만료되었습니다. 페이지를 새로고침 후 다시 로그인해주세요.'
         : rawMsg.includes('AbortError') || rawMsg.includes('시간이 초과')
         ? '응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.'
         : rawMsg.includes('Load failed') || rawMsg.includes('Failed to fetch') || rawMsg.includes('NetworkError')
-        ? '서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.'
+        ? `서버에 연결할 수 없습니다. (${rawMsg})`
         : rawMsg;
       const errMsg: BrainMessage = {
         id: `err-${Date.now()}`,

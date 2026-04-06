@@ -418,11 +418,12 @@ export async function brainChatStream(
     const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
 
     try {
-      res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
+      res = await fetch(`${API_BASE_URL}/api/brain/chat?_t=${Date.now()}`, {
         method: 'POST',
         headers: { ...authHeaders },
         body,
         signal: controller.signal,
+        cache: 'no-store',
       });
       clearTimeout(timeoutId);
       break; // success — exit retry loop
@@ -432,6 +433,7 @@ export async function brainChatStream(
         throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
       }
       lastError = fetchErr;
+      console.error(`[brainChatStream] attempt ${attempt + 1} failed:`, fetchErr.name, fetchErr.message);
       if (attempt === 2) {
         throw new Error(`서버 연결 실패: ${fetchErr.message}`);
       }
