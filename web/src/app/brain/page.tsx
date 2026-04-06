@@ -13,8 +13,44 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
-  MessageSquare,
+  MessageSquare, BarChart3, AlertTriangle, Calendar, CheckSquare,
+  Mail, BookOpen, Users, FileText, Clock, Zap, Info,
 } from 'lucide-react';
+
+// Heading → Lucide icon mapping for structured AI responses
+const HEADING_ICONS: Array<{ pattern: RegExp; icon: React.ReactNode }> = [
+  { pattern: /요약/i, icon: <BarChart3 className="w-4 h-4 text-primary inline" /> },
+  { pattern: /즉시 대응|긴급|대응 필요/i, icon: <AlertTriangle className="w-4 h-4 text-red-500 inline" /> },
+  { pattern: /주요 일정|일정|캘린더/i, icon: <Calendar className="w-4 h-4 text-blue-500 inline" /> },
+  { pattern: /권장 액션|할 일|액션|조치/i, icon: <CheckSquare className="w-4 h-4 text-green-500 inline" /> },
+  { pattern: /이메일|메일|브리핑/i, icon: <Mail className="w-4 h-4 text-primary inline" /> },
+  { pattern: /논문|연구|동향/i, icon: <BookOpen className="w-4 h-4 text-green-500 inline" /> },
+  { pattern: /구성원|학생|팀/i, icon: <Users className="w-4 h-4 text-blue-500 inline" /> },
+  { pattern: /진행 상황|업데이트|현황/i, icon: <Clock className="w-4 h-4 text-yellow-500 inline" /> },
+  { pattern: /완료|완료된/i, icon: <Zap className="w-4 h-4 text-green-500 inline" /> },
+  { pattern: /정보성|참고/i, icon: <Info className="w-4 h-4 text-text-muted inline" /> },
+];
+
+function getHeadingIcon(text: string): React.ReactNode | null {
+  for (const { pattern, icon } of HEADING_ICONS) {
+    if (pattern.test(text)) return icon;
+  }
+  return <FileText className="w-4 h-4 text-text-muted inline" />;
+}
+
+// Custom markdown components with Lucide icons
+const markdownComponents = {
+  h2: ({ children, ...props }: any) => {
+    const text = String(children);
+    const icon = getHeadingIcon(text);
+    return <h2 {...props}>{icon} {children}</h2>;
+  },
+  h3: ({ children, ...props }: any) => {
+    const text = String(children);
+    const icon = getHeadingIcon(text);
+    return <h3 {...props}>{icon} {children}</h3>;
+  },
+};
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -525,7 +561,7 @@ export default function BrainPage() {
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
                         <div className="brain-prose max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                             {stripEmoji(msg.content)}
                           </ReactMarkdown>
                         </div>
@@ -550,7 +586,7 @@ export default function BrainPage() {
                 {loading && streamingContent && (
                   <div className="group relative animate-msg-in">
                     <div className="brain-prose max-w-none">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                         {stripEmoji(streamingContent)}
                       </ReactMarkdown>
                       <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />

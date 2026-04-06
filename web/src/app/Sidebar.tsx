@@ -131,21 +131,18 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
 
   return (
     <>
-      <div className="p-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-text-heading">
-            <FlaskConical className="w-5 h-5 text-primary inline-block" /> <span className="text-primary">Research Flow</span>
-          </h1>
-          <p className="text-xs text-text-muted mt-1">연구실 AI 비서</p>
-        </div>
+      <div className="p-4 pb-2 flex items-center justify-between">
+        <h1 className="text-lg font-bold text-text-heading">
+          <FlaskConical className="w-4 h-4 text-primary inline-block" /> <span className="text-primary">Research Flow</span>
+        </h1>
         {onToggleCollapse && (
-          <button onClick={onToggleCollapse} className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors mt-0.5" title="사이드바 접기">
+          <button onClick={onToggleCollapse} className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors" title="사이드바 접기">
             <PanelLeftClose className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      <nav className="px-3 space-y-1">
+      <nav className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => {
           const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
           return (
@@ -154,7 +151,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
               href={item.href}
               onClick={onNavigate}
               onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 focus-ring ${
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 focus-ring ${
                 active
                   ? 'bg-primary-light text-primary font-medium'
                   : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
@@ -282,35 +279,27 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
         </div>
       )}
 
-      <div className="p-4 border-t border-border">
-        <div className="flex items-center gap-3">
+      <div className="px-3 py-3 border-t border-border">
+        <div className="flex items-center gap-2">
           <button
             onClick={onSignOut}
-            className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center text-sm font-bold hover:bg-primary-light transition-colors"
+            className="w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold flex-shrink-0"
             title="로그아웃"
           >
             {user?.email?.charAt(0).toUpperCase() || '?'}
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-text-heading truncate">
+            <p className="text-xs font-medium text-text-heading truncate">
               {user?.user_metadata?.name || user?.email || '...'}
-            </p>
-            <p className="text-xs text-text-muted truncate">
-              {user?.email || ''}
             </p>
           </div>
           <button
             onClick={toggle}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+            className="p-1 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
             title={dark ? '라이트 모드' : '다크 모드'}
           >
-            {dark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-        </div>
-        <div className="mt-3 flex gap-2 text-xs text-text-muted">
-          <a href="/legal/terms.html" className="hover:text-text-main transition-colors">이용약관</a>
-          <span>·</span>
-          <a href="/legal/privacy.html" className="hover:text-text-main transition-colors">개인정보처리방침</a>
         </div>
       </div>
     </>

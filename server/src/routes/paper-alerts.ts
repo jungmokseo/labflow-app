@@ -347,6 +347,75 @@ ${ctx}제목: ${title}
   } catch { return ''; }
 }
 
+// ── 주간 논문 동향 분석 (Sonnet) ──────────────────────
+async function generateWeeklyInsight(
+  papers: Array<{ title: string; journal: string; stars: number; matchedThemes: string[]; description: string }>,
+  journals: string[],
+  themes: ResearchTheme[],
+): Promise<string> {
+  const themeNames = themes.map(t => t.name);
+  // 테마별 통계
+  const themeCount: Record<string, number> = {};
+  for (const p of papers) {
+    for (const t of p.matchedThemes) {
+      themeCount[t] = (themeCount[t] || 0) + 1;
+    }
+  }
+  const themeStats = Object.entries(themeCount).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}(${c}편)`).join(', ');
+
+  // 핵심 논문 목록 (★★★, ★★)
+  const topPapers = papers.filter(p => p.stars >= 2).slice(0, 10);
+  const paperList = topPapers.map(p =>
+    `- [★${'★'.repeat(p.stars - 1)}] ${p.title} (${p.journal}) — 테마: ${p.matchedThemes.join(', ')}`
+  ).join('\n');
+
+  const prompt = `당신은 바이오센서/유연전자소자 연구 분야의 전문 분석가입니다.
+아래는 이번 주 ${journals.length}개 저널에서 수집한 총 ${papers.length}편의 관련 논문 목록입니다.
+연구실 5대 테마: ${themeNames.join(', ')}
+테마별 분포: ${themeStats}
+
+주요 논문:
+${paperList}
+
+위 내용을 바탕으로 이번 주 연구 동향 시사점을 3~5문장의 전문 분석으로 작성하세요.
+요구사항:
+1. 어떤 테마가 활발한지, 구체적 논문명과 저널을 인용하며 설명
+2. 복수 테마에 걸치는 논문이 있다면 왜 중요한지 분석
+3. 연구 트렌드나 새로운 방향성이 보이면 짚어주세요
+4. "~편이 수집되었습니다" 같은 단순 나열 대신 "왜 이것이 중요한지" 분석 관점
+5. 이모지 사용 금지. 전문적이고 간결한 한국어로 작성.
+6. 마크다운 볼드(**키워드**)를 적극 활용하여 핵심 포인트를 강조.
+
+시사점:`;
+
+  // Sonnet 사용 (비용 효율적 + 고품질 분석)
+  if (env.ANTHROPIC_API_KEY) {
+    try {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        temperature: 0.3,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const text = response.content.find(b => b.type === 'text');
+      if (text && text.type === 'text') return text.text.trim();
+    } catch (err) {
+      console.warn('Sonnet weekly insight failed:', err);
+    }
+  }
+
+  // Gemini fallback
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch { return ''; }
+}
+
 // ── RSS URL 추측 ────────────────────────────────────
 function guessRssUrl(source: any): string | null {
   const homepage = source.homepage_url || '';
@@ -437,6 +506,21 @@ export async function runPaperCrawl(
   // T_last 업데이트
   await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: new Date() } });
 
+  // 주간 분석 생성 (Sonnet으로 전문 분석)
+  let weeklyInsight = '';
+  if (scored.length > 0) {
+    try {
+      weeklyInsight = await generateWeeklyInsight(scored, feeds.map(f => f.name), themes);
+      // DB에 저장 (alert의 metadata에)
+      await (prisma.paperAlert as any).update({
+        where: { id: alert.id },
+        data: { metadata: { weeklyInsight, generatedAt: new Date().toISOString(), totalFetched: allItems.length, matched: scored.length } },
+      });
+    } catch (err) {
+      console.warn('Weekly insight generation failed:', err);
+    }
+  }
+
   return {
     totalFetched: allItems.length,
     afterTLastFilter: afterTLast.length,
@@ -444,6 +528,7 @@ export async function runPaperCrawl(
     newSaved: savedCount,
     tLast: tLast.toISOString(),
     journals: feeds.map(f => f.name),
+    weeklyInsight,
     breakdown: {
       threeStars: scored.filter(s => s.stars === 3).length,
       twoStars: scored.filter(s => s.stars === 2).length,
@@ -687,7 +772,11 @@ export async function paperAlertRoutes(app: FastifyInstance) {
         grouped[t].push(r);
       }
     }
-    return { results, unreadCount, grouped };
+    // weeklyInsight from alert metadata
+    const weeklyInsight = ((alert as any).metadata as any)?.weeklyInsight || '';
+    const totalFetched = ((alert as any).metadata as any)?.totalFetched || 0;
+
+    return { results, unreadCount, grouped, weeklyInsight, totalFetched, journals: alert.journals };
   });
 
   // ── 읽음 표시 ────────────────────────────────────

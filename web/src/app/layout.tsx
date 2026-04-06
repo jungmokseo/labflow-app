@@ -4,7 +4,6 @@ import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { DataPrefetch } from '@/components/DataPrefetch';
-import { GlobalProgress } from '@/components/GlobalProgress';
 import { ToastProvider } from '@/components/Toast';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
@@ -57,7 +56,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="min-h-screen bg-bg text-text-main antialiased">
         <ToastProvider>
-          <GlobalProgress />
           <KeyboardShortcuts />
           <AuthInit />
           <ServiceWorkerRegister />

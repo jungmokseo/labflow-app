@@ -192,27 +192,39 @@ export default function PapersPage() {
           assigned.add(p.id);
         }
 
-        // 수집 저널 목록
-        const journalSet = new Set<string>();
-        for (const p of papers) if (p.journal) journalSet.add(p.journal);
-        const journals = Array.from(journalSet).sort();
+        // 수집 저널 목록 — 설정된 전체 저널 사용
+        const journals = selectedJournals.length > 0 ? selectedJournals : Array.from(new Set(papers.map(p => p.journal))).sort();
 
-        // 핵심 시사점 자동 생성
+        // 핵심 시사점 — 핵심 논문(★★★)의 aiSummary 활용 + 테마 트렌드 분석
         const topPapers = sorted.filter(p => ((p as any).stars || 1) >= 3);
-        const themeEntries = Array.from(themes.entries());
-        const largestTheme = themeEntries.sort((a, b) => b[1].length - a[1].length)[0];
+        const highPapers = sorted.filter(p => ((p as any).stars || 1) >= 2);
+        const themeEntries = Array.from(themes.entries()).sort((a, b) => b[1].length - a[1].length);
+        const largestTheme = themeEntries[0];
+
         let insight = '';
-        if (topPapers.length > 0) {
-          const topTitles = topPapers.slice(0, 2).map(p => `${p.title.slice(0, 50)}…(${p.journal})`);
-          insight += `핵심 논문 ${topPapers.length}편 — ${topTitles.join('; ')}. `;
-        }
+        // 테마 트렌드 요약
         if (largestTheme) {
-          insight += `${largestTheme[0]} 분야가 ${largestTheme[1].length}편으로 가장 활발`;
-          const otherActive = themeEntries.filter(([t, ps]) => t !== largestTheme[0] && ps.length >= 2);
-          if (otherActive.length > 0) {
-            insight += `, ${otherActive.map(([t, ps]) => `${t}(${ps.length}편)`).join('·')}도 주목`;
+          insight += `이번 주는 **${themeEntries.map(([t, ps]) => `${t}**(${ps.length}편)`).join(', **')} 순으로 논문이 수집되었습니다. `;
+        }
+        // 핵심 논문 하이라이트 (aiSummary 포함)
+        if (topPapers.length > 0) {
+          insight += `특히 `;
+          insight += topPapers.slice(0, 3).map(p => {
+            const shortTitle = p.title.length > 60 ? p.title.slice(0, 60) + '…' : p.title;
+            return `${shortTitle}(${p.journal}, ★★★)`;
+          }).join(', ');
+          // 복수 테마 논문 강조
+          const multiTheme = topPapers.find(p => ((p as any).themes as string[])?.length > 1);
+          if (multiTheme) {
+            const themes2 = ((multiTheme as any).themes as string[]);
+            insight += `이(가) ${themes2.join('-')} 복수 테마를 아우르는 핵심 논문입니다.`;
+          } else {
+            insight += '이(가) 주목할 만합니다.';
           }
-          insight += '.';
+        }
+        // 높은 관련(★★) 논문 수 언급
+        if (highPapers.length > topPapers.length) {
+          insight += ` 높은 관련(★★) 논문 ${highPapers.length - topPapers.length}편도 확인이 필요합니다.`;
         }
 
         // 테마 순서를 논문 수 내림차순으로 정렬
@@ -415,7 +427,11 @@ export default function PapersPage() {
             {week.insight && (
               <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3">
                 <p className="text-sm text-text-heading leading-relaxed">
-                  <span className="font-semibold text-primary">시사점</span> — {week.insight}
+                  <span className="font-semibold text-primary">시사점</span> — {week.insight.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+                    part.startsWith('**') && part.endsWith('**')
+                      ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
+                      : part
+                  )}
                 </p>
               </div>
             )}
