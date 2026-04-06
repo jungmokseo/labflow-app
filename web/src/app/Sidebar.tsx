@@ -14,7 +14,7 @@ import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
-  PanelLeftClose, PanelLeft,
+  PanelLeftClose, PanelLeft, LogOut,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -281,13 +281,9 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
 
       <div className="px-3 py-3 border-t border-border">
         <div className="flex items-center gap-2">
-          <button
-            onClick={onSignOut}
-            className="w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold flex-shrink-0"
-            title="로그아웃"
-          >
+          <div className="w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
             {user?.email?.charAt(0).toUpperCase() || '?'}
-          </button>
+          </div>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium text-text-heading truncate">
               {user?.user_metadata?.name || user?.email || '...'}
@@ -299,6 +295,13 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
             title={dark ? '라이트 모드' : '다크 모드'}
           >
             {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            onClick={onSignOut}
+            className="p-1 rounded-lg text-text-muted hover:text-red-500 hover:bg-bg-hover transition-colors"
+            title="로그아웃"
+          >
+            <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

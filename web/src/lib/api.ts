@@ -392,35 +392,58 @@ export async function brainChatStream(
   newSession?: boolean,
 ): Promise<BrainChatResult> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
-  const authHeaders = await getAuthHeaders();
+  const body = JSON.stringify({ message, channelId, fileId, newSession, stream: true });
 
-  // AbortController for timeout (90s for LLM responses)
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 90000);
+  // Retry once on network failure (handles Railway cold start)
+  let res: Response | null = null;
+  let lastError: Error | null = null;
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
-      method: 'POST',
-      headers: { ...authHeaders },
-      body: JSON.stringify({ message, channelId, fileId, newSession, stream: true }),
-      signal: controller.signal,
-    });
-  } catch (fetchErr: any) {
-    clearTimeout(timeoutId);
-    if (fetchErr.name === 'AbortError') {
-      throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // Refresh token on retry to handle stale cache
+    if (attempt > 0) {
+      clearTokenCache();
+      await new Promise(r => setTimeout(r, 1500));
     }
-    throw new Error(`서버 연결 실패: ${fetchErr.message}`);
+    const authHeaders = await getAuthHeaders();
+
+    if (!authHeaders['Authorization']) {
+      throw new Error('인증 토큰을 가져올 수 없습니다. 페이지를 새로고침해주세요.');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+    try {
+      res = await fetch(`${API_BASE_URL}/api/brain/chat`, {
+        method: 'POST',
+        headers: { ...authHeaders },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      break; // success — exit retry loop
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      if (fetchErr.name === 'AbortError') {
+        throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
+      }
+      lastError = fetchErr;
+      if (attempt === 1) {
+        throw new Error(`서버 연결 실패: ${fetchErr.message}`);
+      }
+      // first attempt failed — retry
+    }
+  }
+
+  if (!res) {
+    throw new Error(`서버 연결 실패: ${lastError?.message || 'Unknown'}`);
   }
 
   if (!res.ok) {
-    clearTimeout(timeoutId);
     const err = await res.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || `API Error: ${res.status}`);
   }
 
-  clearTimeout(timeoutId);
   const reader = res.body?.getReader();
   if (!reader) throw new Error('ReadableStream not supported');
 
