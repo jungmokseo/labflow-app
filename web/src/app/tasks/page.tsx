@@ -358,10 +358,10 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Fixed bottom input bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-bg-card border-t border-border z-50">
-        <div className="max-w-2xl mx-auto px-4 py-3">
-          <div className="flex items-end gap-2">
+      {/* Bottom input bar — sticky within content area */}
+      <div className="sticky bottom-0 bg-bg-card border-t border-border z-30 mt-auto">
+        <div className="max-w-3xl mx-auto px-6 py-4">
+          <div className="flex items-end gap-3">
             <button
               className="flex-shrink-0 p-3 rounded-xl text-text-muted hover:text-text-heading hover:bg-bg-input transition-colors"
               title="음성 입력"
@@ -380,12 +380,12 @@ export default function TasksPage() {
               }}
               placeholder="할일, 아이디어, 메모를 입력하세요..."
               rows={1}
-              className="flex-1 bg-bg-input border border-border rounded-xl px-4 py-3 text-base text-text-heading placeholder:text-text-muted focus:outline-none focus:border-primary resize-none min-h-[48px] max-h-[120px]"
+              className="flex-1 bg-bg-input border border-border rounded-xl px-5 py-3.5 text-base text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none min-h-[52px] max-h-[120px]"
             />
             <button
               onClick={handleAdd}
               disabled={adding || !newInput.trim()}
-              className="flex-shrink-0 bg-primary text-white p-3 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
+              className="flex-shrink-0 bg-primary text-white p-3.5 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
             >
               <Send className="w-5 h-5" />
             </button>
