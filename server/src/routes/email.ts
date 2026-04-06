@@ -603,6 +603,19 @@ export async function emailRoutes(app: FastifyInstance) {
   // ── GET /api/email/auth/url ─────────────────────
   app.get('/api/email/auth/url', async (request, reply) => {
     try {
+      const userId = request.userId!;
+
+      // 기존 토큰 revoke → Google에서 앱 접근 권한 해제 → 재인증 시 확실히 refresh_token 발급
+      try {
+        const existingToken = await prisma.gmailToken.findFirst({ where: { userId }, orderBy: { primary: 'desc' } });
+        if (existingToken?.accessToken) {
+          const revokeClient = createOAuth2Client();
+          revokeClient.setCredentials({ access_token: safeDecrypt(existingToken.accessToken) });
+          await revokeClient.revokeCredentials().catch(() => {});
+        }
+        await prisma.gmailToken.deleteMany({ where: { userId } });
+      } catch { /* revoke 실패해도 재인증 진행 */ }
+
       const oauth2Client = createOAuth2Client();
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
@@ -614,7 +627,7 @@ export async function emailRoutes(app: FastifyInstance) {
           'https://www.googleapis.com/auth/drive.file',  // Google Docs 생성용
           // NOTE: Google Cloud Console에서 Calendar API + Drive API 활성화 필요
         ],
-        state: signState(request.userId!),
+        state: signState(userId),
       });
       return reply.send({ success: true, authUrl });
     } catch (error: any) {
@@ -1175,7 +1188,13 @@ export async function emailRoutes(app: FastifyInstance) {
           metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date'],
         }),
       );
-      const messages = await Promise.all(detailPromises);
+      // 부분 실패 허용: 일부 이메일 조회 실패해도 성공한 것으로 브리핑 생성
+      const settled = await Promise.allSettled(detailPromises);
+      const messages = settled
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map(r => r.value);
+      const failedCount = settled.filter(r => r.status === 'rejected').length;
+      if (failedCount > 0) console.warn(`[email] ${failedCount}/${settled.length} email detail fetches failed`);
 
       // 이메일 데이터 추출
       interface ParsedEmail {
@@ -1192,9 +1211,9 @@ export async function emailRoutes(app: FastifyInstance) {
         /weekly\s*report/i.test(subject) || subject.includes('주간 진행사항 보고');
 
       for (const msg of messages) {
-        const headers = msg.data.payload?.headers || [];
+        const headers = (msg.data?.payload?.headers || []) as Array<{name?: string; value?: string}>;
         const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
-        const internalDate = Number(msg.data.internalDate) || Date.now();
+        const internalDate = Number(msg.data?.internalDate) || Date.now();
 
         if (internalDate < afterDate.getTime()) continue;
 

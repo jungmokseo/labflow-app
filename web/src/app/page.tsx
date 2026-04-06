@@ -8,6 +8,7 @@ export default function DashboardPage() {
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [costData, setCostData] = useState<CostSummary | null>(null);
+  const [costError, setCostError] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function DashboardPage() {
         if (health.status === 'fulfilled') setIsHealthy(health.value);
         if (meetingRes.status === 'fulfilled') setMeetings(meetingRes.value.data);
         if (costRes.status === 'fulfilled') setCostData(costRes.value);
+        else setCostError(true);
       } catch (err) {
         console.error('Dashboard load error:', err);
       } finally {
@@ -114,7 +116,9 @@ export default function DashboardPage() {
             <h3 className="font-semibold text-text-heading flex items-center gap-2"><DollarSign className="w-4 h-4 text-green-400" /> AI API 비용</h3>
             <span className="text-xs text-text-muted">최근 30일</span>
           </div>
-          {!costData ? (
+          {costError ? (
+            <p className="text-text-muted text-base py-8 text-center">사용 후 비용 데이터가 표시됩니다</p>
+          ) : !costData ? (
             <p className="text-text-muted text-base py-8 text-center">비용 데이터를 불러오는 중...</p>
           ) : (
             <div className="space-y-4">

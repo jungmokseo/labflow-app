@@ -119,10 +119,14 @@ export default function TasksPage() {
     createCapture(inputText).then(res => {
       if (res.data) {
         refreshActive((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
-      } else {
-        refreshActive();
       }
-    }).catch((err: any) => { setError(err.message); toast('저장 실패: ' + inputText.slice(0, 20), 'error'); });
+      // 1초 후 서버와 동기화 (연속 입력이 끝난 뒤 최종 상태 확인)
+      setTimeout(() => refreshActive(), 1000);
+    }).catch((err: any) => {
+      setError(err.message);
+      toast('저장 실패: ' + inputText.slice(0, 20), 'error');
+      refreshActive(); // 실패 시 서버 상태로 롤백
+    });
   }
 
   async function handleToggleComplete(c: Capture) {

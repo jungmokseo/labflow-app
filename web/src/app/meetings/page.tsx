@@ -63,10 +63,23 @@ export default function MeetingsPage() {
   );
   const meetings = meetingsData?.data || [];
 
-  // Cleanup audio URL on unmount
+  // Cleanup on unmount: audio URL, Wake Lock, silent audio
   useEffect(() => {
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+      if (silentAudioRef.current) {
+        silentAudioRef.current.osc.stop();
+        silentAudioRef.current.ctx.close().catch(() => {});
+        silentAudioRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [audioUrl]);
 

@@ -93,8 +93,12 @@ export async function getTodayEvents(userId: string): Promise<CalendarEvent[]> {
       allDay: !e.start?.dateTime,
       htmlLink: e.htmlLink || undefined,
     }));
-  } catch (err) {
-    console.warn('Calendar fetch failed:', err);
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
+      throw new Error('Google Calendar 토큰이 만료되었습니다. 설정에서 Gmail 재연동이 필요합니다.');
+    }
+    console.warn('Calendar fetch failed:', msg);
     return [];
   }
 }
@@ -126,8 +130,12 @@ export async function getWeekEvents(userId: string): Promise<CalendarEvent[]> {
       allDay: !e.start?.dateTime,
       htmlLink: e.htmlLink || undefined,
     }));
-  } catch (err) {
-    console.warn('Calendar week fetch failed:', err);
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
+      throw new Error('Google Calendar 토큰이 만료되었습니다. 설정에서 Gmail 재연동이 필요합니다.');
+    }
+    console.warn('Calendar week fetch failed:', msg);
     return [];
   }
 }
