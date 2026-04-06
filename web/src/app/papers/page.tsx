@@ -89,6 +89,10 @@ export default function PapersPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState('');
   const [expandedPapers, setExpandedPapers] = useState<Set<string>>(new Set());
+  const [crawlStats, setCrawlStats] = useState<{ totalFetched: number; matched: number } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try { const s = localStorage.getItem('paper-crawl-stats'); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
 
   // Settings sub-state
   const [fieldData, setFieldData] = useState<Record<string, Array<{ name: string; publisher: string; hasRss: boolean }>>>({});
@@ -146,7 +150,12 @@ export default function PapersPage() {
       setCrawlStep(0); // 설정 저장
       await savePaperAlert({ keywords: kws, journals: selectedJournals });
       setCrawlStep(1); // RSS 수집 + 키워드 매칭
-      await runPaperCrawl();
+      const crawlResult = await runPaperCrawl() as any;
+      if (crawlResult?.totalFetched) {
+        const stats = { totalFetched: crawlResult.totalFetched, matched: crawlResult.matched || 0 };
+        setCrawlStats(stats);
+        localStorage.setItem('paper-crawl-stats', JSON.stringify(stats));
+      }
       setCrawlStep(2); // 결과 로드
       await refreshResults();
       setCrawlStep(3); // 완료
@@ -438,7 +447,7 @@ export default function PapersPage() {
             <div className="text-sm text-text-muted space-y-1">
               <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
               <p>
-                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서 <strong className="text-text-heading">{week.papers.length}편</strong> 관련 논문 선별
+                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널{crawlStats ? <> · 총 <strong className="text-text-heading">{crawlStats.totalFetched.toLocaleString()}편</strong> 중</> : ' RSS에서'} <strong className="text-primary">{week.papers.length}편</strong> 관련 논문 선별
                 {' · '}
                 {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
               </p>
