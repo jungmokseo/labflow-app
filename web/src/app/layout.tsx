@@ -61,7 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <ServiceWorkerRegister />
           <DataPrefetch />
           {showAuthenticatedUI ? (
-            <div className="flex h-screen">
+            <div className="flex h-dvh">
               <Sidebar />
               <main className="flex-1 overflow-auto pt-14 md:pt-0 bg-bg">
                 <div className="min-h-full bg-bg-card md:m-3 md:rounded-2xl md:shadow-card">

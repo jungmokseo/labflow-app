@@ -109,24 +109,20 @@ export default function TasksPage() {
 
   async function handleAdd() {
     if (!newInput.trim()) return;
-    setAdding(true);
     const inputText = newInput.trim();
     setNewInput('');
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
+      inputRef.current.focus(); // 연속 입력을 위해 즉시 포커스 유지
     }
-    try {
-      const res = await createCapture(inputText);
+    // API 호출은 백그라운드 — 입력창은 즉시 비워서 연속 입력 가능
+    createCapture(inputText).then(res => {
       if (res.data) {
         refreshActive((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
-        const label = res.data.category === 'task' ? '할일' : res.data.category === 'idea' ? '아이디어' : '메모';
-        toast(`${label} 저장됨: "${res.data.summary || inputText.slice(0, 30)}"`, 'success');
       } else {
-        await refreshActive();
-        toast('저장되었습니다', 'success');
+        refreshActive();
       }
-    } catch (err: any) { setError(err.message); toast('저장 실패', 'error'); }
-    finally { setAdding(false); }
+    }).catch((err: any) => { setError(err.message); toast('저장 실패: ' + inputText.slice(0, 20), 'error'); });
   }
 
   async function handleToggleComplete(c: Capture) {
@@ -373,7 +369,7 @@ export default function TasksPage() {
               value={newInput}
               onChange={handleInputChange}
               onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey && !adding) {
+                if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleAdd();
                 }
@@ -384,7 +380,7 @@ export default function TasksPage() {
             />
             <button
               onClick={handleAdd}
-              disabled={adding || !newInput.trim()}
+              disabled={!newInput.trim()}
               className="flex-shrink-0 bg-primary text-white p-3.5 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
             >
               <Send className="w-5 h-5" />
