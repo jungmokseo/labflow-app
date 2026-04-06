@@ -109,11 +109,9 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
           <StatusItem label="연구실" status={lab ? 'healthy' : 'disconnected'} detail={lab ? lab.name : '미설정'} />
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
-        {!emailConnected && (
-          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
-            Gmail 연동하기
-          </button>
-        )}
+        <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
+          {emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기'}
+        </button>
         {!lab && (
           <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
             온보딩 시작

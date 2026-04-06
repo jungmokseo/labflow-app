@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { getMeetings, uploadMeetingAudio, deleteMeeting, Meeting } from '@/lib/api';
+import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, Meeting } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -53,6 +53,8 @@ export default function MeetingsPage() {
   const startTimeRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const silentAudioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode } | null>(null);
 
   // Load meetings via SWR
   const { data: meetingsData, isLoading: loading, mutate: refreshMeetings } = useApiData(
@@ -102,12 +104,43 @@ export default function MeetingsPage() {
       setAudioBlob(null);
       setAudioUrl(null);
 
+      // 백그라운드 녹음 유지: Wake Lock + 무음 오디오 재생
+      // 모바일에서 화면 꺼지거나 앱 전환 시 브라우저가 탭을 suspend하는 것을 방지
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+        }
+      } catch { /* Wake Lock 미지원 또는 권한 거부 — 무시 */ }
+      // 무음 오디오 재생으로 브라우저 탭 활성 상태 유지
+      try {
+        const audioCtx = new AudioContext();
+        const oscillator = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0; // 완전 무음
+        oscillator.connect(gain);
+        gain.connect(audioCtx.destination);
+        oscillator.start();
+        silentAudioRef.current = { ctx: audioCtx, osc: oscillator };
+      } catch { /* AudioContext 실패 — 무시 */ }
+
       timerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 500);
     } catch (err: any) {
       console.error('Microphone access error:', err);
       setError('마이크 접근 권한이 필요합니다. 브라우저 설정을 확인해 주세요.');
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+    if (silentAudioRef.current) {
+      silentAudioRef.current.osc.stop();
+      silentAudioRef.current.ctx.close().catch(() => {});
+      silentAudioRef.current = null;
     }
   };
 
@@ -119,11 +152,13 @@ export default function MeetingsPage() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    releaseWakeLock();
     setRecordingState('stopped');
   };
 
   const resetRecording = () => {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
+    releaseWakeLock();
     setRecordingState('idle');
     setAudioBlob(null);
     setAudioUrl(null);
@@ -499,6 +534,17 @@ export default function MeetingsPage() {
                         </div>
                       )}
 
+                      {/* 액션 아이템 체크리스트 */}
+                      {m.actionItems.length > 0 && (
+                        <ActionItemChecklist
+                          meetingId={m.id}
+                          items={m.actionItems}
+                          onUpdate={(newItems) => {
+                            refreshMeetings();
+                          }}
+                        />
+                      )}
+
                       {/* 공유/액션 버튼 */}
                       <div className="pt-4 mt-4 border-t border-border/30 flex items-center gap-3">
                         <button
@@ -556,6 +602,66 @@ export default function MeetingsPage() {
             })()}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── 액션 아이템 체크리스트 컴포넌트 ──
+const DONE_PREFIX = '[완료] ';
+
+function ActionItemChecklist({ meetingId, items, onUpdate }: {
+  meetingId: string;
+  items: string[];
+  onUpdate: (items: string[]) => void;
+}) {
+  const [localItems, setLocalItems] = useState(items);
+
+  const toggleItem = async (index: number) => {
+    const updated = [...localItems];
+    const item = updated[index];
+    if (item.startsWith(DONE_PREFIX)) {
+      updated[index] = item.slice(DONE_PREFIX.length);
+    } else {
+      updated[index] = DONE_PREFIX + item;
+    }
+    setLocalItems(updated);
+    try {
+      await updateMeeting(meetingId, { actionItems: updated });
+      onUpdate(updated);
+    } catch {
+      setLocalItems(items); // rollback
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border/30">
+      <h4 className="text-sm font-semibold text-text-heading mb-2 flex items-center gap-1.5">
+        <ClipboardList className="w-4 h-4 text-yellow-400" /> 액션 아이템
+      </h4>
+      <div className="space-y-1.5">
+        {localItems.map((item, i) => {
+          const done = item.startsWith(DONE_PREFIX);
+          const label = done ? item.slice(DONE_PREFIX.length) : item;
+          return (
+            <button
+              key={i}
+              onClick={(e) => { e.stopPropagation(); toggleItem(i); }}
+              className="flex items-start gap-2 w-full text-left group"
+            >
+              <span className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                done ? 'bg-green-500/20 border-green-500 text-green-400' : 'border-border group-hover:border-primary'
+              }`}>
+                {done && (
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
+                )}
+              </span>
+              <span className={`text-sm transition-all ${done ? 'line-through text-text-muted' : 'text-text-body'}`}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

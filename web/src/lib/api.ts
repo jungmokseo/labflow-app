@@ -276,7 +276,7 @@ export async function createMeeting(data: { title: string; agenda?: string[] }) 
   });
 }
 
-export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary'>>) {
+export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary'>> & { actionItems?: string[] }) {
   return apiFetch<{ success: boolean; data: Meeting }>(`/api/meetings/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

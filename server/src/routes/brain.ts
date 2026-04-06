@@ -1352,36 +1352,44 @@ ${context}`;
 
     case 'calendar': {
       // 캘린더 관련
-      const { getTodayEvents, getWeekEvents } = await import('../services/calendar.js');
-      const [todayEvents, weekEvents] = await Promise.all([
-        getTodayEvents(userId),
-        getWeekEvents(userId),
-      ]);
+      try {
+        const { getTodayEvents, getWeekEvents } = await import('../services/calendar.js');
+        const [todayEvents, weekEvents] = await Promise.all([
+          getTodayEvents(userId),
+          getWeekEvents(userId),
+        ]);
 
-      // 대기 중인 일정도 포함
-      const pending = await prisma.memo.findMany({
-        where: { userId, source: 'pending-event', tags: { has: 'pending' } },
-        take: 5,
-      });
-      const pendingInfo = pending.map(m => {
-        try { const e = JSON.parse(m.content); return `[대기] ${e.title} (${e.date})`; } catch { return ''; }
-      }).filter(Boolean).join('\n');
+        // 대기 중인 일정도 포함
+        const pending = await prisma.memo.findMany({
+          where: { userId, source: 'pending-event', tags: { has: 'pending' } },
+          take: 5,
+        });
+        const pendingInfo = pending.map(m => {
+          try { const e = JSON.parse(m.content); return `[대기] ${e.title} (${e.date})`; } catch { return ''; }
+        }).filter(Boolean).join('\n');
 
-      const calContext = [
-        todayEvents.length > 0 ? `오늘 일정 (${todayEvents.length}건):\n${todayEvents.map(e => `- ${e.start.includes('T') ? new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '종일'} ${e.title}${e.location ? ` @ ${e.location}` : ''}`).join('\n')}` : '오늘 일정 없음',
-        weekEvents.length > todayEvents.length ? `\n이번주 일정 (${weekEvents.length}건):\n${weekEvents.slice(0, 10).map(e => `- ${e.start.split('T')[0]} ${e.title}`).join('\n')}` : '',
-        pendingInfo ? `\n등록 대기 중 일정:\n${pendingInfo}` : '',
-      ].join('\n');
+        const calContext = [
+          todayEvents.length > 0 ? `오늘 일정 (${todayEvents.length}건):\n${todayEvents.map(e => `- ${e.start.includes('T') ? new Date(e.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '종일'} ${e.title}${e.location ? ` @ ${e.location}` : ''}`).join('\n')}` : '오늘 일정 없음',
+          weekEvents.length > todayEvents.length ? `\n이번주 일정 (${weekEvents.length}건):\n${weekEvents.slice(0, 10).map(e => `- ${e.start.split('T')[0]} ${e.title}`).join('\n')}` : '',
+          pendingInfo ? `\n등록 대기 중 일정:\n${pendingInfo}` : '',
+        ].join('\n');
 
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: message }] }],
-        systemInstruction: { role: 'user', parts: [{ text: `당신은 캘린더/일정 관리 비서입니다. 현재 일정 정보를 참고하여 답변하세요.\n\n${calContext}` }] },
-      });
-      trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
-      return { response: result.response.text(), intent: 'calendar_tool', metadata: { todayCount: todayEvents.length, weekCount: weekEvents.length, pendingCount: pending.length } };
+        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: message }] }],
+          systemInstruction: { role: 'user', parts: [{ text: `당신은 캘린더/일정 관리 비서입니다. 현재 일정 정보를 참고하여 답변하세요.\n\n${calContext}` }] },
+        });
+        trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+        return { response: result.response.text(), intent: 'calendar_tool', metadata: { todayCount: todayEvents.length, weekCount: weekEvents.length, pendingCount: pending.length } };
+      } catch (err: any) {
+        console.error('[brain] calendar tool error:', err.message);
+        if (err.message?.includes('invalid_grant') || err.message?.includes('Token has been expired')) {
+          return { response: '**Google Calendar 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.', intent: 'calendar_tool' };
+        }
+        return { response: `일정 조회 실패: ${err.message}`, intent: 'calendar_tool' };
+      }
     }
 
     default:
@@ -1697,6 +1705,11 @@ export async function brainRoutes(app: FastifyInstance) {
             const shadowContent = await compressForShadow(briefingData.markdown, 'email');
             saveShadowMessage(shadowChannelId, message, shadowContent).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
           }
+        } else if (briefingRes.statusCode === 401) {
+          // Gmail 토큰 만료 — 재연동 안내
+          console.error(`[brain] narrative-briefing: Gmail token expired (401)`);
+          shadowResult = '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.\n(Google OAuth 토큰은 주기적으로 만료될 수 있습니다)';
+          narrativeBriefingSuccess = true; // Gemini 재처리 스킵
         } else {
           // narrative-briefing 실패 상세 로깅
           console.error(`[brain] narrative-briefing failed: status=${briefingRes.statusCode}, body=${briefingRes.body.slice(0, 500)}`);
