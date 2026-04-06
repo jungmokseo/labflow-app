@@ -65,8 +65,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {showAuthenticatedUI ? (
             <div className="flex h-screen">
               <Sidebar />
-              <main className="flex-1 overflow-auto pt-14 md:pt-0">
-                {children}
+              <main className="flex-1 overflow-auto pt-14 md:pt-0 bg-bg">
+                <div className="min-h-full bg-bg-card md:m-3 md:rounded-2xl md:shadow-card">
+                  {children}
+                </div>
               </main>
             </div>
           ) : (

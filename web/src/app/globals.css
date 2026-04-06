@@ -2,34 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Design System: Stitch "Soft Professional" ── */
+/* ── Design System: Structured Canvas ── */
 :root {
-  /* Primary */
+  /* Primary — Indigo accent */
   --color-primary: #2563EB;
   --color-primary-hover: #1D4ED8;
   --color-primary-light: #EFF6FF;
 
-  /* Background */
-  --color-bg: #FAFAFA;
+  /* Background — cool gray shell + white canvas */
+  --color-bg: #F1F5F9;
   --color-bg-card: #FFFFFF;
-  --color-bg-input: #F3F4F6;
-  --color-bg-hover: #F0F0F0;
+  --color-bg-input: #F1F5F9;
+  --color-bg-hover: #E8ECF1;
 
   /* Text */
-  --color-text-heading: #111827;
-  --color-text-main: #1F2937;
-  --color-text-muted: #6B7280;
+  --color-text-heading: #0F172A;
+  --color-text-main: #334155;
+  --color-text-muted: #64748B;
 
   /* Border */
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-strong: rgba(0, 0, 0, 0.12);
+  --color-border: rgba(15, 23, 42, 0.06);
+  --color-border-strong: rgba(15, 23, 42, 0.10);
 
   /* Accent */
   --color-accent: #10B981;
 
-  /* Shadows */
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.06);
+  /* Shadows — layered for depth */
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 4px rgba(15, 23, 42, 0.03);
+  --shadow-card-hover: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
 
   /* Skeleton */
   --shimmer-from: rgba(0, 0, 0, 0.03);
@@ -226,12 +226,14 @@ main > * {
 
 /* ── Card hover lift ── */
 .card-hover {
-  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 200ms ease, border-color 200ms ease;
   box-shadow: var(--shadow-card);
 }
 .card-hover:hover {
-  transform: translateY(-1px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-card-hover);
+  border-color: var(--color-primary) !important;
+  border-color: rgba(37, 99, 235, 0.15) !important;
 }
 
 /* ── Checkbox bounce ── */
