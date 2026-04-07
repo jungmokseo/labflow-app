@@ -537,17 +537,21 @@ async function executeGetCalendar(
 
     const startDate = input.start_date || new Date().toLocaleDateString('en-CA', { timeZone: userTimezone });
     const endDateInput = input.end_date;
-    const endDate = endDateInput || new Date(new Date(startDate).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA');
+    const endDate = endDateInput || new Date(new Date(startDate + 'T00:00:00Z').getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA');
 
     // Google Calendar API 직접 호출 (임의 날짜 범위)
     const { getCalendarClient } = await import('../services/calendar.js');
     const calendar = await getCalendarClient(ctx.userId);
     if (!calendar) return 'Google Calendar가 연동되지 않았습니다. 설정에서 Gmail 연동을 해주세요.';
 
+    // RFC3339 형식 필수 — timeZone 파라미터는 응답 포맷에만 영향
+    const timeMin = new Date(`${startDate}T00:00:00`).toISOString();
+    const timeMax = new Date(`${endDate}T23:59:59`).toISOString();
+
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${startDate}T00:00:00`,
-      timeMax: `${endDate}T23:59:59`,
+      timeMin,
+      timeMax,
       timeZone: userTimezone,
       singleEvents: true,
       orderBy: 'startTime',

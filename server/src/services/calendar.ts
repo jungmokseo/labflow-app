@@ -157,14 +157,16 @@ export async function getTodayEvents(userId: string, timezone?: string): Promise
   const tz = timezone || 'America/New_York';
 
   try {
-    // 사용자 시간대의 오늘 날짜
+    // 사용자 시간대의 오늘 날짜 → RFC3339 형식으로 변환
     const now = new Date();
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+    const timeMin = new Date(`${todayStr}T00:00:00`).toISOString();
+    const timeMax = new Date(`${todayStr}T23:59:59`).toISOString();
 
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${todayStr}T00:00:00`,
-      timeMax: `${todayStr}T23:59:59`,
+      timeMin,
+      timeMax,
       timeZone: tz,
       singleEvents: true,
       orderBy: 'startTime',
@@ -208,11 +210,13 @@ export async function getWeekEvents(userId: string, timezone?: string): Promise<
     const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
     const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const endStr = endDate.toLocaleDateString('en-CA', { timeZone: tz });
+    const timeMin = new Date(`${todayStr}T00:00:00`).toISOString();
+    const timeMax = new Date(`${endStr}T23:59:59`).toISOString();
 
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: `${todayStr}T00:00:00`,
-      timeMax: `${endStr}T23:59:59`,
+      timeMin,
+      timeMax,
       timeZone: tz,
       singleEvents: true,
       orderBy: 'startTime',
