@@ -58,7 +58,7 @@ function verifyState(state: string): string | null {
 
 // ── Zod 스키마 ──────────────────────────────────────
 const briefingQuerySchema = z.object({
-  maxResults: z.coerce.number().min(1).max(100).default(30),
+  maxResults: z.coerce.number().min(1).default(50),
   includeSpam: z.enum(['true', 'false']).default('false'),
   since: z.string().optional(),           // ISO datetime (T_last override)
   includeBody: z.enum(['true', 'false']).default('true'), // 본문 열람 활성화
@@ -1952,7 +1952,7 @@ ${emailDataForPrompt.join('\n\n')}`,
   app.get('/api/email/messages/recent', async (request, reply) => {
     const userId = request.userId!;
     const query = request.query as { limit?: string; q?: string };
-    const limit = Math.min(parseInt(query.limit || '5', 10) || 5, 30);
+    const limit = parseInt(query.limit || '5', 10) || 5;
     const searchQuery = (query.q || '').trim();
 
     try {

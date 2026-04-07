@@ -317,7 +317,7 @@ async function executeGetEmailBriefing(
     : null;
 
   try {
-    const maxResults = input.max_results || 30;
+    const maxResults = input.max_results || 50;
     const briefingRes = await ctx.app.inject({
       method: 'GET',
       url: `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true`,
@@ -418,7 +418,7 @@ ${e.cc ? `**참조:** ${e.cc}` : ''}
 **Thread-ID:** ${e.threadId}
 
 **본문:**
-${e.body?.slice(0, 8000) || '(본문 없음)'}`;
+${e.body || '(본문 없음)'}`;
 }
 
 // ── draft_email_reply ────────────────────────────────
@@ -462,7 +462,7 @@ async function executeDraftEmailReply(
 원본 이메일:
 - 발신자: ${email.from}
 - 제목: ${email.subject}
-- 본문: ${(email.body as string)?.slice(0, 5000) || email.snippet}
+- 본문: ${(email.body as string) || email.snippet}
 
 사용자 지시: ${instructions}
 
