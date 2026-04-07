@@ -38,9 +38,10 @@ function buildClassificationPrompt(userInput: string): string {
 분류 규칙:
 - type "task" (행동이 필요한 것): 할 일, 해야 할 것, ~까지, 마감, 제출, 보내기, 해줘, 확인, 검토, 수정, 준비, 예약, 정리, 작성, 연락, 보고, 처리, 완료, 설정, 등록, 업로드, 다운로드, 만들기, ~하기 (동사+하기 패턴은 거의 항상 task)
 - type "idea" (생각/제안): 아이디어, ~하면 어떨까, ~해보자, 생각, 가설, 제안, 영감, 만약, 시도, ~해볼까, 실험해보
-- type "memo" (정보 기록만): 전화번호, 코드, 주소, 참고 정보, 회의 내용 기록, 단순 메모
-- **판단 기준: "이걸 안 하면 문제가 되나?" → Yes면 task, No면 memo**
-- **"~하기", "~해야", "~준비" 패턴은 대부분 task입니다. memo로 분류하지 마세요.**
+- type "memo" (정보 기록만): 전화번호, 코드, 주소, 참고 정보, 회의 내용 기록, 순수 정보 메모
+- **핵심 판단 기준: 동작(action)이 포함되면 task, 순수 정보 기록만이면 memo**
+- **"~하기", "~할 것", "~해야", "~확인", "~정리", "~준비", "~시작" 으로 끝나면 무조건 task. memo로 절대 분류하지 마세요.**
+- **의심스러우면 memo보다 task를 선택하세요. task를 memo로 분류하는 것이 그 반대보다 훨씬 해롭습니다.**
 
 마감일 감지 (한국어 자연어 → ISO 날짜):
 - "금요일까지" → 이번 주 금요일 날짜
@@ -121,7 +122,9 @@ export async function classifyCapture(text: string): Promise<CaptureClassificati
 // ── 로컬 분류 fallback ───────────────────────────────
 const TASK_KEYWORDS = [
   '까지', '마감', '제출', '보내', '해야', '해줘', '준비', '확인',
-  '검토', '수정', '완료', '예약', '해놓', '제출', '처리', '연락',
+  '검토', '수정', '완료', '예약', '해놓', '처리', '연락',
+  '하기', '정리', '작성', '설정', '등록', '업로드', '시작',
+  '회신', '답장', '전달', '공유', '미팅', '점검',
 ];
 const IDEA_KEYWORDS = [
   '아이디어', '어떨까', '해보자', '생각', '가설', '제안', '영감',
@@ -140,6 +143,15 @@ function classifyCaptureLocal(text: string): CaptureClassification {
     if (lower.includes(kw)) ideaScore++;
   }
   if (text.includes('?') || text.includes('？')) ideaScore++;
+
+  // "~하기", "~할 것", "~해야" 등 동사 패턴 → 강하게 task
+  if (/하기\s*$/.test(text.trim()) || /할\s*것\s*$/.test(text.trim()) || /해야\s*$/.test(text.trim())) {
+    taskScore += 3;
+  }
+  // "~확인", "~정리", "~준비" 등으로 끝나는 경우도 task
+  if (/(?:확인|정리|준비|작성|검토|제출|처리|시작|회신|점검)\s*$/.test(text.trim())) {
+    taskScore += 2;
+  }
 
   let type: 'idea' | 'task' | 'memo';
   if (taskScore > ideaScore && taskScore >= 1) {

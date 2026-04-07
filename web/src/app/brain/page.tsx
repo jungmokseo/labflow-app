@@ -8,7 +8,6 @@ import {
 import { useApiData } from '@/lib/use-api';
 import { useConversationsStore } from '@/store/conversations';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
-import { stripEmoji } from '@/lib/strip-emoji';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -16,13 +15,15 @@ import {
   Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
   MessageSquare, BarChart3, AlertTriangle, Calendar, CheckSquare,
   Mail, BookOpen, Users, FileText, Clock, Zap, Info,
+  ArrowDown, Square, ArrowRight, Quote, Hash,
+  Building2, User, ShoppingCart, Megaphone,
 } from 'lucide-react';
 
 // Heading → Lucide icon mapping for structured AI responses
 const HEADING_ICONS: Array<{ pattern: RegExp; icon: React.ReactNode }> = [
-  { pattern: /요약/i, icon: <BarChart3 className="w-4 h-4 text-primary inline" /> },
+  { pattern: /요약|주요 사항/i, icon: <BarChart3 className="w-4 h-4 text-primary inline" /> },
   { pattern: /즉시 대응|긴급|대응 필요/i, icon: <AlertTriangle className="w-4 h-4 text-red-500 inline" /> },
-  { pattern: /주요 일정|일정|캘린더/i, icon: <Calendar className="w-4 h-4 text-blue-500 inline" /> },
+  { pattern: /주요 일정|일정|캘린더|오늘 일정|이번 주/i, icon: <Calendar className="w-4 h-4 text-blue-500 inline" /> },
   { pattern: /권장 액션|할 일|액션|조치/i, icon: <CheckSquare className="w-4 h-4 text-green-500 inline" /> },
   { pattern: /이메일|메일|브리핑/i, icon: <Mail className="w-4 h-4 text-primary inline" /> },
   { pattern: /논문|연구|동향/i, icon: <BookOpen className="w-4 h-4 text-green-500 inline" /> },
@@ -30,6 +31,10 @@ const HEADING_ICONS: Array<{ pattern: RegExp; icon: React.ReactNode }> = [
   { pattern: /진행 상황|업데이트|현황/i, icon: <Clock className="w-4 h-4 text-yellow-500 inline" /> },
   { pattern: /완료|완료된/i, icon: <Zap className="w-4 h-4 text-green-500 inline" /> },
   { pattern: /정보성|참고/i, icon: <Info className="w-4 h-4 text-text-muted inline" /> },
+  { pattern: /연세대|학교|대학/i, icon: <BookOpen className="w-4 h-4 text-blue-500 inline" /> },
+  { pattern: /링크솔루텍|회사|사업/i, icon: <Brain className="w-4 h-4 text-primary inline" /> },
+  { pattern: /개인/i, icon: <Users className="w-4 h-4 text-text-muted inline" /> },
+  { pattern: /광고|프로모션/i, icon: <Info className="w-4 h-4 text-text-muted inline" /> },
 ];
 
 function getHeadingIcon(text: string): React.ReactNode | null {
@@ -39,18 +44,114 @@ function getHeadingIcon(text: string): React.ReactNode | null {
   return <FileText className="w-4 h-4 text-text-muted inline" />;
 }
 
-// Custom markdown components with Lucide icons
+// 이모지 제거 (Lucide 아이콘으로 대체하므로 이모지는 strip)
+// eslint-disable-next-line no-misleading-character-class
+const EMOJI_RE = new RegExp(
+  '[\\u{1F300}-\\u{1F9FF}]|[\\u{2600}-\\u{26FF}]|[\\u{2700}-\\u{27BF}]|[\\u{1F000}-\\u{1F2FF}]|[\\u{1F600}-\\u{1F64F}]|[\\u{1F680}-\\u{1F6FF}]|[\\u{1FA00}-\\u{1FAFF}]|[\\u{2300}-\\u{23FF}]|[\\u{200D}]|[\\u{FE0F}]',
+  'gu',
+);
+function cleanEmoji(text: string): string {
+  return text.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ');
+}
+
+// 대괄호 라벨 → Lucide 아이콘 매핑 (불릿 항목용)
+const LABEL_ICONS: Record<string, React.ReactNode> = {
+  '[긴급]': <AlertTriangle className="w-3.5 h-3.5 text-red-500 inline mr-1" />,
+  '[대응]': <CheckSquare className="w-3.5 h-3.5 text-orange-500 inline mr-1" />,
+  '[일정]': <Calendar className="w-3.5 h-3.5 text-blue-500 inline mr-1" />,
+  '[정보]': <Info className="w-3.5 h-3.5 text-text-muted inline mr-1" />,
+  '[광고]': <Info className="w-3.5 h-3.5 text-text-muted inline mr-1" />,
+};
+const LABEL_RE = /\[(긴급|대응|일정|정보|광고)\]/g;
+
+// 텍스트에서 라벨과 이모지를 처리하는 유틸리티
+function processInlineContent(child: any): any {
+  if (typeof child !== 'string') return child;
+  let text = cleanEmoji(child);
+  // [라벨] → Lucide 아이콘 교체
+  const parts: (string | React.ReactNode)[] = [];
+  let lastIdx = 0;
+  let match;
+  const re = new RegExp(LABEL_RE.source, 'g');
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIdx) parts.push(text.slice(lastIdx, match.index));
+    const label = match[0] as keyof typeof LABEL_ICONS;
+    parts.push(LABEL_ICONS[label] || match[0]);
+    lastIdx = re.lastIndex;
+  }
+  if (lastIdx < text.length) parts.push(text.slice(lastIdx));
+  return parts.length > 1 ? parts : text;
+}
+
+// Custom markdown components — 모든 요소에 Lucide 아이콘 + 가독성 스타일링
 const markdownComponents = {
-  h2: ({ children, ...props }: any) => {
-    const text = String(children);
+  // ── Headings: Lucide 아이콘 자동 삽입 ──
+  h1: ({ children, ...props }: any) => {
+    const text = cleanEmoji(String(children));
     const icon = getHeadingIcon(text);
-    return <h2 {...props}>{icon} {children}</h2>;
+    return <h1 {...props} className="flex items-center gap-2">{icon} {text}</h1>;
+  },
+  h2: ({ children, ...props }: any) => {
+    const text = cleanEmoji(String(children));
+    const icon = getHeadingIcon(text);
+    return <h2 {...props} className="flex items-center gap-2">{icon} {text}</h2>;
   },
   h3: ({ children, ...props }: any) => {
-    const text = String(children);
+    const text = cleanEmoji(String(children));
     const icon = getHeadingIcon(text);
-    return <h3 {...props}>{icon} {children}</h3>;
+    return <h3 {...props} className="flex items-center gap-1.5">{icon} {text}</h3>;
   },
+
+  // ── List items: [라벨] → Lucide 아이콘 교체 ──
+  li: ({ children, ...props }: any) => {
+    const processed = Array.isArray(children)
+      ? children.map((c: any, i: number) => <span key={i}>{processInlineContent(c)}</span>)
+      : processInlineContent(children);
+    return <li {...props}>{processed}</li>;
+  },
+
+  // ── Paragraphs: 이모지 정리 + → 화살표 강조 ──
+  p: ({ children, ...props }: any) => {
+    const processed = Array.isArray(children)
+      ? children.map((c: any, i: number) => {
+          if (typeof c === 'string') {
+            // → 화살표를 시각적으로 강조
+            if (c.includes('→')) {
+              const arrowParts = c.split('→');
+              return arrowParts.map((part: string, j: number) => (
+                <span key={`${i}-${j}`}>
+                  {j > 0 && <ArrowRight className="w-3.5 h-3.5 text-primary inline mx-1" />}
+                  {cleanEmoji(part)}
+                </span>
+              ));
+            }
+            return cleanEmoji(c);
+          }
+          return c;
+        })
+      : typeof children === 'string' ? cleanEmoji(children) : children;
+    return <p {...props}>{processed}</p>;
+  },
+
+  // ── Blockquote: 좌측 강조 바 + Quote 아이콘 ──
+  blockquote: ({ children, ...props }: any) => (
+    <blockquote {...props} className="border-l-3 border-primary pl-4 my-3 text-text-muted italic">
+      <Quote className="w-4 h-4 text-primary inline mr-1 -mt-0.5" />
+      {children}
+    </blockquote>
+  ),
+
+  // ── Table: 깔끔한 줄무늬 ──
+  table: ({ children, ...props }: any) => (
+    <div className="overflow-x-auto my-3">
+      <table {...props} className="w-full text-sm border-collapse">
+        {children}
+      </table>
+    </div>
+  ),
+
+  // ── HR: 명확한 섹션 구분 ──
+  hr: () => <hr className="border-t border-border my-5" />,
 };
 
 function timeAgo(dateStr: string): string {
@@ -98,7 +199,11 @@ export default function BrainPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const dragCounter = useRef(0);
+  const [showScrollDown, setShowScrollDown] = useState(false);
 
   // Auto-save input to localStorage
   useEffect(() => {
@@ -141,7 +246,27 @@ export default function BrainPage() {
     }
   }, [activeChannelId]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [activeMessages]);
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    // Only auto-scroll if user is near the bottom
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (isNearBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeMessages, streamingContent]);
+
+  // Show/hide scroll-to-bottom button
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShowScrollDown(distanceFromBottom > 300);
+    };
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Auto-stop recording at max time
   useEffect(() => {
@@ -228,6 +353,10 @@ export default function BrainPage() {
     const channelIdAtSend = activeChannelId;
     setInput('');
     setUploadedFile(null);
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
     const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() };
 
@@ -403,6 +532,29 @@ export default function BrainPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  function handleStopGenerating() {
+    abortControllerRef.current?.abort();
+  }
+
+  function scrollToBottom() {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    setInput(e.target.value);
+    // Auto-resize
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }
+
+  function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }
+
   // Drag and drop
   function handleDragOver(e: React.DragEvent) { e.preventDefault(); e.stopPropagation(); }
   function handleDragEnter(e: React.DragEvent) {
@@ -514,7 +666,7 @@ export default function BrainPage() {
             )}
 
             {/* Messages area — Claude-style */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 relative">
               <div className="max-w-3xl mx-auto space-y-6">
                 {activeMessages.length === 0 && (
                   <div className="text-center text-text-muted py-8">
@@ -554,23 +706,26 @@ export default function BrainPage() {
                   </div>
                 )}
                 {activeMessages.map(msg => (
-                  <div key={msg.id} className="animate-msg-in">
+                  <div key={msg.id} className="animate-msg-in group/msg">
                     {msg.role === 'user' ? (
                       /* User message: right-aligned blue bubble */
-                      <div className="flex justify-end">
+                      <div className="flex flex-col items-end">
                         <div className="bg-primary text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
                           {msg.content}
                         </div>
+                        <span className="text-[10px] text-text-muted mt-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                          {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
                     ) : (
                       /* AI message: left-aligned, no bubble, full width, with markdown */
                       <div className="group relative">
                         <div className="brain-prose max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                            {stripEmoji(msg.content)}
+                            {msg.content}
                           </ReactMarkdown>
                         </div>
-                        {/* Hover action: copy */}
+                        {/* Hover action: copy + timestamp */}
                         <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                           <button
                             onClick={() => handleCopyMessage(msg.id, msg.content)}
@@ -582,6 +737,9 @@ export default function BrainPage() {
                           {copiedId === msg.id && (
                             <span className="text-xs text-green-400">복사됨</span>
                           )}
+                          <span className="text-[10px] text-text-muted ml-1">
+                            {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -630,7 +788,7 @@ export default function BrainPage() {
                   <div className="group relative animate-msg-in">
                     <div className="brain-prose max-w-none">
                       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                        {stripEmoji(streamingContent)}
+                        {streamingContent}
                       </ReactMarkdown>
                       <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
                     </div>
@@ -638,7 +796,30 @@ export default function BrainPage() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
+
+              {/* Scroll to bottom button */}
+              {showScrollDown && (
+                <button
+                  onClick={scrollToBottom}
+                  className="absolute bottom-4 left-1/2 -translate-x-1/2 p-2 rounded-full bg-bg-card border border-border shadow-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-all"
+                  title="아래로 스크롤"
+                >
+                  <ArrowDown className="w-4 h-4" />
+                </button>
+              )}
             </div>
+
+            {/* Stop generating button */}
+            {loading && (
+              <div className="flex justify-center py-2">
+                <button
+                  onClick={handleStopGenerating}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-border bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors text-sm"
+                >
+                  <Square className="w-3 h-3" /> 생성 중단
+                </button>
+              </div>
+            )}
 
             {/* Input area */}
             <div className="border-t border-border">
@@ -663,12 +844,14 @@ export default function BrainPage() {
                 >
                   {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
                 </button>
-                <input
+                <textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                  placeholder="메시지를 입력하세요..."
-                  className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all"
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleTextareaKeyDown}
+                  placeholder="메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
+                  rows={1}
+                  className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all resize-none min-h-[48px] max-h-[200px]"
                 />
                 {/* Voice input button */}
                 <button

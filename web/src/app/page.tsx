@@ -222,21 +222,3 @@ function StatusBadge({ healthy }: { healthy: boolean | null }) {
   );
 }
 
-function SummaryCard({ icon, title, value, subtitle, color }: {
-  icon: React.ReactNode;
-  title: string;
-  value: string | number;
-  subtitle: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-bg-card rounded-xl border border-border p-5">
-      <div className="flex items-center justify-between">
-        <span>{icon}</span>
-        <span className={`text-2xl font-bold ${color}`}>{value}</span>
-      </div>
-      <h3 className="text-base font-medium text-text-heading mt-3">{title}</h3>
-      <p className="text-sm text-text-muted mt-1">{subtitle}</p>
-    </div>
-  );
-}

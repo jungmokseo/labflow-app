@@ -175,10 +175,12 @@ export default function TasksPage() {
   async function handleSaveEdit(c: Capture) {
     if (!editContent.trim()) return;
     const updatedContent = editContent.trim();
+    // summary도 함께 갱신 — 메인 리스트 제목에 반영
+    const updatedSummary = updatedContent.substring(0, 80);
     const updateFn = (prev: any) => prev ? {
       ...prev,
       data: (prev.data || []).map((cap: Capture) =>
-        cap.id === c.id ? { ...cap, content: updatedContent } : cap
+        cap.id === c.id ? { ...cap, content: updatedContent, summary: updatedSummary } : cap
       ),
     } : prev;
     refreshActive(updateFn, { revalidate: false });
@@ -187,6 +189,8 @@ export default function TasksPage() {
     try {
       await updateCapture(c.id, { content: updatedContent });
       toast('수정됨', 'success');
+      // 서버 응답으로 최신 상태 동기화 (AI 재분류 결과 반영)
+      setTimeout(() => { refreshActive(); refreshCompleted(); }, 1500);
     } catch {
       refreshActive();
       refreshCompleted();
@@ -362,12 +366,6 @@ export default function TasksPage() {
       <div className="sticky bottom-0 bg-bg-card border-t border-border z-30 mt-auto">
         <div className="max-w-3xl mx-auto px-6 py-4">
           <div className="flex items-end gap-3">
-            <button
-              className="flex-shrink-0 p-3 rounded-xl text-text-muted hover:text-text-heading hover:bg-bg-input transition-colors"
-              title="음성 입력"
-            >
-              <Mic className="w-5 h-5" />
-            </button>
             <textarea
               ref={inputRef}
               value={newInput}

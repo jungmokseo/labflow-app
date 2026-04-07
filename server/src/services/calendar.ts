@@ -65,19 +65,46 @@ export interface CalendarEvent {
   htmlLink?: string;
 }
 
-export async function getTodayEvents(userId: string): Promise<CalendarEvent[]> {
+/**
+ * 사용자 시간대 기준으로 "오늘"의 시작/끝을 계산
+ */
+function getTodayBoundsInTimezone(tz: string): { startOfDay: Date; endOfDay: Date } {
+  // 사용자 시간대의 현재 날짜를 구함
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+  // 해당 날짜의 00:00과 24:00을 사용자 시간대 기준으로 계산
+  // Intl로 UTC offset 계산
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
+  const parts = formatter.formatToParts(now);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '0';
+  // 시간대의 현재 시각에서 자정까지의 오프셋 계산 대신, timeZone을 events.list에 직접 전달
+  // Google Calendar API는 timeZone 파라미터를 지원하므로 이를 활용
+  const startOfDay = new Date(`${todayStr}T00:00:00`);
+  const endOfDay = new Date(`${todayStr}T23:59:59`);
+  // 직접 시간 계산 대신 날짜 문자열만 반환하고 API에서 timeZone 사용
+  return { startOfDay, endOfDay };
+}
+
+export async function getTodayEvents(userId: string, timezone?: string): Promise<CalendarEvent[]> {
   const calendar = await getCalendarClient(userId);
   if (!calendar) return [];
 
+  const tz = timezone || 'America/New_York';
+
   try {
+    // 사용자 시간대의 오늘 날짜
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
 
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: startOfDay.toISOString(),
-      timeMax: endOfDay.toISOString(),
+      timeMin: `${todayStr}T00:00:00`,
+      timeMax: `${todayStr}T23:59:59`,
+      timeZone: tz,
       singleEvents: true,
       orderBy: 'startTime',
       maxResults: 20,
@@ -103,18 +130,23 @@ export async function getTodayEvents(userId: string): Promise<CalendarEvent[]> {
   }
 }
 
-export async function getWeekEvents(userId: string): Promise<CalendarEvent[]> {
+export async function getWeekEvents(userId: string, timezone?: string): Promise<CalendarEvent[]> {
   const calendar = await getCalendarClient(userId);
   if (!calendar) return [];
 
+  const tz = timezone || 'America/New_York';
+
   try {
     const now = new Date();
-    const endOfWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+    const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const endStr = endDate.toLocaleDateString('en-CA', { timeZone: tz });
 
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: now.toISOString(),
-      timeMax: endOfWeek.toISOString(),
+      timeMin: `${todayStr}T00:00:00`,
+      timeMax: `${endStr}T23:59:59`,
+      timeZone: tz,
       singleEvents: true,
       orderBy: 'startTime',
       maxResults: 50,

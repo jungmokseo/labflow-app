@@ -29,14 +29,19 @@ export async function calendarRoutes(app: FastifyInstance) {
   // ── GET /api/calendar/today ──────────────────────
   app.get('/api/calendar/today', async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = request.userId!;
-    const events = await getTodayEvents(userId);
+    // 사용자 시간대 로드
+    const profile = await prisma.emailProfile.findUnique({ where: { userId } });
+    const tz = (profile as any)?.timezone || 'America/New_York';
+    const events = await getTodayEvents(userId, tz);
     return reply.send({ success: true, events, count: events.length });
   });
 
   // ── GET /api/calendar/week ───────────────────────
   app.get('/api/calendar/week', async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = request.userId!;
-    const events = await getWeekEvents(userId);
+    const profile = await prisma.emailProfile.findUnique({ where: { userId } });
+    const tz = (profile as any)?.timezone || 'America/New_York';
+    const events = await getWeekEvents(userId, tz);
     return reply.send({ success: true, events, count: events.length });
   });
 

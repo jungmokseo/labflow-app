@@ -234,7 +234,6 @@ main > * {
 .card-hover:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-card-hover);
-  border-color: var(--color-primary) !important;
   border-color: rgba(37, 99, 235, 0.15) !important;
 }
 
@@ -288,31 +287,55 @@ main > * {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── Brain Chat Prose — high-readability markdown ── */
+/* ── Brain Chat Prose — Claude/Gemini 수준 가독성 ── */
 .brain-prose {
   font-size: 0.9375rem;
-  line-height: 1.75;
+  line-height: 1.8;
   color: var(--color-text-heading);
 }
 
-.brain-prose h1,
-.brain-prose h2,
-.brain-prose h3 {
-  color: var(--color-text-heading);
+/* Headings — Lucide 아이콘과 함께 명확한 섹션 구분 */
+.brain-prose h1 {
+  font-size: 1.3rem;
   font-weight: 700;
-  margin-top: 1.25rem;
-  margin-bottom: 0.5rem;
+  color: var(--color-text-heading);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
-.brain-prose h1 { font-size: 1.25rem; }
 .brain-prose h2 {
   font-size: 1.1rem;
-  padding-bottom: 0.35rem;
+  font-weight: 700;
+  color: var(--color-text-heading);
+  margin-top: 1.75rem;
+  margin-bottom: 0.6rem;
+  padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
-.brain-prose h3 { font-size: 1rem; }
+.brain-prose h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text-heading);
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+/* 첫 번째 헤딩의 상단 여백 제거 */
+.brain-prose > h1:first-child,
+.brain-prose > h2:first-child,
+.brain-prose > h3:first-child {
+  margin-top: 0;
+}
 
 .brain-prose p {
-  margin: 0.5rem 0;
+  margin: 0.6rem 0;
   color: var(--color-text-main);
 }
 
@@ -327,16 +350,16 @@ main > * {
   text-underline-offset: 2px;
 }
 
-/* Bullet lists — solid, visible */
+/* Bullet lists — 넉넉한 간격, 명확한 계층 */
 .brain-prose ul {
   list-style: none;
   padding-left: 0;
-  margin: 0.5rem 0;
+  margin: 0.6rem 0;
 }
 .brain-prose ul li {
   position: relative;
   padding-left: 1.5rem;
-  margin: 0.35rem 0;
+  margin: 0.5rem 0;
   color: var(--color-text-main);
 }
 .brain-prose ul li::before {
@@ -350,18 +373,36 @@ main > * {
   background-color: var(--color-primary);
 }
 
-/* Nested bullets — smaller, muted */
+/* 2단계 중첩 불릿 — 들여쓰기 + 작은 점 */
+.brain-prose ul ul {
+  margin: 0.25rem 0 0.25rem 0.5rem;
+}
+.brain-prose ul ul li {
+  padding-left: 1.25rem;
+  margin: 0.3rem 0;
+}
 .brain-prose ul ul li::before {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   background-color: var(--color-text-muted);
   border-radius: 50%;
+  top: 0.7rem;
 }
 
-/* Ordered lists */
+/* 3단계 중첩 */
+.brain-prose ul ul ul li::before {
+  width: 4px;
+  height: 4px;
+  background-color: var(--color-text-muted);
+  border-radius: 0;
+  border: 1px solid var(--color-text-muted);
+  background: transparent;
+}
+
+/* Ordered lists — 눈에 띄는 번호 */
 .brain-prose ol {
   padding-left: 1.75rem;
-  margin: 0.5rem 0;
+  margin: 0.6rem 0;
   list-style: none;
   counter-reset: ordered-counter;
 }
@@ -369,7 +410,7 @@ main > * {
   counter-increment: ordered-counter;
   position: relative;
   padding-left: 0.25rem;
-  margin: 0.35rem 0;
+  margin: 0.5rem 0;
   color: var(--color-text-main);
 }
 .brain-prose ol li::before {
@@ -379,6 +420,14 @@ main > * {
   color: var(--color-primary);
   font-weight: 600;
   font-size: 0.875rem;
+}
+
+/* 리스트 내 단락 (- **제목**\n  설명) — 들여쓰기 유지 */
+.brain-prose li > p {
+  margin: 0.15rem 0;
+}
+.brain-prose li > p:first-child {
+  margin-top: 0;
 }
 
 /* Inline code */
@@ -406,7 +455,7 @@ main > * {
   font-size: 0.8125rem;
 }
 
-/* Blockquote */
+/* Blockquote — 인용/참고 강조 */
 .brain-prose blockquote {
   border-left: 3px solid var(--color-primary);
   padding-left: 1rem;
@@ -415,11 +464,11 @@ main > * {
   font-style: italic;
 }
 
-/* Horizontal rule */
+/* Horizontal rule — 섹션 구분 */
 .brain-prose hr {
   border: none;
   border-top: 1px solid var(--color-border);
-  margin: 1rem 0;
+  margin: 1.25rem 0;
 }
 
 /* Table */
@@ -443,14 +492,14 @@ main > * {
   color: var(--color-text-main);
 }
 
-/* Ensure line breaks render in chat */
+/* Line breaks */
 .brain-prose br {
   display: block;
   content: '';
   margin-top: 0.25rem;
 }
 
-/* Dark mode — boost readability */
+/* Dark mode */
 [data-theme="dark"] .brain-prose {
   color: #F3F4F6;
 }

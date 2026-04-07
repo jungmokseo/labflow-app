@@ -264,6 +264,7 @@ export default function MeetingsPage() {
 
   // ── Delete ──
   const handleDelete = async (id: string) => {
+    if (!confirm('이 회의 기록을 삭제하시겠습니까?')) return;
     try {
       await deleteMeeting(id);
       refreshMeetings((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((m: Meeting) => m.id !== id) } : prev, { revalidate: false });
