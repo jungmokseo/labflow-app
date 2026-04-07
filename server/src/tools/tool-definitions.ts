@@ -1,7 +1,7 @@
 /**
  * Tool Definitions — Claude tool-use API용 도구 정의
  *
- * Intent classifier를 제거하고, Claude가 직접 필요한 도구를 판단·호출하는 구조.
+ * 철학: 도구 설명은 간결하게, 양식은 도구 결과 안에서 지정.
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
@@ -21,15 +21,13 @@ export type ToolName =
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: 'search_lab_data',
-    description: `연구실 DB에서 구성원, 과제, 논문, 미팅, 메모를 검색합니다. 여러 종류의 데이터를 동시에 검색할 수 있습니다.
-예시: "김태영 과제 뭐야?" → 구성원+과제 검색, "TIPS 과제 담당자 연락처" → 과제+구성원 검색
-사용자가 연구실 정보(구성원, 과제, 논문, 사사문구 등)에 대해 물어볼 때 사용하세요.`,
+    description: '연구실 DB에서 구성원, 과제, 논문, 미팅, 메모를 검색합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
         query: {
           type: 'string',
-          description: '검색할 내용 (자연어 그대로)',
+          description: '검색할 내용 (자연어)',
         },
         types: {
           type: 'array',
@@ -42,9 +40,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'search_knowledge',
-    description: `벡터 검색(RAG) + 지식그래프를 활용한 깊은 검색입니다. 단순 DB 조회로는 답할 수 없는 복합적인 질문에 사용하세요.
-예시: "hydrogel 관련 연구 현황", "최근 논의된 실험 방법", "누가 어떤 장비를 쓰고 있지?"
-과거 대화, 메모, 논문에서 맥락 정보를 찾을 때 유용합니다.`,
+    description: '벡터 검색(RAG) + 지식그래프로 깊은 검색. 과거 대화, 메모, 논문에서 맥락 정보를 찾습니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -58,10 +54,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_email_briefing',
-    description: `Gmail에서 최근 이메일을 가져와 중요도별로 브리핑합니다. 사용자가 이메일/메일/Gmail 확인을 요청할 때 사용하세요.
-이 도구의 결과는 이미 완성된 브리핑 포맷입니다. 결과를 **그대로 사용자에게 전달**하세요. 요약하거나 재구성하지 마세요.
-예시: "이메일 확인해줘", "메일 뭐 왔어?", "오늘 이메일"
-주의: 사용자가 이메일만 요청한 경우 get_calendar 등 다른 도구를 추가 호출하지 마세요.`,
+    description: 'Gmail에서 최근 이메일을 가져와 중요도별 브리핑을 생성합니다. 결과는 완성된 양식이므로 그대로 전달하세요.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -75,10 +68,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'read_email',
-    description: `특정 이메일의 전문(전체 내용)을 가져옵니다. 발신자, 제목, 키워드로 검색합니다.
-예시: "GitHub에서 온 이메일 보여줘", "가장 최근 이메일 전체 내용", "OO교수 메일 읽어줘"
-주의: "최근 이메일 보여줘"는 이 도구(read_email)를 사용하세요. get_email_briefing이 아닙니다.
-주의: 사용자가 이메일만 요청한 경우 get_calendar 등 다른 도구를 추가 호출하지 마세요.`,
+    description: '특정 이메일의 전문을 가져옵니다. 발신자, 제목, 키워드로 검색합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -88,7 +78,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
         limit: {
           type: 'number',
-          description: '가져올 이메일 수. 사용자가 "1건", "하나만" 등 명시하면 1, 기본값 5.',
+          description: '가져올 이메일 수 (기본 5). 사용자가 "1건", "하나만" 등이면 1.',
         },
       },
       required: [],
@@ -96,8 +86,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'draft_email_reply',
-    description: `이메일 답장 초안을 작성하여 Gmail 임시보관함에 저장합니다.
-예시: "그 이메일에 답장 써줘", "OO에게 회신 초안", "감사 답장 작성해줘"`,
+    description: '이메일 답장 초안을 작성하여 Gmail 임시보관함에 저장합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -115,9 +104,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_calendar',
-    description: `Google Calendar에서 오늘/이번 주 일정을 가져옵니다. 사용자가 일정, 스케줄, 미팅 시간을 **명시적으로** 물어볼 때만 사용하세요.
-예시: "오늘 일정", "이번주 스케줄", "다음 미팅 언제?"
-주의: 이메일 요청에 이 도구를 같이 호출하지 마세요. 사용자가 "일정"을 언급한 경우에만 호출하세요.`,
+    description: 'Google Calendar에서 오늘/이번 주 일정을 가져옵니다. 결과는 정해진 양식으로 제공됩니다.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -126,54 +113,31 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'create_calendar_event',
-    description: `Google Calendar에 새 일정을 등록합니다.
-예시: "내일 오후 2시에 팀 미팅 일정 등록해줘", "금요일 세미나 캘린더에 넣어줘"`,
+    description: 'Google Calendar에 새 일정을 등록합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        title: {
-          type: 'string',
-          description: '일정 제목',
-        },
-        date: {
-          type: 'string',
-          description: '날짜 (YYYY-MM-DD 형식)',
-        },
-        time: {
-          type: 'string',
-          description: '시작 시간 (HH:mm 형식). 종일 일정이면 생략.',
-        },
-        duration: {
-          type: 'number',
-          description: '일정 길이(분). 기본 60.',
-        },
-        location: {
-          type: 'string',
-          description: '장소 (선택)',
-        },
-        description: {
-          type: 'string',
-          description: '메모 (선택)',
-        },
+        title: { type: 'string', description: '일정 제목' },
+        date: { type: 'string', description: '날짜 (YYYY-MM-DD)' },
+        time: { type: 'string', description: '시작 시간 (HH:mm). 종일이면 생략.' },
+        duration: { type: 'number', description: '일정 길이(분). 기본 60.' },
+        location: { type: 'string', description: '장소 (선택)' },
+        description: { type: 'string', description: '메모 (선택)' },
       },
       required: ['title', 'date'],
     },
   },
   {
     name: 'save_capture',
-    description: `할일(task), 아이디어(idea), 메모(memo)를 빠르게 저장합니다. 사용자가 무언가를 기억/기록/저장하고 싶어할 때 사용하세요.
-예시: "이거 메모해줘", "할 일 추가", "아이디어 저장", "논문 리뷰 금요일까지 해야 해"`,
+    description: '할일(task), 아이디어(idea), 메모(memo)를 빠르게 저장합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        content: {
-          type: 'string',
-          description: '저장할 내용 (사용자 원문 그대로)',
-        },
+        content: { type: 'string', description: '저장할 내용 (사용자 원문 그대로)' },
         type: {
           type: 'string',
           enum: ['task', 'idea', 'memo'],
-          description: '캡처 유형. 행동이 필요하면 task, 아이디어/제안이면 idea, 순수 정보면 memo.',
+          description: '행동이 필요하면 task, 아이디어면 idea, 순수 정보면 memo.',
         },
       },
       required: ['content', 'type'],
@@ -181,8 +145,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_daily_brief',
-    description: `오늘의 종합 브리핑: 미팅, 마감 태스크, 논문 알림, 최근 메모를 한눈에 정리합니다.
-예시: "오늘 브리핑", "오늘 뭐 해야 해?", "today"`,
+    description: '오늘의 종합 브리핑: 미팅, 마감 태스크, 논문 알림, 최근 메모를 정리합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {},
@@ -191,8 +154,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_weekly_review',
-    description: `이번 주 활동 리뷰: 미팅, 캡처, 메모, 완료 태스크, 지식 성장 등을 정리합니다.
-예시: "이번 주 정리", "주간 리뷰", "weekly"`,
+    description: '이번 주 활동 리뷰: 미팅, 캡처, 메모, 완료 태스크, 지식 성장 등을 정리합니다.',
     input_schema: {
       type: 'object' as const,
       properties: {},

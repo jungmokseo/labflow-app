@@ -334,8 +334,7 @@ async function executeGetEmailBriefing(
         const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
         const shadowContent = await compressForShadow(briefingData.markdown, 'email');
         saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(() => {});
-        // 직접 반환 마커: Claude가 이 결과를 그대로 전달하도록 지시
-        return `[직접반환] 아래 브리핑을 그대로 사용자에게 전달하세요. 요약·재구성 금지.\n\n${briefingData.markdown}`;
+        return `[양식지정] 아래 브리핑을 그대로 전달하세요.\n\n${briefingData.markdown}`;
       }
     } else if (briefingRes.statusCode === 401) {
       return '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
@@ -389,7 +388,7 @@ async function executeReadEmail(
       const result = formatEmailFull(e);
       const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
       saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(() => {});
-      return result;
+      return `[양식지정] 아래 이메일 내용을 양식 그대로 전달하세요.\n\n${result}`;
     }
 
     const listSection = emails.map((e: any, i: number) =>
@@ -403,7 +402,7 @@ async function executeReadEmail(
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
     saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(() => {});
-    return result;
+    return `[양식지정] 아래 이메일 목록+전문을 양식 그대로 전달하세요.\n\n${result}`;
   } catch (err: any) {
     return `이메일 조회 실패: ${err.message}`;
   }
@@ -590,9 +589,10 @@ async function executeGetCalendar(
     }
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'calendar');
-    saveShadowMessage(shadowChannelId, 'calendar query', sections.join('\n').slice(0, 1000)).catch(() => {});
+    const rawResult = sections.join('\n');
+    saveShadowMessage(shadowChannelId, 'calendar query', rawResult.slice(0, 1000)).catch(() => {});
 
-    return sections.join('\n');
+    return `[양식지정] 아래 일정을 양식 그대로 전달하세요. 각 일정은 별도 불릿(-), 시간은 **볼드**, 빈 줄로 구분.\n\n${rawResult}`;
   } catch (err: any) {
     if (err.message?.includes('invalid_grant') || err.message?.includes('Token has been expired')) {
       return '**Google Calendar 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
