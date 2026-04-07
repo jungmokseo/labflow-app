@@ -89,22 +89,28 @@ export async function checkCalendarAccess(userId: string): Promise<{
 
   try {
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    // 경량 호출: calendarList에서 primary 캘린더 1개만 조회
-    await calendar.calendarList.get({ calendarId: 'primary' });
+    // calendar.events 스코프로 접근 가능한 경량 호출 (calendarList는 별도 스코프 필요)
+    const now = new Date();
+    await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: now.toISOString(),
+      timeMax: new Date(now.getTime() + 60000).toISOString(),
+      maxResults: 1,
+    });
     return { accessible: true };
   } catch (err: any) {
-    const msg = err?.message || '';
+    const msg = err?.message || err?.toString?.() || 'unknown error';
+    console.error('[calendar] health check failed:', msg);
     if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
-      return { accessible: false, error: 'token_expired', message: 'Google 토큰 만료. 재인증 필요.' };
+      return { accessible: false, error: 'token_expired', message: 'Google 토큰 만료 — Gmail 재연동 필요' };
     }
     if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
       return { accessible: false, error: 'api_disabled', message: 'Google Cloud Console에서 Calendar API 활성화 필요' };
     }
     if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes') || msg.includes('Access Not Configured')) {
-      return { accessible: false, error: 'scope_missing', message: 'Calendar 권한 없음. 설정 → Gmail 재연동 필요 (calendar.events 스코프 추가)' };
+      return { accessible: false, error: 'scope_missing', message: 'Calendar 권한 없음 — Gmail 재연동 필요' };
     }
-    console.error('[calendar] health check failed:', msg);
-    return { accessible: false, error: 'unknown', message: msg };
+    return { accessible: false, error: 'unknown', message: `Calendar 오류: ${msg.slice(0, 100)}` };
   }
 }
 

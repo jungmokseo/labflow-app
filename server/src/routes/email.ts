@@ -692,12 +692,13 @@ export async function emailRoutes(app: FastifyInstance) {
       }
 
       // Calendar API 접근 가능 여부 확인
-      let calendarStatus: { accessible: boolean; error?: string; message?: string } = { accessible: false };
+      let calendarStatus: { accessible: boolean; error?: string; message?: string } = { accessible: false, message: 'Calendar 확인 실패' };
       try {
         const { checkCalendarAccess } = await import('../services/calendar.js');
         calendarStatus = await checkCalendarAccess(user.id);
       } catch (err: any) {
-        calendarStatus = { accessible: false, error: 'check_failed', message: err.message };
+        console.error('[email/status] calendar check error:', err?.message || err);
+        calendarStatus = { accessible: false, error: 'check_failed', message: err?.message || 'Calendar 헬스체크 실패' };
       }
 
       return reply.send({
