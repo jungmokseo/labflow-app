@@ -205,7 +205,7 @@ export interface EmailProfile {
 }
 
 export async function getEmailStatus() {
-  return apiFetch<{ success: boolean; connected: boolean; tokenValid?: boolean; needsReauth?: boolean; tokenError?: string; hasProfile?: boolean; message?: string }>('/api/email/status');
+  return apiFetch<{ success: boolean; connected: boolean; tokenValid?: boolean; needsReauth?: boolean; tokenError?: string; hasProfile?: boolean; message?: string; calendarConnected?: boolean; calendarError?: string | null; calendarMessage?: string | null }>('/api/email/status');
 }
 
 export async function getEmailAuthUrl() {

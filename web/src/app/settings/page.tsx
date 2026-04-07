@@ -16,6 +16,8 @@ export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('status');
   const [health, setHealth] = useState<boolean | null>(null);
   const [emailConnected, setEmailConnected] = useState(false);
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [lab, setLab] = useState<LabProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +30,11 @@ export default function SettingsPage() {
           getLabProfile(),
         ]);
         if (h.status === 'fulfilled') setHealth(h.value);
-        if (emailRes.status === 'fulfilled') setEmailConnected(emailRes.value.connected);
+        if (emailRes.status === 'fulfilled') {
+          setEmailConnected(emailRes.value.connected);
+          setCalendarConnected(emailRes.value.calendarConnected ?? false);
+          setCalendarMessage(emailRes.value.calendarMessage ?? null);
+        }
         if (labRes.status === 'fulfilled') setLab(labRes.value as any);
       } finally {
         setLoading(false);
@@ -80,7 +86,7 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} lab={lab} />}
+      {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} calendarConnected={calendarConnected} calendarMessage={calendarMessage} lab={lab} />}
       {tab === 'lab' && <LabTab lab={lab} onUpdate={setLab} />}
       {tab === 'email' && <EmailTab connected={emailConnected} />}
       {tab === 'dictionary' && <DictionaryTab />}
@@ -89,7 +95,7 @@ export default function SettingsPage() {
 }
 
 // ── Status Tab ──────────────────────────────────
-function StatusTab({ health, emailConnected, lab }: { health: boolean | null; emailConnected: boolean; lab: LabProfile | null }) {
+function StatusTab({ health, emailConnected, calendarConnected, calendarMessage, lab }: { health: boolean | null; emailConnected: boolean; calendarConnected: boolean; calendarMessage: string | null; lab: LabProfile | null }) {
   const handleConnectGmail = async () => {
     try {
       const res = await getEmailAuthUrl();
@@ -106,6 +112,7 @@ function StatusTab({ health, emailConnected, lab }: { health: boolean | null; em
         <div className="grid grid-cols-2 gap-4">
           <StatusItem label="API 서버" status={health === true ? 'healthy' : 'error'} detail="Railway" />
           <StatusItem label="Gmail" status={emailConnected ? 'healthy' : 'disconnected'} detail={emailConnected ? '연동됨' : '미연동'} />
+          <StatusItem label="Calendar" status={calendarConnected ? 'healthy' : 'error'} detail={calendarConnected ? '연동됨' : calendarMessage || '미연동'} />
           <StatusItem label="연구실" status={lab ? 'healthy' : 'disconnected'} detail={lab ? lab.name : '미설정'} />
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>

@@ -77,11 +77,18 @@ ${calContext}
 
     return { response: calendarData, intent: 'calendar_tool', metadata: { todayCount: todayEvents.length, weekCount: weekEvents.length, pendingCount: pending.length } };
   } catch (err: any) {
-    console.error('[brain] calendar tool error:', err.message);
-    if (err.message?.includes('invalid_grant') || err.message?.includes('Token has been expired')) {
+    const msg = err?.message || '';
+    console.error('[brain] calendar tool error:', msg);
+    if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
       return { response: '**Google Calendar 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.', intent: 'calendar_tool' };
     }
-    return { response: `일정 조회 실패: ${err.message}`, intent: 'calendar_tool' };
+    if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
+      return { response: '**Google Calendar API가 활성화되지 않았습니다.**\n\nGoogle Cloud Console → API 및 서비스 → Calendar API를 활성화해주세요.', intent: 'calendar_tool' };
+    }
+    if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes') || msg.includes('Access Not Configured')) {
+      return { response: '**Calendar 접근 권한이 없습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 Calendar 권한을 포함해서 다시 인증해주세요.', intent: 'calendar_tool' };
+    }
+    return { response: `일정 조회 실패: ${msg}`, intent: 'calendar_tool' };
   }
 }
 

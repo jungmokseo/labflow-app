@@ -611,10 +611,18 @@ async function executeGetCalendar(
 
     return `[양식지정] 아래 일정을 양식 그대로 전달하세요. 각 일정은 별도 불릿(-), 시간은 **볼드**, 빈 줄로 구분.\n\n${rawResult}`;
   } catch (err: any) {
-    if (err.message?.includes('invalid_grant') || err.message?.includes('Token has been expired')) {
+    const msg = err?.message || '';
+    console.error('[calendar] executeGetCalendar error:', msg);
+    if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
       return '**Google Calendar 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
     }
-    return `일정 조회 실패: ${err.message}`;
+    if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
+      return '**Google Calendar API가 활성화되지 않았습니다.**\n\nGoogle Cloud Console → API 및 서비스 → Calendar API를 활성화해주세요.';
+    }
+    if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes') || msg.includes('Access Not Configured')) {
+      return '**Calendar 접근 권한이 없습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 Calendar 권한을 포함해서 다시 인증해주세요.';
+    }
+    return `일정 조회 실패: ${msg}`;
   }
 }
 

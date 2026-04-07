@@ -53,6 +53,61 @@ export async function getCalendarClient(userId: string) {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
+/**
+ * Calendar API 접근 가능 여부 확인
+ * - 토큰 존재 + Calendar API 활성화 + calendar.events 스코프 확인
+ */
+export async function checkCalendarAccess(userId: string): Promise<{
+  accessible: boolean;
+  error?: 'no_token' | 'api_disabled' | 'scope_missing' | 'token_expired' | 'unknown';
+  message?: string;
+}> {
+  const token = await basePrismaClient.gmailToken.findFirst({
+    where: { userId },
+    orderBy: { primary: 'desc' },
+  });
+  if (!token) return { accessible: false, error: 'no_token', message: 'Gmail 연동 필요' };
+
+  const oauth2Client = createOAuth2Client();
+  oauth2Client.setCredentials({
+    access_token: safeDecrypt(token.accessToken),
+    refresh_token: safeDecrypt(token.refreshToken),
+    expiry_date: token.expiresAt?.getTime(),
+  });
+  oauth2Client.on('tokens', async (tokens) => {
+    try {
+      await basePrismaClient.gmailToken.update({
+        where: { id: token.id },
+        data: {
+          accessToken: encryptToken(tokens.access_token!),
+          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+        },
+      });
+    } catch { /* ignore */ }
+  });
+
+  try {
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    // 경량 호출: calendarList에서 primary 캘린더 1개만 조회
+    await calendar.calendarList.get({ calendarId: 'primary' });
+    return { accessible: true };
+  } catch (err: any) {
+    const msg = err?.message || '';
+    if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
+      return { accessible: false, error: 'token_expired', message: 'Google 토큰 만료. 재인증 필요.' };
+    }
+    if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
+      return { accessible: false, error: 'api_disabled', message: 'Google Cloud Console에서 Calendar API 활성화 필요' };
+    }
+    if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes') || msg.includes('Access Not Configured')) {
+      return { accessible: false, error: 'scope_missing', message: 'Calendar 권한 없음. 설정 → Gmail 재연동 필요 (calendar.events 스코프 추가)' };
+    }
+    console.error('[calendar] health check failed:', msg);
+    return { accessible: false, error: 'unknown', message: msg };
+  }
+}
+
 // ── 읽기: 오늘/기간 일정 조회 ────────────────────────
 export interface CalendarEvent {
   id: string;
@@ -125,6 +180,12 @@ export async function getTodayEvents(userId: string, timezone?: string): Promise
     if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
       throw new Error('Google Calendar 토큰이 만료되었습니다. 설정에서 Gmail 재연동이 필요합니다.');
     }
+    if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
+      throw new Error('Google Calendar API가 활성화되지 않았습니다. Google Cloud Console에서 Calendar API를 활성화해주세요.');
+    }
+    if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes')) {
+      throw new Error('Calendar 접근 권한이 없습니다. 설정에서 Gmail 재연동이 필요합니다.');
+    }
     console.warn('Calendar fetch failed:', msg);
     return [];
   }
@@ -166,6 +227,12 @@ export async function getWeekEvents(userId: string, timezone?: string): Promise<
     const msg = err?.message || '';
     if (msg.includes('invalid_grant') || msg.includes('Token has been expired')) {
       throw new Error('Google Calendar 토큰이 만료되었습니다. 설정에서 Gmail 재연동이 필요합니다.');
+    }
+    if (msg.includes('Calendar API') || msg.includes('has not been used') || msg.includes('is disabled')) {
+      throw new Error('Google Calendar API가 활성화되지 않았습니다. Google Cloud Console에서 Calendar API를 활성화해주세요.');
+    }
+    if (msg.includes('Insufficient Permission') || msg.includes('insufficient authentication scopes')) {
+      throw new Error('Calendar 접근 권한이 없습니다. 설정에서 Gmail 재연동이 필요합니다.');
     }
     console.warn('Calendar week fetch failed:', msg);
     return [];

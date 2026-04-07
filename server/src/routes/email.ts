@@ -691,12 +691,24 @@ export async function emailRoutes(app: FastifyInstance) {
           : 'unknown';
       }
 
+      // Calendar API 접근 가능 여부 확인
+      let calendarStatus: { accessible: boolean; error?: string; message?: string } = { accessible: false };
+      try {
+        const { checkCalendarAccess } = await import('../services/calendar.js');
+        calendarStatus = await checkCalendarAccess(user.id);
+      } catch (err: any) {
+        calendarStatus = { accessible: false, error: 'check_failed', message: err.message };
+      }
+
       return reply.send({
         success: true,
         connected: tokenValid,
         tokenValid,
         tokenError,
         needsReauth: !tokenValid,
+        calendarConnected: calendarStatus.accessible,
+        calendarError: calendarStatus.error || null,
+        calendarMessage: calendarStatus.message || null,
         accounts: allTokens.map(t => ({
           id: t.id,
           email: t.email,

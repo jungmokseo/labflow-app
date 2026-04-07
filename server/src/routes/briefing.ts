@@ -16,6 +16,12 @@ import { authMiddleware } from '../middleware/auth.js';
 import { aiRateLimiter } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
 import { getTodayEvents } from '../services/calendar.js';
+import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+
+function safeDecrypt(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  try { return isEncrypted(value) ? decryptToken(value) : value; } catch { return value; }
+}
 
 // ── Schemas ──────────────────────────────────────
 const briefingQuerySchema = z.object({
@@ -72,8 +78,8 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
       env.GOOGLE_REDIRECT_URI,
     );
     oauth2Client.setCredentials({
-      access_token: gmailToken.accessToken,
-      refresh_token: gmailToken.refreshToken || undefined,
+      access_token: safeDecrypt(gmailToken.accessToken),
+      refresh_token: safeDecrypt(gmailToken.refreshToken),
       expiry_date: gmailToken.expiresAt?.getTime(),
     });
 
@@ -83,9 +89,9 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
         await basePrismaClient.gmailToken.update({
           where: { id: gmailToken.id },
           data: {
-            accessToken: tokens.access_token!,
+            accessToken: encryptToken(tokens.access_token!),
             expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-            ...(tokens.refresh_token ? { refreshToken: tokens.refresh_token } : {}),
+            ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
           },
         });
       } catch {
