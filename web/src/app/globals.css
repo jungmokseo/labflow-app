@@ -4,85 +4,85 @@
 
 /* ── Design System: Structured Canvas ── */
 :root {
-  /* Primary — Indigo accent */
-  --color-primary: #2563EB;
-  --color-primary-hover: #1D4ED8;
-  --color-primary-light: #DBEAFE;
+  /* Primary — deeper blue for readability */
+  --color-primary: #1D4ED8;
+  --color-primary-hover: #1E40AF;
+  --color-primary-light: #BFDBFE;
 
-  /* Background — warm muted tones, easy on eyes */
-  --color-bg: #EEEEF3;
-  --color-bg-card: #F7F7FA;
-  --color-bg-input: #E8E8EE;
-  --color-bg-hover: #E0E0E8;
-  --color-bg-sidebar: #F0F0F5;
+  /* Background — clear separation between sidebar and main */
+  --color-bg: #F3F4F6;
+  --color-bg-card: #FFFFFF;
+  --color-bg-input: #E5E7EB;
+  --color-bg-hover: #DBEAFE;
+  --color-bg-sidebar: #E0E7F1;
 
   /* Text */
   --color-text-heading: #0F172A;
-  --color-text-main: #334155;
-  --color-text-muted: #64748B;
+  --color-text-main: #1E293B;
+  --color-text-muted: #475569;
 
   /* Border */
-  --color-border: rgba(15, 23, 42, 0.06);
-  --color-border-strong: rgba(15, 23, 42, 0.10);
+  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border-strong: rgba(15, 23, 42, 0.15);
 
   /* Accent */
-  --color-accent: #10B981;
+  --color-accent: #059669;
 
   /* Shadows — layered for depth */
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 4px rgba(15, 23, 42, 0.03);
-  --shadow-card-hover: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 4px rgba(15, 23, 42, 0.04);
+  --shadow-card-hover: 0 8px 24px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.05);
 
   /* Skeleton */
   --shimmer-from: rgba(0, 0, 0, 0.03);
   --shimmer-via: rgba(0, 0, 0, 0.06);
 
   /* Focus ring */
-  --color-focus: rgba(37, 99, 235, 0.4);
+  --color-focus: rgba(29, 78, 216, 0.5);
 
   /* Misc */
   --color-overlay: rgba(0, 0, 0, 0.4);
-  --color-badge-bg: rgba(37, 99, 235, 0.08);
+  --color-badge-bg: rgba(29, 78, 216, 0.10);
 }
 
 [data-theme="dark"] {
-  /* Primary */
-  --color-primary: #3B82F6;
-  --color-primary-hover: #2563EB;
-  --color-primary-light: rgba(59, 130, 246, 0.12);
+  /* Primary — brighter blue for dark bg contrast */
+  --color-primary: #60A5FA;
+  --color-primary-hover: #3B82F6;
+  --color-primary-light: rgba(96, 165, 250, 0.18);
 
-  /* Background */
-  --color-bg: #0a0a0a;
-  --color-bg-card: #141414;
-  --color-bg-input: #1E1E1E;
-  --color-bg-hover: #252525;
-  --color-bg-sidebar: #111111;
+  /* Background — distinct sidebar vs main */
+  --color-bg: #0C0C0C;
+  --color-bg-card: #161616;
+  --color-bg-input: #1C1C1C;
+  --color-bg-hover: #1E293B;
+  --color-bg-sidebar: #0F1521;
 
   /* Text — brighter for dark bg readability */
   --color-text-heading: #F9FAFB;
-  --color-text-main: #F3F4F6;
-  --color-text-muted: #A1A1AA;
+  --color-text-main: #E5E7EB;
+  --color-text-muted: #94A3B8;
 
   /* Border */
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-strong: rgba(255, 255, 255, 0.10);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
 
   /* Accent */
-  --color-accent: #4ADE80;
+  --color-accent: #34D399;
 
   /* Shadows */
-  --shadow-card: none;
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Skeleton */
   --shimmer-from: rgba(255, 255, 255, 0.03);
   --shimmer-via: rgba(255, 255, 255, 0.08);
 
   /* Focus ring */
-  --color-focus: rgba(59, 130, 246, 0.5);
+  --color-focus: rgba(96, 165, 250, 0.5);
 
   /* Misc */
   --color-overlay: rgba(0, 0, 0, 0.6);
-  --color-badge-bg: rgba(59, 130, 246, 0.15);
+  --color-badge-bg: rgba(96, 165, 250, 0.18);
 }
 
 html {

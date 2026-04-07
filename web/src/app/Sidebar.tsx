@@ -378,7 +378,7 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className={`hidden md:flex flex-col bg-bg-sidebar border-r border-border transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`hidden md:flex flex-col bg-bg-sidebar border-r border-border-strong transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
         {collapsed ? (
           <div className="flex flex-col h-full items-center py-4">
             <button onClick={() => setCollapsed(false)} className="p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover mb-4" title="사이드바 펼치기">

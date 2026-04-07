@@ -667,7 +667,7 @@ export default function BrainPage() {
 
             {/* Messages area — Claude-style */}
             <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 relative">
-              <div className="max-w-3xl mx-auto space-y-6">
+              <div className="max-w-4xl mx-auto space-y-6">
                 {activeMessages.length === 0 && (
                   <div className="text-center text-text-muted py-8">
                     <Brain className="w-12 h-12 text-primary/40 mx-auto mb-4" />
@@ -833,7 +833,7 @@ export default function BrainPage() {
                   </span>
                 </div>
               )}
-              <div className="px-4 pb-4 pt-3 flex gap-2 max-w-3xl mx-auto w-full">
+              <div className="px-4 pb-4 pt-3 flex gap-2 max-w-4xl mx-auto w-full">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden"
                   accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
                 <button

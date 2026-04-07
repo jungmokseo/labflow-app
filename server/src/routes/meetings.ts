@@ -603,7 +603,6 @@ function formatSummaryText(s: MeetingSummaryResult): string {
   parts.push(`# ${s.title}`);
   parts.push('');
   if (s.date) parts.push(`날짜: ${s.date}`);
-  if (s.actionItems.length > 0) parts.push(`액션 아이템: ${s.actionItems.map(a => a.split(':').pop()?.trim() || a).slice(0, 5).join(' / ')}`);
   if (s.participants.length > 0) parts.push(`참석자: ${s.participants.join(', ')}`);
   if (s.team) parts.push(`팀: ${s.team}`);
 
@@ -628,16 +627,6 @@ function formatSummaryText(s: MeetingSummaryResult): string {
       for (const b of d.bullets) {
         parts.push(`- ${b}`);
       }
-    }
-  }
-
-  // 액션 아이템 (체크박스 형태)
-  if (s.actionItems.length > 0) {
-    parts.push('');
-    parts.push('## 액션 아이템');
-    parts.push('');
-    for (const a of s.actionItems) {
-      parts.push(`- [ ] ${a}`);
     }
   }
 

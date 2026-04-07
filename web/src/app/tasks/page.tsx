@@ -364,7 +364,7 @@ export default function TasksPage() {
 
       {/* Bottom input bar — sticky within content area */}
       <div className="sticky bottom-0 bg-bg-card border-t border-border z-30 mt-auto">
-        <div className="max-w-3xl mx-auto px-6 py-4">
+        <div className="max-w-4xl mx-auto px-6 py-4">
           <div className="flex items-end gap-3">
             <textarea
               ref={inputRef}

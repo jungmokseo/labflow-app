@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm';
 // Skeleton imports removed — using inline spinner
 import {
   Mic, Paperclip, ClipboardList, FileText, CheckCircle, Music,
-  ChevronUp, ChevronDown, Copy, X,
+  ChevronUp, ChevronDown, Copy, X, Plus, Pencil, Trash2,
 } from 'lucide-react';
 
 const ACCEPTED_AUDIO_TYPES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/m4a', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
@@ -630,22 +630,60 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
   onUpdate: (items: string[]) => void;
 }) {
   const [localItems, setLocalItems] = useState(items);
+  const [newItemText, setNewItemText] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
+  const newInputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
 
-  const toggleItem = async (index: number) => {
-    const updated = [...localItems];
-    const item = updated[index];
-    if (item.startsWith(DONE_PREFIX)) {
-      updated[index] = item.slice(DONE_PREFIX.length);
-    } else {
-      updated[index] = DONE_PREFIX + item;
-    }
+  useEffect(() => { setLocalItems(items); }, [items]);
+
+  const persist = async (updated: string[]) => {
     setLocalItems(updated);
     try {
       await updateMeeting(meetingId, { actionItems: updated });
       onUpdate(updated);
     } catch {
-      setLocalItems(items); // rollback
+      setLocalItems(items);
     }
+  };
+
+  const toggleItem = (index: number) => {
+    const updated = [...localItems];
+    const item = updated[index];
+    updated[index] = item.startsWith(DONE_PREFIX) ? item.slice(DONE_PREFIX.length) : DONE_PREFIX + item;
+    persist(updated);
+  };
+
+  const addItem = () => {
+    const text = newItemText.trim();
+    if (!text) return;
+    persist([...localItems, text]);
+    setNewItemText('');
+    setTimeout(() => newInputRef.current?.focus(), 0);
+  };
+
+  const startEdit = (index: number) => {
+    const item = localItems[index];
+    const label = item.startsWith(DONE_PREFIX) ? item.slice(DONE_PREFIX.length) : item;
+    setEditingIndex(index);
+    setEditText(label);
+    setTimeout(() => editInputRef.current?.focus(), 0);
+  };
+
+  const saveEdit = () => {
+    if (editingIndex === null) return;
+    const text = editText.trim();
+    if (!text) { setEditingIndex(null); return; }
+    const updated = [...localItems];
+    const wasDone = updated[editingIndex].startsWith(DONE_PREFIX);
+    updated[editingIndex] = wasDone ? DONE_PREFIX + text : text;
+    setEditingIndex(null);
+    persist(updated);
+  };
+
+  const deleteItem = (index: number) => {
+    persist(localItems.filter((_, i) => i !== index));
   };
 
   return (
@@ -657,25 +695,70 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
         {localItems.map((item, i) => {
           const done = item.startsWith(DONE_PREFIX);
           const label = done ? item.slice(DONE_PREFIX.length) : item;
+
+          if (editingIndex === i) {
+            return (
+              <div key={i} className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <input
+                  ref={editInputRef}
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingIndex(null); }}
+                  className="flex-1 text-sm bg-surface-card border border-primary rounded px-2 py-1 text-text-body outline-none"
+                />
+                <button onClick={saveEdit} className="text-xs text-green-400 hover:text-green-300 px-1">저장</button>
+                <button onClick={() => setEditingIndex(null)} className="text-xs text-text-muted hover:text-text-body px-1">취소</button>
+              </div>
+            );
+          }
+
           return (
-            <button
-              key={i}
-              onClick={(e) => { e.stopPropagation(); toggleItem(i); }}
-              className="flex items-start gap-2 w-full text-left group"
-            >
-              <span className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
-                done ? 'bg-green-500/20 border-green-500 text-green-400' : 'border-border group-hover:border-primary'
-              }`}>
-                {done && (
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
-                )}
-              </span>
-              <span className={`text-sm transition-all ${done ? 'line-through text-text-muted' : 'text-text-body'}`}>
-                {label}
-              </span>
-            </button>
+            <div key={i} className="flex items-start gap-2 group" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => toggleItem(i)}
+                className="flex items-start gap-2 flex-1 text-left"
+              >
+                <span className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                  done ? 'bg-green-500/20 border-green-500 text-green-400' : 'border-border group-hover:border-primary'
+                }`}>
+                  {done && (
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
+                  )}
+                </span>
+                <span className={`text-sm transition-all ${done ? 'line-through text-text-muted' : 'text-text-body'}`}>
+                  {label}
+                </span>
+              </button>
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                <button onClick={() => startEdit(i)} className="p-1 text-text-muted hover:text-primary" title="수정">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button onClick={() => deleteItem(i)} className="p-1 text-text-muted hover:text-red-400" title="삭제">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
           );
         })}
+      </div>
+      {/* 새 액션 아이템 추가 */}
+      <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+        <input
+          ref={newInputRef}
+          value={newItemText}
+          onChange={(e) => setNewItemText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
+          placeholder="새 액션 아이템 추가..."
+          className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary px-1 py-1 text-text-body placeholder:text-text-muted/50 outline-none transition-colors"
+        />
+        <button
+          onClick={addItem}
+          disabled={!newItemText.trim()}
+          className="p-1 text-text-muted hover:text-primary disabled:opacity-30 transition-colors"
+          title="추가"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );
