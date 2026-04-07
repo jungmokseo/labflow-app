@@ -613,16 +613,28 @@ export async function runPaperCrawl(
 
     const mKeywords = extractMatchedKeywords(item, themes, flatKeywords);
 
-    await prisma.paperAlertResult.create({
-      data: {
-        alertId: alert.id, title: item.title, authors: enrichedAuthors,
-        journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
-        url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
-        aiSummary: summary, aiReason: (item as any).aiReason || null,
-        relevance: item.score, stars: item.stars, themes: item.matchedThemes,
-        matchedKeywords: mKeywords,
-      },
-    });
+    try {
+      await prisma.paperAlertResult.create({
+        data: {
+          alertId: alert.id, title: item.title, authors: enrichedAuthors,
+          journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
+          url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
+          aiSummary: summary, aiReason: (item as any).aiReason || null,
+          relevance: item.score, stars: item.stars, themes: item.matchedThemes,
+          matchedKeywords: mKeywords,
+        },
+      });
+    } catch {
+      // 새 컬럼(aiReason, matchedKeywords)이 없으면 기존 필드만으로 저장
+      await prisma.paperAlertResult.create({
+        data: {
+          alertId: alert.id, title: item.title, authors: enrichedAuthors,
+          journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
+          url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
+          aiSummary: summary, relevance: item.score, stars: item.stars, themes: item.matchedThemes,
+        },
+      });
+    }
     savedCount++;
   }
 
@@ -636,15 +648,23 @@ export async function runPaperCrawl(
     }
   }
 
-  // T_last 업데이트 + 통계/시사점 저장
-  await prisma.paperAlert.update({
-    where: { id: alert.id },
-    data: {
-      lastRunAt: new Date(),
-      lastTotalFetched: allItems.length,
-      lastWeeklyInsight: weeklyInsight || null,
-    },
-  });
+  // T_last 업데이트 + 통계/시사점 저장 (새 컬럼 없으면 graceful fallback)
+  try {
+    await prisma.paperAlert.update({
+      where: { id: alert.id },
+      data: {
+        lastRunAt: new Date(),
+        lastTotalFetched: allItems.length,
+        lastWeeklyInsight: weeklyInsight || null,
+      },
+    });
+  } catch {
+    // 새 컬럼이 아직 DB에 없으면 lastRunAt만 업데이트
+    await prisma.paperAlert.update({
+      where: { id: alert.id },
+      data: { lastRunAt: new Date() },
+    });
+  }
 
   return {
     totalFetched: allItems.length,
@@ -941,8 +961,8 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     }
     return {
       results, unreadCount, grouped, journals: alert.journals,
-      totalFetched: alert.lastTotalFetched || null,
-      weeklyInsight: alert.lastWeeklyInsight || null,
+      totalFetched: (alert as any).lastTotalFetched || null,
+      weeklyInsight: (alert as any).lastWeeklyInsight || null,
     };
   });
 
