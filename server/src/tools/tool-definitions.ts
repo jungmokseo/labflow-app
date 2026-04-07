@@ -104,7 +104,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_calendar',
-    description: 'Google Calendar에서 오늘/이번 주 일정을 가져옵니다. 결과는 정해진 양식으로 제공됩니다.',
+    description: 'Google Calendar에서 오늘 일정과 이번 주 전체 일정(내일, 모레 등 포함)을 가져옵니다. "내일 일정", "이번 주 스케줄" 등 모든 일정 질문에 사용하세요.',
     input_schema: {
       type: 'object' as const,
       properties: {},
