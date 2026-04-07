@@ -1952,7 +1952,7 @@ ${emailDataForPrompt.join('\n\n')}`,
   app.get('/api/email/messages/recent', async (request, reply) => {
     const userId = request.userId!;
     const query = request.query as { limit?: string; q?: string };
-    const limit = Math.min(parseInt(query.limit || '5', 10) || 5, 10);
+    const limit = Math.min(parseInt(query.limit || '5', 10) || 5, 30);
     const searchQuery = (query.q || '').trim();
 
     try {

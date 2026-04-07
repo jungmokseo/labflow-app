@@ -84,7 +84,7 @@ async function executeSearchLabData(
       ? prisma.memo.findMany({
           where: { OR: [{ userId: ctx.userId }, { labId: ctx.labId }] },
           orderBy: { createdAt: 'desc' },
-          take: 30,
+          take: 50,
         })
       : Promise.resolve([]),
   ]);
@@ -93,7 +93,7 @@ async function executeSearchLabData(
     ? await prisma.meeting.findMany({
         where: { userId: ctx.userId },
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 20,
       })
     : [];
 
@@ -418,7 +418,7 @@ ${e.cc ? `**참조:** ${e.cc}` : ''}
 **Thread-ID:** ${e.threadId}
 
 **본문:**
-${e.body?.slice(0, 3000) || '(본문 없음)'}`;
+${e.body?.slice(0, 8000) || '(본문 없음)'}`;
 }
 
 // ── draft_email_reply ────────────────────────────────
@@ -462,7 +462,7 @@ async function executeDraftEmailReply(
 원본 이메일:
 - 발신자: ${email.from}
 - 제목: ${email.subject}
-- 본문: ${(email.body as string)?.slice(0, 2000) || email.snippet}
+- 본문: ${(email.body as string)?.slice(0, 5000) || email.snippet}
 
 사용자 지시: ${instructions}
 
