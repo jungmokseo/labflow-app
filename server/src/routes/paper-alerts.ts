@@ -975,8 +975,8 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     }
     return {
       results, unreadCount, grouped, journals: alert.journals,
-      totalFetched: (alert as any).lastTotalFetched || null,
-      weeklyInsight: (alert as any).lastWeeklyInsight || null,
+      totalFetched: (alert as any).lastTotalFetched ?? null,
+      weeklyInsight: (alert as any).lastWeeklyInsight ?? null,
     };
   });
 

@@ -119,8 +119,8 @@ export default function PapersPage() {
     ? resultsResponse
     : (resultsResponse as any)?.results || (resultsResponse as any)?.data || [];
   const apiJournals: string[] = Array.isArray(resultsResponse) ? [] : ((resultsResponse as any)?.journals || []);
-  const apiTotalFetched: number | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.totalFetched || null);
-  const apiWeeklyInsight: string | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.weeklyInsight || null);
+  const apiTotalFetched: number | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.totalFetched ?? null);
+  const apiWeeklyInsight: string | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.weeklyInsight ?? null);
 
   useEffect(() => { loadAlerts(); }, []);
 
