@@ -126,14 +126,30 @@ export default function PapersPage() {
 
   const totalJournals = selectedJournals.length + customFeeds.length;
 
+  // BLISS Lab 기본 저널 (설정 복원용)
+  const DEFAULT_JOURNALS = [
+    'Nature', 'Science', 'Nature Materials', 'Nature Nanotechnology',
+    'Nature Biomedical Engineering', 'Nature Electronics', 'Science Advances',
+    'Science Robotics', 'Advanced Materials', 'Advanced Functional Materials',
+    'Nature Sensors', 'Nature Chemical Engineering', 'ACS Nano', 'ACS Sensors',
+  ];
+
   async function loadAlerts() {
     try {
       const data = await getPaperAlerts();
       const alertList = data.alerts || data.data || [];
       if (alertList.length > 0) {
-        setKeywords(alertList[0].keywords.join(', '));
-        setSelectedJournals(alertList[0].journals);
-        setCustomFeeds((alertList[0] as any).customFeeds || []);
+        const alert = alertList[0];
+        const journals = alert.journals?.length > 0 ? alert.journals : DEFAULT_JOURNALS;
+        const kws = alert.keywords?.length > 0 ? alert.keywords.join(', ') : '';
+        setKeywords(kws);
+        setSelectedJournals(journals);
+        setCustomFeeds((alert as any).customFeeds || []);
+        // 서버에 저널이 비어있으면 기본값으로 자동 저장
+        if (alert.journals?.length === 0) {
+          const themeKws = (data as any).researchThemes?.flatMap((t: any) => t.keywords || []) || [];
+          savePaperAlert({ keywords: themeKws.length > 0 ? themeKws : [], journals: DEFAULT_JOURNALS }).catch(() => {});
+        }
       }
     } catch {}
   }
