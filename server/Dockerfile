@@ -6,7 +6,7 @@ RUN npm ci
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src/
-RUN npm run build
+RUN npx tsc
 
 FROM node:22-alpine
 WORKDIR /app
@@ -16,4 +16,4 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
 ENV NODE_ENV=production
 EXPOSE 3001
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null; node dist/index.js"]
