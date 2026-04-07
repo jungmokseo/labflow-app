@@ -178,7 +178,7 @@ const alertSettingSchema = z.object({
     rssUrl: z.string().url(),
     publisher: z.string().optional(),
   })).optional(),
-  schedule: z.enum(['daily', 'weekly', 'manual']).default('daily'),
+  schedule: z.enum(['weekly', 'manual']).default('weekly'),
 });
 
 // ── Cron 스케줄러 (서버 시작 시 실행) ────────────────
@@ -194,6 +194,8 @@ export function startPaperAlertCron() {
       console.error('Paper alert cron error:', err);
     }
   }, 24 * 60 * 60 * 1000); // 24시간
+  // 기존 daily → weekly 마이그레이션
+  prisma.paperAlert.updateMany({ where: { schedule: 'daily' }, data: { schedule: 'weekly' } }).catch(() => {});
   // 서버 시작 시 즉시 1회 체크 (밀린 스케줄 처리)
   checkAndRunScheduledAlerts().catch(() => {});
   console.log('[paper-alert] Paper alert cron started (daily check)');
@@ -215,7 +217,6 @@ async function checkAndRunScheduledAlerts() {
     const hoursSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60);
 
     let shouldRun = false;
-    if (alert.schedule === 'daily' && hoursSinceLastRun >= 23) shouldRun = true;
     if (alert.schedule === 'weekly' && hoursSinceLastRun >= 167) shouldRun = true; // ~7일
 
     if (shouldRun) {
@@ -670,7 +671,7 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     let nextRunEstimate: string | null = null;
     if (primaryAlert?.lastRunAt && primaryAlert.schedule !== 'manual') {
       const lastRun = new Date(primaryAlert.lastRunAt);
-      const interval = primaryAlert.schedule === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+      const interval = 7 * 24 * 60 * 60 * 1000; // weekly
       nextRunEstimate = new Date(lastRun.getTime() + interval).toISOString();
     }
 
@@ -680,7 +681,7 @@ export async function paperAlertRoutes(app: FastifyInstance) {
       journalCategories: fieldMap,
       maxJournals: MAX_JOURNALS,
       researchThemes: (lab.researchThemes as ResearchTheme[] | null) || [],
-      scheduleOptions: ['daily', 'weekly', 'manual'],
+      scheduleOptions: ['weekly', 'manual'],
       nextRunEstimate,
     };
   });

@@ -422,6 +422,15 @@ export default function PapersPage() {
               className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
           </div>
 
+          {/* Schedule info */}
+          <div className="flex items-center justify-between bg-bg-input rounded-lg px-4 py-3">
+            <div>
+              <p className="text-sm text-text-heading font-medium">자동 수집 주기</p>
+              <p className="text-xs text-text-muted">매주 자동 실행 · 수동 수집도 가능</p>
+            </div>
+            <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">주간</span>
+          </div>
+
           <button onClick={() => {
             // Optimistic: close settings immediately
             setShowSettings(false);
