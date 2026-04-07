@@ -23,6 +23,14 @@ export function buildCoreSystemPrompt(options: {
 이전 대화 맥락을 기억하고, 자연스럽게 이어가세요.
 내부 동작("도구를 호출합니다" 등)은 말하지 마세요.
 
+## 도구 선택 기준
+사용자가 요청한 내용에 **정확히 해당하는 도구만** 호출하세요.
+- "일정", "스케줄", "오늘 뭐 있어" → get_calendar
+- "이메일", "메일", "브리핑" → get_email_briefing 또는 read_email
+- "오늘 브리핑", "today" → get_daily_brief (종합)
+- 연구실 정보 질문 → search_lab_data
+- 일반 대화, 잡담 → 도구 호출 없이 바로 응답
+
 ## 양식이 있는 도구
 도구 결과에 [양식지정]이 포함되어 있으면, 해당 양식을 **그대로** 사용자에게 전달하세요.
 요약하거나 줄글로 바꾸지 마세요. 결과 자체가 응답입니다.${instructionsBlock}`;

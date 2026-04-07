@@ -139,31 +139,17 @@ async function build5LayerContext(channelId: string, userId: string, labId: stri
     context += '## 연구실 정보\n' + labContext + '\n';
   }
 
+  // Shadow sessions: 요약만 로드 (상세 데이터는 Claude가 tool로 직접 가져옴)
   if (shadows.length > 0) {
     const shadowResults = await Promise.all(shadows.map(async (shadow) => {
-      const [shadowSummary, recentShadowMsgs] = await Promise.all([
-        prisma.channelSummary.findFirst({
-          where: { channelId: shadow.id },
-          orderBy: { createdAt: 'desc' },
-        }),
-        prisma.message.findMany({
-          where: { channelId: shadow.id },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        }),
-      ]);
-
-      if (!shadowSummary && recentShadowMsgs.length === 0) return '';
+      const shadowSummary = await prisma.channelSummary.findFirst({
+        where: { channelId: shadow.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!shadowSummary) return '';
 
       const label = shadow.shadowType === 'email' ? '이메일' : shadow.shadowType === 'calendar' ? '캘린더' : '지식';
-      let text = `## ${label} 관련 정보\n`;
-      if (shadowSummary) text += shadowSummary.summaryText + '\n';
-      if (recentShadowMsgs.length > 0) {
-        text += recentShadowMsgs.reverse().map(m =>
-          `${m.role === 'user' ? '질문' : '답변'}: ${m.content.slice(0, 200)}`
-        ).join('\n') + '\n';
-      }
-      return text + '\n';
+      return `## ${label} 기록 요약\n${shadowSummary.summaryText}\n\n`;
     }));
 
     context += shadowResults.filter(Boolean).join('');
