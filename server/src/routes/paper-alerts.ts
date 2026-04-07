@@ -241,7 +241,7 @@ async function parseRssFeed(url: string): Promise<RssItem[]> {
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'ResearchFlow/1.0 (Paper Monitoring)' },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(30000),
     });
     if (!response.ok) return [];
     const xml = await response.text();
@@ -823,15 +823,20 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     }));
   });
 
-  // ── 수동 크롤링 (T_last 기반 필터링) ──────────────
+  // ── 수동 크롤링 (즉시 응답 + 백그라운드 실행) ──────
   app.post('/api/papers/alerts/run', async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await prisma.lab.findUnique({ where: { ownerId: request.userId! } });
     if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
     const alert = await prisma.paperAlert.findFirst({ where: { labId: lab.id, active: true } });
     if (!alert) return reply.code(404).send({ error: '논문 알림 설정이 없습니다.' });
 
-    const result = await runPaperCrawl(alert, lab);
-    return result;
+    // 즉시 응답 — 수집은 백그라운드에서 진행
+    reply.send({ success: true, status: 'started', message: '수집을 시작했습니다. 완료되면 결과가 업데이트됩니다.' });
+
+    // 백그라운드 실행
+    runPaperCrawl(alert, lab).catch(err => {
+      console.error('[paper-alert] Background crawl failed:', err.message || err);
+    });
   });
 
   // ── 결과 목록 ────────────────────────────────────

@@ -153,16 +153,26 @@ export default function PapersPage() {
       const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
       setCrawlStep(0); // 설정 저장
       await savePaperAlert({ keywords: kws, journals: selectedJournals });
-      setCrawlStep(1); // RSS 수집 + 키워드 매칭
-      const crawlResult = await runPaperCrawl() as any;
-      if (crawlResult?.totalFetched) {
-        const stats = { totalFetched: crawlResult.totalFetched, matched: crawlResult.matched || 0 };
-        setCrawlStats(stats);
-        localStorage.setItem('paper-crawl-stats', JSON.stringify(stats));
-      }
-      setCrawlStep(2); // 결과 로드
-      await refreshResults();
-      setCrawlStep(3); // 완료
+      setCrawlStep(1); // RSS 수집 시작 (백그라운드)
+      await runPaperCrawl();
+      // 백그라운드 수집 완료 대기 — 주기적 폴링
+      setCrawlStep(2);
+      let attempts = 0;
+      const maxAttempts = 30; // 최대 ~2.5분
+      const poll = async () => {
+        while (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 5000)); // 5초 간격
+          attempts++;
+          const res = await refreshResults();
+          const newResults = (res as any)?.results || (res as any)?.data || [];
+          if (newResults.length > 0) {
+            setCrawlStep(3);
+            return;
+          }
+        }
+        setCrawlStep(3); // 타임아웃이어도 완료 표시
+      };
+      await poll();
     } catch (err: any) { setError(err.message); }
     finally { setCrawling(false); setCrawlStep(0); }
   }
