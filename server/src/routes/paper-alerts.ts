@@ -786,11 +786,48 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     return reply.send({ success: true, type: 'custom', name: body.name, rssUrl, sampleCount: items.length });
   });
 
-  // ── 알림 설정 조회 ────────────────────────────────
+  // ── 알림 설정 조회 (설정 없으면 Lab 테마 기반 자동 생성) ─
   app.get('/api/papers/alerts', async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await prisma.lab.findUnique({ where: { ownerId: request.userId! } });
     if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
-    const alerts = await prisma.paperAlert.findMany({ where: { labId: lab.id } });
+    let alerts = await prisma.paperAlert.findMany({ where: { labId: lab.id } });
+
+    // 설정이 없거나 저널이 비어있으면 Lab researchThemes 기반 자동 복원
+    if (alerts.length === 0 || (alerts[0] && alerts[0].journals.length === 0)) {
+      const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
+      const autoKeywords = themes.flatMap(t => t.keywords || []);
+      // 연구 분야에 맞는 기본 저널 추천 (재료/센서/바이오/나노/화학 중심)
+      const defaultJournals = [
+        'Nature', 'Science', 'Nature Materials', 'Nature Nanotechnology',
+        'Nature Biomedical Engineering', 'Nature Electronics', 'Science Advances',
+        'Science Robotics', 'Advanced Materials', 'Advanced Functional Materials',
+        'Nature Sensors', 'Nature Chemical Engineering', 'ACS Nano', 'ACS Sensors',
+      ].filter(j => JOURNAL_BY_NAME.has(j));
+
+      if (alerts.length === 0) {
+        const created = await prisma.paperAlert.create({
+          data: {
+            labId: lab.id,
+            keywords: autoKeywords.length > 0 ? autoKeywords : (lab.researchFields || []),
+            journals: defaultJournals,
+            schedule: 'weekly',
+          },
+        });
+        alerts = [created];
+        console.log(`[paper-alert] Auto-created alert for lab ${lab.id} with ${defaultJournals.length} journals, ${autoKeywords.length} keywords`);
+      } else if (alerts[0].journals.length === 0) {
+        const updated = await prisma.paperAlert.update({
+          where: { id: alerts[0].id },
+          data: {
+            journals: defaultJournals,
+            keywords: autoKeywords.length > 0 ? autoKeywords : alerts[0].keywords,
+          },
+        });
+        alerts = [updated];
+        console.log(`[paper-alert] Auto-restored journals for alert ${alerts[0].id}`);
+      }
+    }
+
     const fieldMap: Record<string, string[]> = {};
     for (const field of ALL_FIELDS) {
       fieldMap[field] = BUILT_IN_JOURNALS.filter(j => j.fields.includes(field)).map(j => j.name);

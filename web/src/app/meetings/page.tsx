@@ -585,8 +585,8 @@ export default function MeetingsPage() {
                               } else {
                                 alert(data.error || 'Google Docs 내보내기 실패');
                               }
-                            } catch {
-                              alert('Google Docs 내보내기에 실패했습니다');
+                            } catch (err: any) {
+                              alert(`Google Docs 내보내기 실패: ${err.message || err}`);
                             }
                           }}
                           className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
