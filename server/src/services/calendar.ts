@@ -23,7 +23,7 @@ function createOAuth2Client() {
   );
 }
 
-async function getCalendarClient(userId: string) {
+export async function getCalendarClient(userId: string) {
   const token = await basePrismaClient.gmailToken.findFirst({
     where: { userId },
     orderBy: { primary: 'desc' },

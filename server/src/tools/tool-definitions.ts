@@ -104,10 +104,19 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_calendar',
-    description: 'Google Calendar에서 오늘부터 7일간의 일정을 가져옵니다. 결과에서 원하는 날짜의 일정을 찾아 답변하세요.',
+    description: 'Google Calendar에서 일정을 조회합니다. 날짜 범위를 지정할 수 있습니다.',
     input_schema: {
       type: 'object' as const,
-      properties: {},
+      properties: {
+        start_date: {
+          type: 'string',
+          description: '조회 시작 날짜 (YYYY-MM-DD). 생략하면 오늘.',
+        },
+        end_date: {
+          type: 'string',
+          description: '조회 종료 날짜 (YYYY-MM-DD). 생략하면 시작일+7일.',
+        },
+      },
       required: [],
     },
   },

@@ -42,7 +42,7 @@ export async function executeToolCall(
     case 'draft_email_reply':
       return executeDraftEmailReply(input, ctx);
     case 'get_calendar':
-      return executeGetCalendar(ctx);
+      return executeGetCalendar(input, ctx);
     case 'create_calendar_event':
       return executeCreateCalendarEvent(input, ctx);
     case 'save_capture':
@@ -526,6 +526,7 @@ Gmail에서 확인하고 수정한 후 전송하세요.`;
 // ── get_calendar ─────────────────────────────────────
 
 async function executeGetCalendar(
+  input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
   ctx.sendProgress('일정을 확인하고 있습니다...');
@@ -534,22 +535,41 @@ async function executeGetCalendar(
     const userProfile = await prisma.emailProfile.findUnique({ where: { userId: ctx.userId } });
     const userTimezone = (userProfile as any)?.timezone || 'America/New_York';
 
-    const { getTodayEvents, getWeekEvents } = await import('../services/calendar.js');
-    const [todayEvents, weekEvents] = await Promise.all([
-      getTodayEvents(ctx.userId, userTimezone),
-      getWeekEvents(ctx.userId, userTimezone),
-    ]);
+    const startDate = input.start_date || new Date().toLocaleDateString('en-CA', { timeZone: userTimezone });
+    const endDateInput = input.end_date;
+    const endDate = endDateInput || new Date(new Date(startDate).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA');
 
-    const pending = await prisma.memo.findMany({
-      where: { userId: ctx.userId, source: 'pending-event', tags: { has: 'pending' } },
-      take: 5,
+    // Google Calendar API 직접 호출 (임의 날짜 범위)
+    const { getCalendarClient } = await import('../services/calendar.js');
+    const calendar = await getCalendarClient(ctx.userId);
+    if (!calendar) return 'Google Calendar가 연동되지 않았습니다. 설정에서 Gmail 연동을 해주세요.';
+
+    const res = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: `${startDate}T00:00:00`,
+      timeMax: `${endDate}T23:59:59`,
+      timeZone: userTimezone,
+      singleEvents: true,
+      orderBy: 'startTime',
+      maxResults: 50,
     });
-    const pendingInfo = pending.map(m => {
-      try { const e = JSON.parse(m.content); return `[대기] ${e.title} (${e.date})`; } catch { return ''; }
-    }).filter(Boolean).join('\n');
+
+    const allEvents = (res.data.items || []).map((e: any) => ({
+      title: e.summary || '(제목 없음)',
+      start: e.start?.dateTime || e.start?.date || '',
+      end: e.end?.dateTime || e.end?.date || '',
+      location: e.location || undefined,
+      description: e.description || undefined,
+      allDay: !e.start?.dateTime,
+    }));
+
+    // 오늘 날짜 기준 분리
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: userTimezone });
+    const todayEvents = allEvents.filter((e: any) => e.start.startsWith(todayStr));
+    const otherEvents = allEvents.filter((e: any) => !e.start.startsWith(todayStr));
 
     const tzLabel = userTimezone.includes('New_York') ? 'EDT' : userTimezone.includes('Seoul') ? 'KST' : userTimezone;
-    const todayStr = new Date().toLocaleDateString('ko-KR', { timeZone: userTimezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+    const todayLabel = new Date().toLocaleDateString('ko-KR', { timeZone: userTimezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
     const formatEventTime = (isoStr: string) => {
       if (!isoStr.includes('T')) return '종일';
       return new Date(isoStr).toLocaleTimeString('ko-KR', { timeZone: userTimezone, hour: '2-digit', minute: '2-digit', hour12: false });
@@ -563,11 +583,12 @@ async function executeGetCalendar(
     };
 
     const sections: string[] = [
-      `오늘: ${todayStr} (${tzLabel} 기준)`,
+      `오늘: ${todayLabel} (${tzLabel} 기준)`,
+      `조회 범위: ${startDate} ~ ${endDate}`,
     ];
 
     if (todayEvents.length > 0) {
-      sections.push(`\n[오늘 일정 ${todayEvents.length}건]\n${todayEvents.map(e => {
+      sections.push(`\n[오늘 일정 ${todayEvents.length}건]\n${todayEvents.map((e: any) => {
         const time = formatEventTime(e.start);
         const endTime = e.end && e.end.includes('T') ? formatEventTime(e.end) : '';
         const timeRange = endTime ? `${time}~${endTime}` : time;
@@ -577,15 +598,11 @@ async function executeGetCalendar(
       sections.push('\n[오늘 일정 없음]');
     }
 
-    if (weekEvents.length > todayEvents.length) {
-      sections.push(`\n[이번주 일정 ${weekEvents.length}건]\n${weekEvents.slice(0, 15).map(e => {
+    if (otherEvents.length > 0) {
+      sections.push(`\n[기간 내 일정 ${otherEvents.length}건]\n${otherEvents.slice(0, 30).map((e: any) => {
         const date = formatEventDate(e.start);
         return `- ${date} | ${e.title}${e.location ? ` | ${e.location}` : ''}`;
       }).join('\n')}`);
-    }
-
-    if (pendingInfo) {
-      sections.push(`\n[등록 대기 중 일정]\n${pendingInfo}`);
     }
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'calendar');
