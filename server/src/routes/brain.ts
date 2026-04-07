@@ -1,7 +1,7 @@
 /**
- * 미니브레인 (Lab Memory) Routes — 4층 기억 구조 (메타기억 포함) + 의도 분류 + 멀티홉 질의 체이닝
+ * 미니브레인 (Lab Memory) Routes — Claude Tool-Use 아키텍처
  *
- * POST   /api/brain/chat              → 미니브레인 대화 (4층 기억 + 멀티홉 DB 조회)
+ * POST   /api/brain/chat              → Claude tool-use 기반 대화 (intent classifier 제거)
  * GET    /api/brain/channels           → 사용자 채널 목록
  * POST   /api/brain/channels           → 새 채널 생성
  * GET    /api/brain/channels/:id       → 채널 메시지 목록
@@ -24,20 +24,12 @@ import { generateEmbedding, searchPapers } from '../services/embedding-service.j
 import { getGraphContextForQuery } from '../services/knowledge-graph.js';
 
 // ── Modularized imports ──────────────────────────────
-import { buildCoreSystemPrompt, PROGRESS_MAP } from '../prompts/core-system.js';
-import {
-  type Intent, type ClassifiedIntent, type ConversationTurn,
-  classifyIntent, detectCorrection, loadIntentCorrections, saveIntentCorrection,
-} from '../prompts/intent-classifier.js';
+import { buildCoreSystemPrompt } from '../prompts/core-system.js';
 import { calculateConfidence, getStaleWarning, trackAccess } from '../services/metamemory.js';
 import { maybeGenerateSummary, autoExtractInfo, generateSessionTitle } from '../services/session-manager.js';
-import { determineShadowType, getOrCreateShadow, saveShadowMessage, compressForShadow } from '../tools/shadow-session.js';
-import { executeMultiHopQuery, handleDbQuery } from '../tools/db-query-handler.js';
-import {
-  handleEmailBriefing, handleEmailRead, handleEmailReplyDraft,
-  handleEmailPreference, handleEmailToolMessage, handleEmailQuery,
-} from '../tools/email-handler.js';
-import { handleCalendarQuery, handleCalendarCreate, handlePapersToolMessage, handleMeetingToolMessage } from '../tools/calendar-handler.js';
+import { TOOL_DEFINITIONS } from '../tools/tool-definitions.js';
+import { executeToolCall } from '../tools/tool-executor.js';
+import type Anthropic from '@anthropic-ai/sdk';
 
 // ── Schemas ─────────────────────────────────────────
 const chatSchema = z.object({
@@ -66,37 +58,7 @@ const searchSchema = z.object({
 });
 
 // ══════════════════════════════════════════════════════
-//  TOOL-SPECIFIC HANDLER (레거시 래퍼 — 기존 호출 유지)
-// ══════════════════════════════════════════════════════
-
-type ToolName = 'email' | 'papers' | 'meeting' | 'calendar';
-
-async function handleToolMessage(
-  tool: ToolName,
-  message: string,
-  userId: string,
-  lab: any,
-  labId?: string,
-  _recentTurns?: Array<{ role: string; content: string }>,
-): Promise<{ response: string; intent: string; metadata?: any }> {
-  const labIdStr = lab?.id || labId;
-
-  switch (tool) {
-    case 'email':
-      return handleEmailToolMessage(message, userId);
-    case 'papers':
-      return handlePapersToolMessage(message, userId, labIdStr);
-    case 'meeting':
-      return handleMeetingToolMessage(message, userId);
-    case 'calendar':
-      return handleCalendarQuery(message, userId);
-    default:
-      return { response: '알 수 없는 도구입니다.', intent: 'unknown_tool' };
-  }
-}
-
-// ══════════════════════════════════════════════════════
-//  3-LAYER CONTEXT BUILDER
+//  CONTEXT BUILDER
 // ══════════════════════════════════════════════════════
 
 // ── Lab Profile 캐시 (5분 TTL) ──────────────────────
@@ -152,18 +114,7 @@ async function getCachedLabContext(labId: string): Promise<string> {
   return context;
 }
 
-// Intent → 관련 Shadow 타입 매핑 (관련 없는 Shadow는 컨텍스트에서 제외)
-function getRelevantShadowTypes(intent?: string): Set<string> | null {
-  if (!intent) return null; // intent 없으면 전체 로드
-  const emailIntents = ['email_briefing', 'email_query', 'email_read', 'email_reply_draft', 'email_preference'];
-  const calendarIntents = ['calendar_query', 'calendar_create'];
-  if (emailIntents.includes(intent)) return new Set(['email']);
-  if (calendarIntents.includes(intent)) return new Set(['calendar']);
-  // general_chat, query_*, multi_hop 등은 전체 Shadow 참조 허용
-  return null;
-}
-
-async function build5LayerContext(channelId: string, userId: string, labId: string | null, query?: string, intent?: string): Promise<string> {
+async function build5LayerContext(channelId: string, userId: string, labId: string | null, query?: string): Promise<string> {
   const [summaries, labContext, shadows] = await Promise.all([
     prisma.channelSummary.findMany({
       where: { channelId },
@@ -189,12 +140,7 @@ async function build5LayerContext(channelId: string, userId: string, labId: stri
   }
 
   if (shadows.length > 0) {
-    const relevantTypes = getRelevantShadowTypes(intent);
-    const filteredShadows = relevantTypes
-      ? shadows.filter(s => relevantTypes.has(s.shadowType || ''))
-      : shadows;
-
-    const shadowResults = await Promise.all(filteredShadows.map(async (shadow) => {
+    const shadowResults = await Promise.all(shadows.map(async (shadow) => {
       const [shadowSummary, recentShadowMsgs] = await Promise.all([
         prisma.channelSummary.findFirst({
           where: { channelId: shadow.id },
@@ -223,11 +169,10 @@ async function build5LayerContext(channelId: string, userId: string, labId: stri
     context += shadowResults.filter(Boolean).join('');
   }
 
-  // L5: Graph + Vector Context
-  const skipIntents = ['capture_create', 'capture_list', 'capture_complete', 'save_memo', 'email_briefing', 'email_read', 'email_reply_draft', 'calendar_create', 'add_dict'];
+  // L5: Graph + Vector Context (simple greetings skip)
   const simplePatterns = /^(안녕|고마워|감사|ㅎㅎ|ㅋㅋ|ok|네|응|좋아|알겠)/i;
 
-  if (query && !skipIntents.includes(intent || '') && !simplePatterns.test(query.trim())) {
+  if (query && !simplePatterns.test(query.trim())) {
     try {
       const graphContext = await getGraphContextForQuery(query, userId, labId, { timeoutMs: 800 });
       if (graphContext.contextText) {
@@ -352,7 +297,7 @@ export async function brainRoutes(app: FastifyInstance) {
     });
   });
 
-  // ── Chat (단일 대화 + Shadow Session) ──────
+  // ── Chat (Claude Tool-Use 기반) ──────
   app.post('/api/brain/chat', async (request: FastifyRequest, reply: FastifyReply) => {
     const { channelId: inputChannelId, message, fileId, newSession, stream } = chatSchema.parse(request.body);
     const userId = request.userId!;
@@ -433,426 +378,135 @@ export async function brainRoutes(app: FastifyInstance) {
     });
     const contextMessages = recentCtx.reverse();
 
-    // ── 의도 분류 ──
-    const recentTurns: ConversationTurn[] = contextMessages.map(m => ({
-      role: m.role, content: m.content,
-    }));
-
-    const correctionCheck = detectCorrection(message, recentTurns);
-    const corrections = await loadIntentCorrections(userId);
-
-    const classified = await classifyIntent(message, recentTurns, corrections);
-    let { intent, hops } = classified;
-    const entities = classified.entities || {};
-
-    sendProgress(PROGRESS_MAP[intent] || '처리하고 있습니다...');
-
-    // 정정 처리
-    if (correctionCheck.isCorrection && correctionCheck.previousUserMessage) {
-      const prevClassified = await classifyIntent(correctionCheck.previousUserMessage);
-      if (prevClassified.intent !== intent) {
-        saveIntentCorrection(userId, {
-          originalMessage: correctionCheck.previousUserMessage,
-          wrongIntent: prevClassified.intent,
-          correctIntent: intent,
-        }).catch((err: any) => console.error('[background] saveIntentCorrection:', err.message || err));
-      }
-      const prevIntent = prevClassified.intent;
-      if (['calendar_query', 'email_briefing', 'email_read'].includes(prevIntent) && intent === 'general_chat') {
-        intent = prevIntent as Intent;
-        sendProgress(PROGRESS_MAP[intent] || '다시 확인하고 있습니다...');
-      }
-    }
-
-    // ── RAG 데이터 검색 ──
-    let dbResult: string | null = null;
-    let ragUsed = false;
-    let ragResultCount = 0;
-
-    const isActionIntent = ['save_memo', 'capture_create', 'capture_complete',
-      'daily_brief', 'emerge', 'weekly_review', 'add_dict',
-      'email_briefing', 'email_query', 'email_read', 'email_reply_draft',
-      'calendar_query', 'calendar_create'].includes(intent);
-
-    // ── Shadow Session: 도구 관련 intent 처리 ──
-    const shadowType = determineShadowType(intent, message);
-    let shadowResult: string | null = null;
-    let narrativeBriefingSuccess = false;
-
-    if (shadowType === 'email' && intent === 'email_briefing') {
-      const briefingResult = await handleEmailBriefing(app, request, message, userId, sendProgress, !!stream, reply);
-      shadowResult = briefingResult.result;
-      narrativeBriefingSuccess = briefingResult.narrativeSuccess;
-      // 실패 시 기존 메모 기반 fallback
-      if (!shadowResult) {
-        sendProgress('최근 브리핑 데이터를 확인하고 있습니다...');
-        const toolResult = await handleToolMessage('email', message + fileContext, userId, lab, request.labId, recentTurns);
-        shadowResult = toolResult.response;
-      }
-    } else if (shadowType === 'email' && intent === 'email_query') {
-      const toolResult = await handleToolMessage('email', message + fileContext, userId, lab, request.labId, recentTurns);
-      const shadowChannelId = await getOrCreateShadow(userId, 'email');
-      saveShadowMessage(shadowChannelId, message, toolResult.response).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
-      shadowResult = toolResult.response;
-    } else if (shadowType === 'email' && intent === 'email_read') {
-      shadowResult = await handleEmailRead(app, request, message, userId, entities, sendProgress);
-    } else if (shadowType === 'email' && intent === 'email_reply_draft') {
-      shadowResult = await handleEmailReplyDraft(app, request, message, userId, entities, sendProgress);
-    } else if (intent === 'email_preference') {
-      shadowResult = await handleEmailPreference(message, userId);
-    } else if (shadowType === 'calendar' && intent === 'calendar_create') {
-      shadowResult = await handleCalendarCreate(app, request, message, userId, sendProgress);
-    } else if (shadowType === 'calendar') {
-      const toolResult = await handleToolMessage('calendar', message + fileContext, userId, lab, request.labId, recentTurns);
-      const shadowChannelId = await getOrCreateShadow(userId, 'calendar');
-      saveShadowMessage(shadowChannelId, message, toolResult.response).catch((err: any) => console.error('[background] saveShadowMessage:', err.message || err));
-      shadowResult = toolResult.response;
-    }
-
-    // Handle document update/replace request
-    if (/업데이트|교체|대체|replace/i.test(message) && !dbResult) {
-      const prevMsg = contextMessages.find((m: any) => m.role === 'assistant' && m.content?.includes('유사한 기존 문서'));
-      if (prevMsg) {
-        const recentUpload = await prisma.memo.findFirst({
-          where: { userId, source: 'file-upload' },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (recentUpload) {
-          const { findSimilarDocuments } = await import('../services/rag-engine.js');
-          const similar = await findSimilarDocuments(basePrismaClient, recentUpload.content.slice(0, 1500), userId, lab?.id || null);
-          const toArchive = similar.filter(s => s.sourceId !== recentUpload.id);
-
-          let archivedCount = 0;
-          for (const doc of toArchive) {
-            try {
-              await prisma.memo.update({
-                where: { id: doc.sourceId },
-                data: { source: 'archived' },
-              });
-              archivedCount++;
-            } catch {}
-          }
-
-          if (archivedCount > 0) {
-            dbResult = `기존 유사 문서 ${archivedCount}건을 보관 처리하고, 새 문서("${recentUpload.title}")로 업데이트했습니다. 보관된 문서는 삭제되지 않았으며 필요시 복구 가능합니다.`;
-          }
-        }
-      }
-    }
-
-    if (lab && !isActionIntent) {
-      if (intent === 'multi_hop' && hops && hops.length > 0) {
-        dbResult = await executeMultiHopQuery(message, entities, hops, lab.id);
-      }
-
-      sendProgress('연구실 정보를 검색하고 있습니다...');
-      const useRag = env.OPENAI_API_KEY && await isRagReady(basePrismaClient);
-
-      if (useRag) {
-        try {
-          const searchResults = await hybridSearch(basePrismaClient, message, userId, lab.id, { limit: 10 });
-          if (searchResults.length > 0) {
-            const ranked = await rerank(searchResults, message, { topK: 8 });
-            ragResultCount = ranked.length;
-            ragUsed = true;
-
-            const ragText = ranked.map(r => {
-              const sourceLabel = { memo: '메모', member: '구성원', project: '과제', publication: '논문' }[r.sourceType] || r.sourceType;
-              const metaSource = (r.metadata as any)?.source;
-              const label = metaSource ? `${sourceLabel}/${metaSource}` : sourceLabel;
-              return `[${r.citation}] (${label}) ${r.title || ''}\n${r.chunkText.substring(0, 500)}`;
-            }).join('\n\n');
-
-            dbResult = dbResult ? `${dbResult}\n\n${ragText}` : ragText;
-          }
-        } catch (err) {
-          console.warn('RAG search failed, falling back to keyword:', err);
-        }
-      }
-
-      // Fallback: 키워드 검색
-      if (!dbResult) {
-        const searchWords = message
-          .replace(/[?？！!을를이가에서의로는은해줘줘요알려정보보여뭐있어내]/g, ' ')
-          .split(/\s+/).filter(w => w.length > 1);
-
-        if (searchWords.length > 0) {
-          const memos = await prisma.memo.findMany({
-            where: {
-              OR: [{ userId }, { labId: lab.id }],
-              AND: { OR: searchWords.flatMap(w => [
-                { title: { contains: w, mode: 'insensitive' as const } },
-                { content: { contains: w, mode: 'insensitive' as const } },
-              ]) },
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 8,
-          });
-
-          if (memos.length > 0) {
-            dbResult = memos.map((m, i) =>
-              `${i + 1}. [${m.source || '메모'}] ${m.title || ''}\n${m.content.substring(0, 400)}`
-            ).join('\n\n');
-          }
-        }
-
-        if (!dbResult) {
-          dbResult = await handleDbQuery(intent, entities, lab.id, userId, message);
-        }
-      }
-    }
-
-    // 메모 저장
-    if (intent === 'save_memo' && lab) {
-      const { autoTagByRules } = await import('../services/auto-tagger.js');
-      const autoTags = entities.tags ? [entities.tags] : autoTagByRules(message);
-      const title = message.length > 60 ? message.slice(0, 57) + '...' : message;
-      const newMemo = await prisma.memo.create({
-        data: {
-          labId: lab.id,
-          userId,
-          title,
-          content: message,
-          source: 'chat',
-          tags: autoTags,
-        },
-      });
-      dbResult = `메모가 저장되었습니다. (태그: ${autoTags.join(', ')})`;
-      embedAndStore(basePrismaClient, {
-        sourceType: 'memo', sourceId: newMemo.id, labId: lab.id, userId,
-        title, content: message, tags: autoTags, source: 'chat',
-      }).catch((err: any) => console.error('[background] embedAndStore:', err.message || err));
-    }
-
-    // 용어 교정 등록
-    if (intent === 'add_dict' && lab && entities.wrongForm && entities.correctForm) {
-      await prisma.domainDict.upsert({
-        where: { labId_wrongForm: { labId: lab.id, wrongForm: entities.wrongForm } },
-        create: { labId: lab.id, wrongForm: entities.wrongForm, correctForm: entities.correctForm },
-        update: { correctForm: entities.correctForm },
-      });
-      dbResult = `용어 교정 등록 완료: "${entities.wrongForm}" → "${entities.correctForm}"`;
-    }
-
-    // 캡처 인텐트 처리
-    const captureContent = entities.content || message;
-    if (intent === 'capture_create' && lab) {
-      const { classifyCapture, typeToCategory, urgencyToPriority } = await import('../services/capture-classifier.js');
-      const classification = await classifyCapture(captureContent);
-      const capture = await prisma.capture.create({
-        data: {
-          userId,
-          labId: lab.id,
-          content: captureContent,
-          summary: classification.summary,
-          category: typeToCategory(classification.type),
-          tags: classification.tags,
-          priority: urgencyToPriority(classification.urgency),
-          confidence: classification.confidence,
-          actionDate: classification.dueDate ? new Date(classification.dueDate) : null,
-          modelUsed: 'gemini-flash',
-          sourceType: 'text',
-          status: 'active',
-          reviewed: true,
-        },
-      });
-      const label = classification.type === 'task' ? '[완료]' : classification.type === 'idea' ? '[아이디어]' : '[메모]';
-      dbResult = `${label} 캡처 저장 완료: [${classification.type}] ${classification.summary}` +
-        (classification.tags.length > 0 ? `\n태그: ${classification.tags.join(', ')}` : '') +
-        (classification.dueDate ? `\n마감: ${classification.dueDate.split('T')[0]}` : '');
-    }
-
-    if (intent === 'capture_list' && lab) {
-      const typeFilter = entities.type ? { category: entities.type.toUpperCase() as any } : {};
-      const captures = await prisma.capture.findMany({
-        where: { labId: lab.id, status: 'active', ...typeFilter },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-      });
-      if (captures.length === 0) {
-        dbResult = '현재 활성 캡처가 없습니다.';
-      } else {
-        const lines = captures.map((c: any, i: number) => {
-          const label = c.category === 'TASK' ? '[할일]' : c.category === 'IDEA' ? '[아이디어]' : '[메모]';
-          return `${i + 1}. ${label} ${c.summary || c.content.substring(0, 40)}`;
-        });
-        dbResult = `캡처 목록 (${captures.length}건):\n${lines.join('\n')}`;
-      }
-    }
-
-    if (intent === 'capture_complete' && lab && entities.content) {
-      const capture = await prisma.capture.findFirst({
-        where: {
-          labId: lab.id,
-          status: 'active',
-          OR: [
-            { content: { contains: entities.content, mode: 'insensitive' } },
-            { summary: { contains: entities.content, mode: 'insensitive' } },
-          ],
-        },
-      });
-      if (capture) {
-        await prisma.capture.update({
-          where: { id: capture.id },
-          data: { status: 'completed', completed: true, completedAt: new Date() },
-        });
-        dbResult = `[완료] 캡처 완료 처리: ${capture.summary || capture.content.substring(0, 40)}`;
-      } else {
-        dbResult = '일치하는 캡처를 찾을 수 없습니다.';
-      }
-    }
-
-    // Thinking Commands
-    if (intent === 'daily_brief') {
-      const { dailyBrief } = await import('../services/knowledge-graph.js');
-      dbResult = await dailyBrief(userId);
-    } else if (intent === 'emerge') {
-      const { emergeInsights } = await import('../services/knowledge-graph.js');
-      dbResult = await emergeInsights(userId);
-    } else if (intent === 'weekly_review') {
-      const { weeklyReview } = await import('../services/knowledge-graph.js');
-      dbResult = await weeklyReview(userId);
-    }
-
-    let toolResult: string | null = shadowResult || null;
-
-    // 5층 컨텍스트 빌드
+    // ── 5층 컨텍스트 빌드 ──
     sendProgress('이전 대화를 참고하고 있습니다...');
-    const layerContext = await build5LayerContext(channelId, userId, lab?.id || null, message, intent);
-
-    const recentMessages = await prisma.message.findMany({
-      where: { channelId },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
+    const layerContext = await build5LayerContext(channelId, userId, lab?.id || null, message);
 
     // 사용자 메시지 저장
     await prisma.message.create({
       data: { channelId, userId, role: 'user', content: message },
     });
 
-    // AI 응답 생성
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
+    // ── Claude Tool-Use 기반 응답 생성 ──
     const userInstructions = lab?.instructions ? lab.instructions : null;
     const systemPrompt = buildCoreSystemPrompt({
       responseStyle: lab?.responseStyle,
       userInstructions,
     });
 
-    const sortedMessages = [...recentMessages].sort((a, b) =>
+    // Anthropic 메시지 빌드
+    const sortedMessages = [...contextMessages].sort((a, b) =>
       new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
-    const chatHistory = sortedMessages.map(m => ({
-      role: m.role === 'user' ? 'user' as const : 'model' as const,
-      parts: [{ text: m.content }],
-    }));
-
-    // ── 직접 반환 intent들 ──
-    const directPassthroughIntents = ['daily_brief', 'emerge', 'weekly_review'];
-    const isEmailBriefingDirect = intent === 'email_briefing' && narrativeBriefingSuccess && shadowResult;
-    const skipDirectDueToCorrection = correctionCheck.isCorrection;
-    const directResult = isEmailBriefingDirect ? shadowResult
-      : directPassthroughIntents.includes(intent) ? (dbResult || '데이터가 아직 충분하지 않습니다. 대화, 미팅, 이메일이 쌓이면 자동으로 제공됩니다.')
-      : dbResult;
-    if (!skipDirectDueToCorrection && (isEmailBriefingDirect || directPassthroughIntents.includes(intent)) && directResult) {
-      sendProgress('결과를 전달하고 있습니다...');
-      const responseText = directResult;
-
-      if (stream) {
-        const chunkSize = 80;
-        for (let i = 0; i < responseText.length; i += chunkSize) {
-          const chunk = responseText.slice(i, i + chunkSize);
-          try { reply.raw.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`); } catch {}
-        }
-      }
-
-      await prisma.message.create({
-        data: { channelId, userId, role: 'assistant', content: responseText },
-      });
-
-      if (stream) {
-        try {
-          reply.raw.write(`data: ${JSON.stringify({
-            type: 'done', response: responseText, channelId, intent,
-            isNewSession: !inputChannelId,
-          })}\n\n`);
-          reply.raw.end();
-        } catch {}
-        return;
-      }
-      return reply.send({ response: responseText, channelId, intent, isNewSession: !inputChannelId });
-    }
-
-    // 사용자 콘텐츠 조합
-    let userContent = message + fileContext;
-
-    if (correctionCheck.isCorrection && correctionCheck.previousAssistantMessage) {
-      userContent = `[사용자 정정] 사용자가 이전 답변의 오류를 지적하고 있습니다. 이전 답변이 틀렸음을 인정하고, 사용자의 정정 내용을 반영하여 다시 답변하세요.\n\n이전 답변 (틀린 내용 포함):\n${correctionCheck.previousAssistantMessage.substring(0, 1500)}\n\n사용자 정정:\n${userContent}`;
-    }
-
-    if (layerContext) {
-      userContent = `[참고 정보]\n${layerContext}\n\n${userContent}`;
-    }
-    if (toolResult) {
-      userContent = `${userContent}\n\n[도구 결과 — 이메일/캘린더/논문 API에서 가져온 데이터]\n${toolResult}`;
-    }
-    if (dbResult) {
-      userContent = `${userContent}\n\n[조회 결과 — 연구실 DB 검색 결과]\n${dbResult}`;
-    }
-
-    sendProgress('답변을 준비하고 있습니다...');
-
-    // ── 최종 응답: Claude Sonnet ──
     const anthropicMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
     for (const m of sortedMessages) {
       const role = m.role === 'user' ? 'user' as const : 'assistant' as const;
       if (anthropicMessages.length > 0 && anthropicMessages[anthropicMessages.length - 1].role === role) continue;
       anthropicMessages.push({ role, content: m.content });
     }
+
+    // 현재 메시지에 컨텍스트 주입
+    let userContent = message + fileContext;
+    if (layerContext) {
+      userContent = `[참고 정보 — 연구실 DB, 이전 대화, 지식그래프에서 자동 수집]\n${layerContext}\n\n${userContent}`;
+    }
+
     if (anthropicMessages.length > 0 && anthropicMessages[anthropicMessages.length - 1].role === 'user') {
       anthropicMessages[anthropicMessages.length - 1].content += '\n\n' + userContent;
     } else {
       anthropicMessages.push({ role: 'user', content: userContent });
     }
 
+    sendProgress('답변을 준비하고 있습니다...');
+
     let responseText = '';
+    let usedTools: string[] = [];
 
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
-      if (stream) {
-        const anthropicStream = anthropic.messages.stream({
+      const toolCtx = {
+        app, request, userId, labId: lab?.id || null,
+        sendProgress, stream: !!stream, reply,
+      };
+
+      // Tool-use 루프: Claude가 tool 호출을 멈출 때까지 반복
+      let messages: Anthropic.MessageParam[] = anthropicMessages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+
+      const MAX_TOOL_ROUNDS = 5;
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+        const response = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 4096,
           system: systemPrompt,
-          messages: anthropicMessages,
+          tools: TOOL_DEFINITIONS,
+          messages,
         });
 
-        for await (const event of anthropicStream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            const text = event.delta.text;
-            responseText += text;
-            try { reply.raw.write(`data: ${JSON.stringify({ type: 'token', content: text })}\n\n`); } catch {}
+        // 텍스트 블록 수집
+        const textBlocks = response.content.filter(b => b.type === 'text');
+        const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
+
+        if (textBlocks.length > 0) {
+          responseText += textBlocks.map(b => b.type === 'text' ? b.text : '').join('');
+        }
+
+        // tool 호출이 없으면 종료
+        if (response.stop_reason === 'end_turn' || toolUseBlocks.length === 0) {
+          break;
+        }
+
+        // tool 호출 실행
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        for (const toolBlock of toolUseBlocks) {
+          if (toolBlock.type !== 'tool_use') continue;
+          const toolName = toolBlock.name as any;
+          const toolInput = toolBlock.input as Record<string, any>;
+          usedTools.push(toolName);
+
+          try {
+            const result = await executeToolCall(toolName, toolInput, toolCtx);
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolBlock.id,
+              content: result,
+            });
+          } catch (err: any) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolBlock.id,
+              content: `도구 실행 실패: ${err.message}`,
+              is_error: true,
+            });
           }
         }
-      } else {
-        const result = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4096,
-          system: systemPrompt,
-          messages: anthropicMessages,
-        });
-        const textBlock = result.content.find(b => b.type === 'text');
-        responseText = textBlock && textBlock.type === 'text' ? textBlock.text : '';
+
+        // 다음 라운드를 위해 메시지에 추가
+        messages = [
+          ...messages,
+          { role: 'assistant' as const, content: response.content },
+          { role: 'user' as const, content: toolResults },
+        ];
       }
-      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet'], intent);
+
+      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet'], usedTools[0] || 'general_chat');
     } catch (sonnetErr: any) {
-      console.warn('[brain] Sonnet failed, falling back to Gemini Flash:', sonnetErr.message);
+      console.warn('[brain] Sonnet tool-use failed, falling back to Gemini Flash:', sonnetErr.message);
       sendProgress('대체 모델로 전환 중...');
+
+      // Gemini fallback (tool-use 없이 기본 대화)
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const chatHistory = sortedMessages.map(m => ({
+        role: m.role === 'user' ? 'user' as const : 'model' as const,
+        parts: [{ text: m.content }],
+      }));
 
       const chat = model.startChat({
         history: chatHistory,
@@ -876,14 +530,15 @@ export async function brainRoutes(app: FastifyInstance) {
         const result = await Promise.race([chat.sendMessage(userContent), geminiTimeout]);
         responseText = result.response.text();
       }
-      trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash'], intent);
+      trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash'], 'fallback');
     }
 
-    // 할루시네이션 검증
-    if (ragUsed && ragResultCount > 0) {
-      const validation = validateResponse(responseText, ragResultCount > 0);
-      if (!validation.isGrounded && validation.warning) {
-        responseText += `\n\n[주의] ${validation.warning}`;
+    // Stream text if Sonnet was used (Gemini already streamed above)
+    if (stream && usedTools.length >= 0 && responseText && !responseText.startsWith('[streamed]')) {
+      const chunkSize = 80;
+      for (let i = 0; i < responseText.length; i += chunkSize) {
+        const chunk = responseText.slice(i, i + chunkSize);
+        try { reply.raw.write(`data: ${JSON.stringify({ type: 'token', content: chunk })}\n\n`); } catch {}
       }
     }
 
@@ -906,55 +561,15 @@ export async function brainRoutes(app: FastifyInstance) {
       autoExtractInfo(message, responseText, lab.id).catch((err: any) => console.error('[background] autoExtractInfo:', err.message || err));
     }
 
-    // 자동 캡처 감지
-    let autoCaptured: { type: string; summary: string } | null = null;
-    if (lab && !['capture_create', 'capture_list', 'capture_complete', 'save_memo'].includes(intent)) {
-      const { shouldAutoCapture, classifyCapture, typeToCategory, urgencyToPriority } = await import('../services/capture-classifier.js');
-      const autoType = shouldAutoCapture(message);
-      if (autoType) {
-        try {
-          const classification = await classifyCapture(message);
-          if (classification.confidence >= 0.6) {
-            await prisma.capture.create({
-              data: {
-                userId,
-                labId: lab.id,
-                content: message,
-                summary: classification.summary,
-                category: typeToCategory(classification.type),
-                tags: classification.tags,
-                priority: urgencyToPriority(classification.urgency),
-                confidence: classification.confidence,
-                actionDate: classification.dueDate ? new Date(classification.dueDate) : null,
-                modelUsed: 'gemini-flash-auto',
-                sourceType: 'text',
-                status: 'active',
-                reviewed: false,
-              },
-            });
-            autoCaptured = { type: classification.type, summary: classification.summary };
-            const label = classification.type === 'task' ? '[할일]' : '[아이디어]';
-            const indicator = `\n\n---\n${label} ${classification.type === 'task' ? '할일' : '아이디어'} 자동 저장됨: "${classification.summary}"`;
-            responseText += indicator;
-            await prisma.message.updateMany({
-              where: { channelId, role: 'assistant' },
-              data: { content: responseText },
-            });
-          }
-        } catch (err) {
-          console.warn('Auto-capture failed:', err);
-        }
-      }
-    }
-
+    const intent = usedTools[0] || 'general_chat';
     const payload = {
       response: responseText,
       channelId,
       intent,
       isNewSession,
-      multiHop: intent === 'multi_hop',
-      dbResult: dbResult ? true : false,
-      autoCaptured,
+      multiHop: usedTools.length > 1,
+      dbResult: usedTools.length > 0,
+      autoCaptured: null as { type: string; summary: string } | null,
     };
 
     if (stream) {
