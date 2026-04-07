@@ -27,7 +27,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
+import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
@@ -1610,7 +1610,7 @@ ${emailDataForPrompt.join('\n\n')}`,
             }],
           });
 
-          trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet'], 'email_briefing');
+          trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage), 'email_briefing');
           const textBlock = response.content.find(b => b.type === 'text');
           markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
         } catch (err: any) {

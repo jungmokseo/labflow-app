@@ -17,7 +17,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { basePrismaClient } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { aiRateLimiter, trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
+import { aiRateLimiter, trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
 import { hybridSearch, rerank, validateResponse, isRagReady, embedAndStore } from '../services/rag-engine.js';
 import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
@@ -442,6 +442,10 @@ export async function brainRoutes(app: FastifyInstance) {
           messages,
         });
 
+        // 매 라운드 실제 토큰 기반 비용 추적
+        const roundCost = calculateAnthropicCost('claude-sonnet', response.usage);
+        trackAICost(userId, 'claude-sonnet', roundCost, usedTools[usedTools.length - 1] || 'general_chat');
+
         // 텍스트 블록 수집
         const textBlocks = response.content.filter(b => b.type === 'text');
         const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
@@ -487,8 +491,6 @@ export async function brainRoutes(app: FastifyInstance) {
           { role: 'user' as const, content: toolResults },
         ];
       }
-
-      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet'], usedTools[0] || 'general_chat');
     } catch (sonnetErr: any) {
       console.warn('[brain] Sonnet tool-use failed, falling back to Gemini Flash:', sonnetErr.message);
       sendProgress('대체 모델로 전환 중...');

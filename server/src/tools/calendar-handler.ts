@@ -232,8 +232,8 @@ ${context}`;
         system: systemPrompt,
         messages: [{ role: 'user', content: message }],
       });
-      const { trackAICost, COST_PER_CALL } = await import('../middleware/rate-limiter.js');
-      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
+      const { trackAICost, calculateAnthropicCost } = await import('../middleware/rate-limiter.js');
+      trackAICost(userId, 'claude-opus', calculateAnthropicCost('claude-opus', response.usage));
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') {
         return { response: text.text, intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length, model: 'opus' } };

@@ -24,7 +24,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
+import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
@@ -455,7 +455,7 @@ ${correctionDict}
       ],
     });
 
-    if (userId) trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
+    if (userId) trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage));
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in Sonnet response');
 
