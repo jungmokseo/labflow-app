@@ -99,12 +99,23 @@ export async function handleEmailRead(
   sendProgress: (step: string) => void,
 ): Promise<string> {
   try {
-    const searchTerms = entities.subject || entities.sender || entities.content || '';
+    // 검색어: entities에서 먼저, 없으면 사용자 메시지에서 직접 추출
+    let searchTerms = entities.subject || entities.sender || entities.content || '';
+    if (!searchTerms) {
+      // 메시지에서 키워드 추출: "GitHub 이메일 자세히" → "GitHub"
+      const cleaned = message
+        .replace(/이메일|메일|email|자세히|보여줘|보여|원문|전문|전체|내용|읽어|확인|최근|가장/gi, '')
+        .trim();
+      if (cleaned.length > 0) {
+        searchTerms = cleaned;
+      }
+    }
     const queryParam = searchTerms ? `&q=${encodeURIComponent(searchTerms)}` : '';
 
+    // 먼저 5건을 가져와서 복수 결과 처리
     const emailRes = await app.inject({
       method: 'GET',
-      url: `/api/email/messages/recent?limit=3${queryParam}`,
+      url: `/api/email/messages/recent?limit=5${queryParam}`,
       headers: {
         authorization: request.headers.authorization || '',
         'content-type': 'application/json',
@@ -113,11 +124,46 @@ export async function handleEmailRead(
     });
 
     const emailData = JSON.parse(emailRes.body);
-    if (emailData.emails && emailData.emails.length > 0) {
-      sendProgress('이메일 내용을 가져오고 있습니다...');
-      const emailTexts = emailData.emails.map((e: any, i: number) => {
-        return `--- 이메일 ${i + 1} ---
-**발신자:** ${e.from}
+    if (!emailData.emails || emailData.emails.length === 0) {
+      return searchTerms
+        ? `"${searchTerms}" 관련 이메일을 찾을 수 없습니다.`
+        : '최근 이메일이 없습니다.';
+    }
+
+    sendProgress('이메일 내용을 가져오고 있습니다...');
+    const emails = emailData.emails;
+
+    if (emails.length === 1) {
+      // 1건: 바로 전문 표시
+      const e = emails[0];
+      const result = formatEmailFull(e);
+      const shadowChannelId = await getOrCreateShadow(userId, 'email');
+      saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(() => {});
+      return result;
+    }
+
+    // 복수 결과: 목록 + 가장 최신 1건 전문
+    // (최신순 정렬 — API가 최신순이면 [0]이 가장 최신)
+    const listSection = emails.map((e: any, i: number) =>
+      `${i + 1}. **${e.subject}** — ${(e.from || '').split('<')[0].trim()} (${e.date})`
+    ).join('\n');
+
+    const newest = emails[0];
+    const fullSection = formatEmailFull(newest);
+
+    const result = `"${searchTerms || '최근'}" 관련 이메일 **${emails.length}건** 발견:\n\n${listSection}\n\n---\n\n**가장 최신 이메일 전문:**\n\n${fullSection}\n\n---\n다른 이메일을 보려면 번호나 제목을 알려주세요.`;
+
+    const shadowChannelId = await getOrCreateShadow(userId, 'email');
+    saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(() => {});
+    return result;
+  } catch (err: any) {
+    console.error('[brain] email_read error:', err.message);
+    return `이메일 조회 실패: ${err.message}`;
+  }
+}
+
+function formatEmailFull(e: any): string {
+  return `**발신자:** ${e.from}
 **수신자:** ${e.to}
 **날짜:** ${e.date}
 **제목:** ${e.subject}
@@ -127,21 +173,6 @@ ${e.cc ? `**참조:** ${e.cc}` : ''}
 
 **본문:**
 ${e.body?.slice(0, 3000) || '(본문 없음)'}`;
-      }).join('\n\n');
-
-      const result = `최근 이메일 ${emailData.emails.length}건:\n\n${emailTexts}`;
-
-      const shadowChannelId = await getOrCreateShadow(userId, 'email');
-      saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(() => {});
-
-      return result;
-    } else {
-      return '최근 이메일이 없습니다.';
-    }
-  } catch (err: any) {
-    console.error('[brain] email_read error:', err.message);
-    return `이메일 조회 실패: ${err.message}`;
-  }
 }
 
 /**
