@@ -247,7 +247,7 @@ async function parseRssFeed(url: string): Promise<RssItem[]> {
     const xml = await response.text();
     const items: RssItem[] = [];
     const itemMatches = xml.match(/<item[^>]*>[\s\S]*?<\/item>/gi) || [];
-    for (const itemXml of itemMatches.slice(0, 50)) {
+    for (const itemXml of itemMatches) {
       const title = itemXml.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim() || '';
       const link = itemXml.match(/<link[^>]*>([\s\S]*?)<\/link>/i)?.[1]?.trim() || '';
       const description = itemXml.match(/<description[^>]*>([\s\S]*?)<\/description>/i)?.[1]?.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').trim() || '';
@@ -275,6 +275,80 @@ function scoreByThemes(item: RssItem, themes: ResearchTheme[], flatKeywords: str
   const totalKw = flatKeywords.length + themes.reduce((s, t) => s + t.keywords.length, 0);
   const score = totalKw > 0 ? Math.min(1, (matchedThemes.length + flatMatchCount) / Math.max(totalKw * 0.3, 1)) : 0;
   return { stars, matchedThemes, score };
+}
+
+// ── AI Relevance Scoring (연구실 맥락 기반) ──────────
+async function aiRelevanceScore(
+  papers: Array<{ title: string; description: string; journal: string; matchedThemes: string[]; stars: number }>,
+  themes: ResearchTheme[],
+  labContext: string,
+): Promise<Map<string, { stars: number; reason: string }>> {
+  const results = new Map<string, { stars: number; reason: string }>();
+  if (papers.length === 0) return results;
+
+  // 배치로 처리 (최대 20편씩)
+  const batches: typeof papers[] = [];
+  for (let i = 0; i < papers.length; i += 20) {
+    batches.push(papers.slice(i, i + 20));
+  }
+
+  for (const batch of batches) {
+    const paperList = batch.map((p, i) =>
+      `[${i + 1}] "${p.title}" (${p.journal})\n    키워드 매칭 테마: ${p.matchedThemes.join(', ') || '없음'}\n    초록: ${p.description.slice(0, 300)}`
+    ).join('\n\n');
+
+    const prompt = `당신은 바이오센서/유연전자소자 분야 연구 논문 큐레이터입니다.
+
+아래는 연구실의 핵심 연구 테마입니다:
+${themes.map(t => `- ${t.name}: ${t.keywords.join(', ')}`).join('\n')}
+
+${labContext ? `연구실 추가 맥락:\n${labContext}\n` : ''}
+
+아래 논문들의 **실질적 관련도**를 평가하세요. 단순히 키워드가 포함되었다고 높은 점수를 주지 마세요.
+"이 논문의 방법론, 소재, 응용 분야가 우리 연구실의 연구 방향과 직접적으로 연관되는가?"를 판단하세요.
+
+${paperList}
+
+각 논문에 대해 다음 JSON 배열로만 응답하세요:
+[{"id": 1, "stars": 1~3, "reason": "관련 이유 한 줄"}]
+
+stars 기준:
+- 3: 연구실 핵심 테마와 직접 관련. 방법론이나 소재가 연구실에서 활용 가능.
+- 2: 관련 분야지만 간접적. 배경지식이나 비교 대상으로 유용.
+- 1: 키워드는 겹치지만 실질적 연관성 낮음. 다른 응용 분야.`;
+
+    try {
+      if (env.ANTHROPIC_API_KEY) {
+        const Anthropic = (await import('@anthropic-ai/sdk')).default;
+        const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+        const response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2048,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        const text = response.content.find(b => b.type === 'text');
+        if (text && text.type === 'text') {
+          const match = text.text.match(/\[[\s\S]*\]/);
+          if (match) {
+            const scored = JSON.parse(match[0]) as Array<{ id: number; stars: number; reason: string }>;
+            for (const s of scored) {
+              const paper = batch[s.id - 1];
+              if (paper) results.set(paper.title, { stars: Math.min(3, Math.max(1, s.stars)), reason: s.reason });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[paper-alert] AI relevance scoring failed, using keyword scores:', err);
+      // Fallback: 키워드 스코어 그대로 사용
+      for (const p of batch) {
+        results.set(p.title, { stars: p.stars, reason: '' });
+      }
+    }
+  }
+
+  return results;
 }
 
 // ── CrossRef ────────────────────────────────────────
@@ -473,12 +547,34 @@ export async function runPaperCrawl(
     } catch { return true; }
   });
 
-  // 스코어링 + 필터
-  const scored = afterTLast
+  // 1차 필터: 키워드 매칭 (빠른 pre-filter)
+  const keywordMatched = afterTLast
     .map(item => ({ ...item, ...scoreByThemes(item, themes, flatKeywords) }))
     .filter(item => item.stars > 0)
-    .sort((a, b) => b.stars - a.stars || b.score - a.score)
-    .slice(0, 30);
+    .sort((a, b) => b.stars - a.stars || b.score - a.score);
+
+  // 2차 필터: AI 관련도 평가 (연구실 맥락 기반)
+  let labContext = '';
+  try {
+    const labData = await prisma.lab.findFirst({
+      where: { id: alert.id },
+      include: { projects: { where: { status: 'active' }, take: 5 }, publications: { take: 5, orderBy: { year: 'desc' } } },
+    });
+    if (labData) {
+      const parts: string[] = [];
+      if (labData.projects.length > 0) parts.push(`진행 과제: ${labData.projects.map(p => p.name).join(', ')}`);
+      if (labData.publications.length > 0) parts.push(`최근 논문: ${labData.publications.map(p => p.title).join(', ')}`);
+      labContext = parts.join('\n');
+    }
+  } catch { /* ignore */ }
+
+  const aiScores = await aiRelevanceScore(keywordMatched, themes, labContext);
+
+  // AI 스코어 적용 (AI 결과 있으면 교체, 없으면 키워드 스코어 유지)
+  const scored = keywordMatched.map(item => {
+    const aiResult = aiScores.get(item.title);
+    return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : item;
+  }).sort((a, b) => b.stars - a.stars || b.score - a.score).slice(0, 30);
 
   // 저장 (제목 기반 중복 제거 + CrossRef + AI 요약)
   let savedCount = 0;
