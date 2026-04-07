@@ -515,7 +515,7 @@ function guessRssUrl(source: any): string | null {
 // ── 크롤링 실행 함수 (라우트 + cron 공용) ────────────
 export async function runPaperCrawl(
   alert: { id: string; keywords: string[]; journals: string[]; customFeeds: any; lastRunAt: Date | null },
-  lab: { researchThemes: any },
+  lab: { id: string; researchThemes: any },
 ) {
   const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
   const flatKeywords = alert.keywords as string[];
@@ -556,17 +556,18 @@ export async function runPaperCrawl(
   // 2차 필터: AI 관련도 평가 (연구실 맥락 기반)
   let labContext = '';
   try {
-    const labData = await prisma.lab.findFirst({
-      where: { id: alert.id },
-      include: { projects: { where: { status: 'active' }, take: 5 }, publications: { take: 5, orderBy: { year: 'desc' } } },
+    const labData = await prisma.lab.findUnique({
+      where: { id: lab.id },
+      include: { projects: { where: { status: 'active' }, take: 10 }, publications: { take: 10, orderBy: { year: 'desc' } } },
     });
     if (labData) {
       const parts: string[] = [];
-      if (labData.projects.length > 0) parts.push(`진행 과제: ${labData.projects.map(p => p.name).join(', ')}`);
+      if (labData.researchFields?.length > 0) parts.push(`연구 분야: ${labData.researchFields.join(', ')}`);
+      if (labData.projects.length > 0) parts.push(`진행 과제: ${labData.projects.map(p => `${p.name}(${p.funder || ''})`).join(', ')}`);
       if (labData.publications.length > 0) parts.push(`최근 논문: ${labData.publications.map(p => p.title).join(', ')}`);
       labContext = parts.join('\n');
     }
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[paper-alert] Lab context fetch failed:', err); }
 
   const aiScores = await aiRelevanceScore(keywordMatched, themes, labContext);
 
