@@ -260,6 +260,15 @@ async function parseRssFeed(url: string): Promise<RssItem[]> {
   } catch { return []; }
 }
 
+// ── 기본 연구 테마 (Lab researchThemes 없을 때 fallback) ──
+const DEFAULT_RESEARCH_THEMES: ResearchTheme[] = [
+  { name: 'Liquid Metal', keywords: ['liquid metal', 'gallium', 'EGaIn', 'galinstan', 'LM particle', 'LM nanoparticle', 'liquid-metal', 'spray printing', 'Marangoni', 'self-fusion', 'stretchable electrode', 'deformable conductor', 'liquid metal composite', 'liquid metal alloy', 'room temperature liquid metal', 'liquid metal droplet', 'gallium-based'] },
+  { name: '하이드로겔', keywords: ['hydrogel', 'PVA hydrogel', 'PAA hydrogel', 'double network hydrogel', 'self-healing hydrogel', 'hemostasis', 'hemostatic', 'wound healing', 'wound dressing', 'tough hydrogel', 'conductive hydrogel', 'injectable hydrogel', 'hydrogel sensor', 'hydrogel patch', 'adhesive hydrogel', 'ionic hydrogel', 'stretchable hydrogel', 'bioelectronic hydrogel', 'wearable hydrogel'] },
+  { name: 'Antifouling Coating', keywords: ['antifouling', 'anti-fouling', 'biofouling', 'biofilm', 'lubricant-infused', 'lubricated surface', 'slippery surface', 'SLIPS', 'liquid-infused', 'omniphobic', 'implant coating', 'antibacterial coating', 'antimicrobial surface', 'fouling resistant', 'non-fouling', 'zwitterionic coating'] },
+  { name: '이종소재 접착제', keywords: ['tissue adhesive', 'bioadhesive', 'bio-adhesive', 'dopamine adhesive', 'mussel-inspired adhesive', 'catechol adhesive', 'chain entanglement', 'heterogeneous bonding', 'dissimilar material bonding', 'universal adhesive', 'underwater adhesive', 'wet adhesion', 'tough adhesion', 'surgical adhesive', 'wound closure adhesive', 'sealant adhesive'] },
+  { name: 'Neuromorphic Device', keywords: ['neuromorphic', 'memristor', 'memristive', 'synaptic device', 'synaptic transistor', 'in-memory computing', 'resistive switching', 'artificial synapse', 'spiking neural', 'brain-inspired computing', 'reservoir computing', 'neural interface', 'brain-computer interface', 'neural recording', 'neural electrode'] },
+];
+
 // ── Theme scoring ───────────────────────────────────
 interface ResearchTheme { name: string; keywords: string[]; }
 
@@ -522,7 +531,12 @@ export async function runPaperCrawl(
   alert: { id: string; keywords: string[]; journals: string[]; customFeeds: any; lastRunAt: Date | null },
   lab: { id: string; researchThemes: any },
 ) {
-  const themes = (lab.researchThemes as ResearchTheme[] | null) || [];
+  // Lab researchThemes 사용, 없거나 키워드가 부족하면 기본 5대 테마로 fallback
+  let themes = (lab.researchThemes as ResearchTheme[] | null) || [];
+  const totalThemeKeywords = themes.reduce((s, t) => s + (t.keywords?.length || 0), 0);
+  if (themes.length === 0 || totalThemeKeywords < 10) {
+    themes = DEFAULT_RESEARCH_THEMES;
+  }
   const flatKeywords = alert.keywords as string[];
 
   // T_last: lastRunAt 이후 논문만 수집 (첫 실행이면 최근 2주)
