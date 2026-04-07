@@ -147,10 +147,7 @@ export async function createMeetingDoc(
     sections.push(meeting.nextSteps.map(n => `• ${n}`).join('\n'));
   }
 
-  if (meeting.transcription) {
-    sections.push('\n---\n전사 원문');
-    sections.push(meeting.transcription);
-  }
+  // 전사 원문은 Google Docs에 포함하지 않음 (너무 길고 불필요)
 
   const content = sections.join('\n\n');
   return createGoogleDoc(userId, title, content);
