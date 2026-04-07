@@ -152,6 +152,17 @@ async function getCachedLabContext(labId: string): Promise<string> {
   return context;
 }
 
+// Intent → 관련 Shadow 타입 매핑 (관련 없는 Shadow는 컨텍스트에서 제외)
+function getRelevantShadowTypes(intent?: string): Set<string> | null {
+  if (!intent) return null; // intent 없으면 전체 로드
+  const emailIntents = ['email_briefing', 'email_query', 'email_read', 'email_reply_draft', 'email_preference'];
+  const calendarIntents = ['calendar_query', 'calendar_create'];
+  if (emailIntents.includes(intent)) return new Set(['email']);
+  if (calendarIntents.includes(intent)) return new Set(['calendar']);
+  // general_chat, query_*, multi_hop 등은 전체 Shadow 참조 허용
+  return null;
+}
+
 async function build5LayerContext(channelId: string, userId: string, labId: string | null, query?: string, intent?: string): Promise<string> {
   const [summaries, labContext, shadows] = await Promise.all([
     prisma.channelSummary.findMany({
@@ -178,7 +189,12 @@ async function build5LayerContext(channelId: string, userId: string, labId: stri
   }
 
   if (shadows.length > 0) {
-    const shadowResults = await Promise.all(shadows.map(async (shadow) => {
+    const relevantTypes = getRelevantShadowTypes(intent);
+    const filteredShadows = relevantTypes
+      ? shadows.filter(s => relevantTypes.has(s.shadowType || ''))
+      : shadows;
+
+    const shadowResults = await Promise.all(filteredShadows.map(async (shadow) => {
       const [shadowSummary, recentShadowMsgs] = await Promise.all([
         prisma.channelSummary.findFirst({
           where: { channelId: shadow.id },

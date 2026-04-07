@@ -64,20 +64,9 @@ export async function handleCalendarQuery(
       pendingInfo ? `\n[등록 대기 중 일정]\n${pendingInfo}` : '',
     ].filter(Boolean).join('\n');
 
-    let emailContext = '';
-    try {
-      const recentBriefing = await prisma.memo.findFirst({
-        where: { userId, source: 'email-briefing', tags: { has: 'narrative' } },
-        orderBy: { createdAt: 'desc' },
-      });
-      if (recentBriefing) {
-        emailContext = `\n[최근 이메일 브리핑 요약 (일정 관련 참고용)]\n${recentBriefing.content.slice(0, 2000)}`;
-      }
-    } catch {}
-
     const calendarData = `## 캘린더 데이터 (${tzLabel} 기준, ${todayStr})
 
-${calContext}${emailContext}
+${calContext}
 
 [형식 지시] 위 일정 데이터를 아래 형식으로 정리하여 사용자에게 답변하세요:
 - 각 일정은 별도 불릿(-)으로, 빈 줄로 구분
