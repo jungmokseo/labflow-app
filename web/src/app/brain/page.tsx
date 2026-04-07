@@ -549,7 +549,7 @@ export default function BrainPage() {
   }
 
   function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -833,52 +833,62 @@ export default function BrainPage() {
                   </span>
                 </div>
               )}
-              <div className="px-4 pb-4 pt-3 flex gap-2 max-w-4xl mx-auto w-full">
+              <div className="px-4 pb-4 pt-3 max-w-4xl mx-auto w-full">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden"
                   accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="px-3 py-3 bg-bg-input text-text-muted rounded-xl hover:text-text-heading hover:bg-bg-hover/80 transition-colors disabled:opacity-50"
-                  title="파일 업로드"
-                >
-                  {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
-                </button>
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={handleTextareaChange}
-                  onKeyDown={handleTextareaKeyDown}
-                  placeholder="메시지를 입력하세요... (Shift+Enter로 줄바꿈)"
-                  rows={1}
-                  className="flex-1 bg-bg-input text-text-heading px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-bg-input/80 transition-all resize-none min-h-[48px] max-h-[200px]"
-                />
-                {/* Voice input button */}
-                <button
-                  onClick={isRecording ? stopRecording : startRecording}
-                  className={`px-3 py-3 rounded-xl transition-colors ${
-                    isRecording
-                      ? 'bg-red-500 text-text-heading animate-pulse'
-                      : 'bg-bg-input text-text-muted hover:text-text-heading hover:bg-bg-hover/80'
-                  }`}
-                  title={isRecording ? `녹음 중지 (${formatRecordingTime(recordingTime)})` : '음성 입력'}
-                >
-                  {isRecording ? (
-                    <div className="flex items-center gap-1.5">
-                      <MicOff className="w-5 h-5" />
-                      <span className="text-xs font-mono">{formatRecordingTime(recordingTime)}</span>
+                {/* 텍스트 입력 영역 (Claude 스타일) */}
+                <div className="bg-bg-input rounded-2xl border border-border/30 focus-within:ring-2 focus-within:ring-primary/50 transition-all">
+                  <textarea
+                    ref={textareaRef}
+                    value={input}
+                    onChange={handleTextareaChange}
+                    onKeyDown={handleTextareaKeyDown}
+                    placeholder="메시지를 입력하세요..."
+                    rows={2}
+                    className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[72px] max-h-[200px]"
+                  />
+                  {/* 하단 도구 바 */}
+                  <div className="flex items-center justify-between px-3 pb-2">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="p-2 text-text-muted rounded-lg hover:text-text-heading hover:bg-bg-hover/50 transition-colors disabled:opacity-50"
+                        title="파일 업로드"
+                      >
+                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={isRecording ? stopRecording : startRecording}
+                        className={`p-2 rounded-lg transition-colors ${
+                          isRecording
+                            ? 'bg-red-500 text-white animate-pulse'
+                            : 'text-text-muted hover:text-text-heading hover:bg-bg-hover/50'
+                        }`}
+                        title={isRecording ? `녹음 중지 (${formatRecordingTime(recordingTime)})` : '음성 입력'}
+                      >
+                        {isRecording ? (
+                          <div className="flex items-center gap-1">
+                            <MicOff className="w-4 h-4" />
+                            <span className="text-xs font-mono">{formatRecordingTime(recordingTime)}</span>
+                          </div>
+                        ) : (
+                          <Mic className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
-                  ) : (
-                    <Mic className="w-5 h-5" />
-                  )}
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={loading || !input.trim()}
-                  className="px-5 py-3 bg-primary text-white rounded-xl text-sm font-medium disabled:opacity-50 hover:bg-primary/90"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted/50">Shift+Enter 줄바꿈</span>
+                      <button
+                        onClick={handleSend}
+                        disabled={loading || !input.trim()}
+                        className="p-2 bg-primary text-white rounded-lg disabled:opacity-30 hover:bg-primary/90 transition-colors"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </>
