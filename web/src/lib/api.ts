@@ -288,6 +288,14 @@ export async function deleteMeeting(id: string) {
   return apiFetch<{ success: boolean }>(`/api/meetings/${id}`, { method: 'DELETE' });
 }
 
+export async function exportMeetingToGDocs(id: string) {
+  return apiFetch<{ success: boolean; docUrl?: string; docId?: string; error?: string }>(`/api/meetings/${id}/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+}
+
 export async function uploadMeetingAudio(
   audio: File,
   opts?: { title?: string; duration?: number }
@@ -688,6 +696,8 @@ export interface PaperAlertResult {
   read: boolean;
   theme: string | null;
   aiSummary?: string;
+  aiReason?: string;
+  matchedKeywords?: string[];
   publishedAt: string | null;
   createdAt: string;
 }

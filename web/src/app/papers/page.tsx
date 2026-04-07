@@ -75,10 +75,12 @@ function getThemeIcon(theme: string): React.ReactNode {
 interface WeekGroup {
   label: string;
   papers: PaperAlertResult[];
-  themes: Map<string, PaperAlertResult[]>;
-  totalFetched?: number;
+  themes: Map<string, PaperAlertResult[]>;       // ★2-3 논문만
+  otherPapers: PaperAlertResult[];                // ★1 기타 논문
+  totalFetched: number | null;
   journals: string[];
-  insight: string;
+  insight: string;                                // 클라이언트 생성 (fallback)
+  aiInsight: string | null;                       // AI 생성 시사점 (서버)
 }
 
 export default function PapersPage() {
@@ -117,6 +119,8 @@ export default function PapersPage() {
     ? resultsResponse
     : (resultsResponse as any)?.results || (resultsResponse as any)?.data || [];
   const apiJournals: string[] = Array.isArray(resultsResponse) ? [] : ((resultsResponse as any)?.journals || []);
+  const apiTotalFetched: number | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.totalFetched || null);
+  const apiWeeklyInsight: string | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.weeklyInsight || null);
 
   useEffect(() => { loadAlerts(); }, []);
 
@@ -202,13 +206,20 @@ export default function PapersPage() {
         return dateB.getTime() - dateA.getTime();
       })
       .map(([label, papers]) => {
-        // 테마별 분류 — 중복 제거: 논문을 첫 번째(가장 관련 높은) 테마에만 배치
+        // 테마별 분류 — ★2-3만 테마 섹션, ★1은 기타 논문
         const themes = new Map<string, PaperAlertResult[]>();
+        const otherPapers: PaperAlertResult[] = [];
         const assigned = new Set<string>();
         // 별점 높은 논문 먼저 배치
         const sorted = [...papers].sort((a, b) => ((b as any).stars || 1) - ((a as any).stars || 1));
         for (const p of sorted) {
           if (assigned.has(p.id)) continue;
+          const stars = (p as any).stars || 1;
+          if (stars === 1) {
+            otherPapers.push(p);
+            assigned.add(p.id);
+            continue;
+          }
           const pThemes = ((p as any).themes as string[]) || ['기타'];
           const primaryTheme = pThemes[0];
           if (!themes.has(primaryTheme)) themes.set(primaryTheme, []);
@@ -275,7 +286,7 @@ export default function PapersPage() {
           Array.from(themes.entries()).sort((a, b) => b[1].length - a[1].length)
         );
 
-        return { label, papers, themes: sortedThemes, journals, insight };
+        return { label, papers, themes: sortedThemes, otherPapers, totalFetched: apiTotalFetched, journals, insight, aiInsight: apiWeeklyInsight };
       });
   })();
 
@@ -481,16 +492,20 @@ export default function PapersPage() {
             <div className="text-sm text-text-muted space-y-1">
               <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
               <p>
-                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널{crawlStats ? <> · 총 <strong className="text-text-heading">{crawlStats.totalFetched.toLocaleString()}편</strong> 중</> : ' RSS에서'} <strong className="text-primary">{week.papers.length}편</strong> 관련 논문 선별
-                {' · '}
-                {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
+                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서{week.totalFetched ? <> 총 <strong className="text-text-heading">{week.totalFetched.toLocaleString()}편</strong> 수집,</> : ''} <strong className="text-primary">{week.papers.length}편</strong> 관련 논문 선별
+                {Array.from(week.themes.entries()).length > 0 && <>
+                  {' · 테마별: '}
+                  {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
+                </>}
+                {week.otherPapers.length > 0 && <>, 기타({week.otherPapers.length})</>}
               </p>
             </div>
-            {/* 핵심 시사점 */}
-            {week.insight && (
+            {/* AI 생성 핵심 시사점 (서버에서 생성) */}
+            {(week.aiInsight || week.insight) && (
               <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3">
+                <p className="text-xs font-medium text-primary mb-1.5">핵심 시사점</p>
                 <p className="text-sm text-text-heading leading-relaxed">
-                  <span className="font-semibold text-primary">시사점</span> — {week.insight.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+                  {(week.aiInsight || week.insight).split(/(\*\*[^*]+\*\*)/).map((part, i) =>
                     part.startsWith('**') && part.endsWith('**')
                       ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
                       : part
@@ -500,7 +515,7 @@ export default function PapersPage() {
             )}
           </div>
 
-          {/* 테마별 섹션 */}
+          {/* 테마별 섹션 (★2-3 논문) */}
           {Array.from(week.themes.entries()).map(([theme, papers]) => (
             <div key={theme} className="bg-bg-card rounded-xl border border-border p-5">
               <h3 className="text-primary font-semibold text-base mb-2 flex items-center gap-1.5">
@@ -549,6 +564,14 @@ export default function PapersPage() {
                               ) : null}
                             </p>
                           )}
+                          {/* ★2 확인 추천 코멘트 */}
+                          {stars === 2 && (paper as any).aiReason && (
+                            <div className="bg-orange-500/8 border border-orange-500/15 rounded-md px-3 py-2">
+                              <p className="text-xs text-orange-300">
+                                <span className="font-semibold">확인 추천</span> — {(paper as any).aiReason}
+                              </p>
+                            </div>
+                          )}
                           {paper.aiSummary && (
                             <p className="text-sm text-text-main leading-relaxed">{paper.aiSummary}</p>
                           )}
@@ -565,6 +588,51 @@ export default function PapersPage() {
               </div>
             </div>
           ))}
+
+          {/* 기타 논문 섹션 (★1) */}
+          {week.otherPapers.length > 0 && (
+            <div className="bg-bg-card/60 rounded-xl border border-border/50 p-5">
+              <h3 className="text-text-muted font-semibold text-base mb-2 flex items-center gap-1.5">
+                <FileText className="w-4 h-4" /> 기타 논문 ({week.otherPapers.length}편)
+              </h3>
+              <p className="text-xs text-text-muted/70 mb-3">동향 파악용 — 키워드 매칭되었으나 직접 연관은 낮은 논문</p>
+              <div className="space-y-1">
+                {week.otherPapers.map(paper => {
+                  const isOpen = expandedPapers.has(paper.id);
+                  return (
+                    <div key={paper.id}>
+                      <button
+                        onClick={() => togglePaper(paper.id)}
+                        className="w-full flex items-center gap-2 text-left py-1.5 px-3 rounded-lg hover:bg-bg-hover/20 transition-colors"
+                      >
+                        {isOpen ? <ChevronDown className="w-3 h-3 text-text-muted/50 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-text-muted/50 flex-shrink-0" />}
+                        <span className="flex-1 min-w-0 text-sm text-text-muted truncate">{paper.title}</span>
+                        <span className="text-xs text-text-muted/50 flex-shrink-0">({paper.journal})</span>
+                        <span className="text-xs text-gray-500 flex-shrink-0 flex items-center gap-0.5"><StarRating count={1} className="text-gray-500" /> 참고</span>
+                      </button>
+                      {isOpen && (
+                        <div className="ml-7 mb-2 pl-4 border-l-2 border-border/30 space-y-1.5">
+                          <p className="text-xs text-text-muted">
+                            {paper.journal}
+                            {(paper as any).pubDate && <> | {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
+                            {((paper as any).doi || paper.url) && <>
+                              {' | '}<Link2 className="w-3 h-3 inline" />{' '}
+                              {(paper as any).doi ? (
+                                <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
+                              ) : paper.url ? (
+                                <a href={paper.url} target="_blank" rel="noopener" className="text-primary hover:underline">링크</a>
+                              ) : null}
+                            </>}
+                          </p>
+                          {paper.aiSummary && <p className="text-xs text-text-muted/80">{paper.aiSummary}</p>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>

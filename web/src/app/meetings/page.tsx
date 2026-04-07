@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, Meeting } from '@/lib/api';
+import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, exportMeetingToGDocs, Meeting } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -541,10 +541,12 @@ export default function MeetingsPage() {
 
                   {expanded && (
                     <div className="px-4 pb-4 border-t border-border pt-4">
-                      {/* Notion 스타일 회의록 렌더링 */}
+                      {/* Notion 스타일 회의록 렌더링 — 액션 아이템은 아래 체크리스트로 표시하므로 요약에서 제거 */}
                       {m.summary && (
                         <div className="notion-note">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.summary}</ReactMarkdown>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {m.summary.replace(/##\s*액션\s*아이템[\s\S]*?(?=\n##\s|\n---|\n$|$)/, '').trim()}
+                          </ReactMarkdown>
                         </div>
                       )}
 
@@ -577,9 +579,7 @@ export default function MeetingsPage() {
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
-                              const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
-                              const res = await fetch(`${API_BASE}/api/meetings/${m.id}/export`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                              const data = await res.json();
+                              const data = await exportMeetingToGDocs(m.id);
                               if (data.success && data.docUrl) {
                                 window.open(data.docUrl, '_blank');
                               } else {

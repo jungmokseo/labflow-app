@@ -294,7 +294,7 @@ async function aiRelevanceScore(
 
   for (const batch of batches) {
     const paperList = batch.map((p, i) =>
-      `[${i + 1}] "${p.title}" (${p.journal})\n    키워드 매칭 테마: ${p.matchedThemes.join(', ') || '없음'}\n    초록: ${p.description.slice(0, 300)}`
+      `[${i + 1}] "${p.title}" (${p.journal})\n    키워드 스코어: ★${p.stars} (매칭 테마: ${p.matchedThemes.join(', ') || '없음'})\n    초록: ${p.description.slice(0, 400)}`
     ).join('\n\n');
 
     const prompt = `당신은 바이오센서/유연전자소자 분야 연구 논문 큐레이터입니다.
@@ -304,18 +304,23 @@ ${themes.map(t => `- ${t.name}: ${t.keywords.join(', ')}`).join('\n')}
 
 ${labContext ? `연구실 추가 맥락:\n${labContext}\n` : ''}
 
-아래 논문들의 **실질적 관련도**를 평가하세요. 단순히 키워드가 포함되었다고 높은 점수를 주지 마세요.
-"이 논문의 방법론, 소재, 응용 분야가 우리 연구실의 연구 방향과 직접적으로 연관되는가?"를 판단하세요.
+아래 논문들은 키워드 매칭으로 사전 필터링되었으며, 각 논문에 **키워드 스코어**(참고값)가 표시되어 있습니다.
+이 스코어를 참고하되, 논문의 실제 내용(방법론, 소재, 응용 분야)을 기반으로 관련도를 재평가하세요.
+
+**중요 지침:**
+- 키워드 스코어가 ★2~3인 논문은 명확한 이유가 없는 한 ★1로 강등하지 마세요.
+- 초록을 꼼꼼히 읽고, 소재/방법론/응용이 연구실 테마와 실질적으로 겹치는지 판단하세요.
+- ★2 논문에는 반드시 "이 논문의 어떤 부분이 연구실과 관련 있어서 확인을 추천하는지" 구체적으로 설명하세요.
 
 ${paperList}
 
 각 논문에 대해 다음 JSON 배열로만 응답하세요:
-[{"id": 1, "stars": 1~3, "reason": "관련 이유 한 줄"}]
+[{"id": 1, "stars": 1~3, "reason": "관련 이유 또는 확인 추천 코멘트 (2문장 이내)"}]
 
 stars 기준:
 - 3: 연구실 핵심 테마와 직접 관련. 방법론이나 소재가 연구실에서 활용 가능.
-- 2: 관련 분야지만 간접적. 배경지식이나 비교 대상으로 유용.
-- 1: 키워드는 겹치지만 실질적 연관성 낮음. 다른 응용 분야.`;
+- 2: 관련 분야이며 참고할 가치 있음. "이런 부분이 관련 있으니 확인 추천" 코멘트 필수.
+- 1: 같은 분야이나 직접 연관은 낮음. 동향 파악 목적.`;
 
     try {
       if (env.ANTHROPIC_API_KEY) {
@@ -574,8 +579,19 @@ export async function runPaperCrawl(
   // AI 스코어 적용 (AI 결과 있으면 교체, 없으면 키워드 스코어 유지)
   const scored = keywordMatched.map(item => {
     const aiResult = aiScores.get(item.title);
-    return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : item;
-  }).sort((a, b) => b.stars - a.stars || b.score - a.score).slice(0, 30);
+    return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : { ...item, aiReason: '' };
+  }).sort((a, b) => b.stars - a.stars || b.score - a.score).slice(0, 50); // ★1 포함해서 50편까지
+
+  // 매칭 키워드 추출 함수
+  function extractMatchedKeywords(item: { title: string; description: string }, themesArr: ResearchTheme[], flatKw: string[]): string[] {
+    const text = `${item.title} ${item.description}`.toLowerCase();
+    const matched: string[] = [];
+    for (const t of themesArr) {
+      for (const kw of t.keywords) { if (text.includes(kw.toLowerCase()) && !matched.includes(kw)) matched.push(kw); }
+    }
+    for (const kw of flatKw) { if (text.includes(kw.toLowerCase()) && !matched.includes(kw)) matched.push(kw); }
+    return matched;
+  }
 
   // 저장 (제목 기반 중복 제거 + CrossRef + AI 요약)
   let savedCount = 0;
@@ -588,23 +604,29 @@ export async function runPaperCrawl(
       if (cr?.abstract) enrichedAbstract = cr.abstract;
       if (cr?.authors) enrichedAuthors = cr.authors.join(', ');
     }
-    const summary = item.stars >= 2 ? await generatePaperSummary(item.title, enrichedAbstract, item.matchedThemes) : '';
+    // ★2+ 상세 요약, ★1 간단 요약
+    const summary = item.stars >= 2
+      ? await generatePaperSummary(item.title, enrichedAbstract, item.matchedThemes)
+      : enrichedAbstract.length > 50
+        ? enrichedAbstract.slice(0, 200).replace(/\s+\S*$/, '') + '…'
+        : '';
+
+    const mKeywords = extractMatchedKeywords(item, themes, flatKeywords);
 
     await prisma.paperAlertResult.create({
       data: {
         alertId: alert.id, title: item.title, authors: enrichedAuthors,
         journal: item.journal, pubDate: item.pubDate ? new Date(item.pubDate) : null,
         url: item.link, doi: item.doi, abstract: enrichedAbstract.slice(0, 3000),
-        aiSummary: summary, relevance: item.score, stars: item.stars, themes: item.matchedThemes,
+        aiSummary: summary, aiReason: (item as any).aiReason || null,
+        relevance: item.score, stars: item.stars, themes: item.matchedThemes,
+        matchedKeywords: mKeywords,
       },
     });
     savedCount++;
   }
 
-  // T_last 업데이트
-  await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: new Date() } });
-
-  // 주간 분석 생성 (Sonnet으로 전문 분석) — 결과에 포함하여 반환
+  // 주간 분석 생성 (Sonnet으로 전문 분석) — DB에 저장
   let weeklyInsight = '';
   if (scored.length > 0) {
     try {
@@ -613,6 +635,16 @@ export async function runPaperCrawl(
       console.warn('Weekly insight generation failed:', err);
     }
   }
+
+  // T_last 업데이트 + 통계/시사점 저장
+  await prisma.paperAlert.update({
+    where: { id: alert.id },
+    data: {
+      lastRunAt: new Date(),
+      lastTotalFetched: allItems.length,
+      lastWeeklyInsight: weeklyInsight || null,
+    },
+  });
 
   return {
     totalFetched: allItems.length,
@@ -870,7 +902,11 @@ export async function paperAlertRoutes(app: FastifyInstance) {
         grouped[t].push(r);
       }
     }
-    return { results, unreadCount, grouped, journals: alert.journals };
+    return {
+      results, unreadCount, grouped, journals: alert.journals,
+      totalFetched: alert.lastTotalFetched || null,
+      weeklyInsight: alert.lastWeeklyInsight || null,
+    };
   });
 
   // ── 읽음 표시 ────────────────────────────────────
