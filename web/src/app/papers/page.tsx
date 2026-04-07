@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults,
   getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
+  resetPaperAlertResults,
   type PaperAlertResult,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
@@ -422,7 +423,7 @@ export default function PapersPage() {
               className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
           </div>
 
-          {/* Schedule info */}
+          {/* Schedule info + Reset */}
           <div className="flex items-center justify-between bg-bg-input rounded-lg px-4 py-3">
             <div>
               <p className="text-sm text-text-heading font-medium">자동 수집 주기</p>
@@ -430,6 +431,17 @@ export default function PapersPage() {
             </div>
             <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">주간</span>
           </div>
+
+          <button onClick={async () => {
+            if (!confirm('기존 수집 결과를 모두 삭제하고 다시 수집합니다. 계속하시겠습니까?')) return;
+            try {
+              await resetPaperAlertResults();
+              refreshResults();
+              setShowSettings(false);
+            } catch { }
+          }} className="w-full py-2.5 text-red-400 border border-red-500/20 rounded-lg text-sm hover:bg-red-500/10 transition-colors">
+            결과 초기화 (설정 유지)
+          </button>
 
           <button onClick={() => {
             // Optimistic: close settings immediately

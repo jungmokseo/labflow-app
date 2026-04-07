@@ -872,4 +872,17 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     await prisma.paperAlertResult.update({ where: { id: request.params.id }, data: { read: true } });
     return { success: true };
   });
+
+  // ── 결과 초기화 (설정 유지, 결과만 삭제) ──────────
+  app.delete('/api/papers/alerts/results', async (request: FastifyRequest, reply: FastifyReply) => {
+    const lab = await prisma.lab.findUnique({ where: { ownerId: request.userId! } });
+    if (!lab) return reply.code(404).send({ error: '연구실을 먼저 설정해주세요.' });
+    const alert = await prisma.paperAlert.findFirst({ where: { labId: lab.id } });
+    if (!alert) return reply.code(404).send({ error: '논문 알림 설정이 없습니다.' });
+
+    const deleted = await prisma.paperAlertResult.deleteMany({ where: { alertId: alert.id } });
+    await prisma.paperAlert.update({ where: { id: alert.id }, data: { lastRunAt: null } });
+
+    return { success: true, deleted: deleted.count, message: '결과 초기화 완료. 다시 수집하면 최근 2주분을 새로 가져옵니다.' };
+  });
 }

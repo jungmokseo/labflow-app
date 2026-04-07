@@ -751,6 +751,10 @@ export async function getPaperAlertResults(alertId?: string) {
   return apiFetch<{ success: boolean; data: PaperAlertResult[]; results?: PaperAlertResult[]; unreadCount?: number }>(path);
 }
 
+export async function resetPaperAlertResults() {
+  return apiFetch<{ success: boolean; deleted: number; message: string }>('/api/papers/alerts/results', { method: 'DELETE' });
+}
+
 export async function markPaperRead(resultId: string) {
   return apiFetch<{ success: boolean }>(`/api/papers/alerts/results/${resultId}`, { method: 'PATCH' });
 }
