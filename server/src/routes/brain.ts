@@ -362,7 +362,16 @@ export async function brainRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    const contextMessages = recentCtx.reverse();
+    // 에러/실패 메시지를 컨텍스트에서 필터링 (과거 에러로 인한 도구 호출 포기 방지)
+    const ERROR_PATTERNS = [
+      '토큰이 만료', 'invalid_grant', 'invalid authentication', '인증이 필요',
+      '연동이 필요', '접근 장애', '기술적인 문제', '조회 실패', '실패했습니다',
+      'Token has been expired', 'ECONNREFUSED', 'ETIMEDOUT',
+    ];
+    const contextMessages = recentCtx.reverse().filter(m => {
+      if (m.role !== 'assistant') return true;
+      return !ERROR_PATTERNS.some(p => m.content.includes(p));
+    });
 
     // ── 5층 컨텍스트 빌드 ──
     sendProgress('이전 대화를 참고하고 있습니다...');

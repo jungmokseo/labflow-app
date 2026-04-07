@@ -655,14 +655,48 @@ export async function emailRoutes(app: FastifyInstance) {
       if (allTokens.length === 0) return reply.send({ success: true, connected: false });
 
       const primaryToken = allTokens[0];
-      // refresh_token이 있으면 access_token 만료와 무관하게 connected
-      // Google OAuth2 클라이언트가 자동으로 refresh 처리함
       const hasRefreshToken = !!primaryToken.refreshToken;
       const rawProfile = await prisma.emailProfile.findUnique({ where: { userId: user.id } });
 
+      // 실제 Google API로 토큰 유효성 검증 (access_token 만료 시 자동 refresh 시도)
+      let tokenValid = false;
+      let tokenError: string | null = null;
+      try {
+        const oauth2Client = createOAuth2Client();
+        oauth2Client.setCredentials({
+          access_token: safeDecrypt(primaryToken.accessToken),
+          refresh_token: safeDecrypt(primaryToken.refreshToken),
+          expiry_date: primaryToken.expiresAt?.getTime(),
+        });
+        // 토큰 갱신 시 DB 업데이트
+        oauth2Client.on('tokens', async (tokens) => {
+          try {
+            await prisma.gmailToken.update({
+              where: { id: primaryToken.id },
+              data: {
+                accessToken: encryptToken(tokens.access_token!),
+                expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+                ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+              },
+            });
+          } catch { /* ignore */ }
+        });
+        // 경량 API 호출로 검증 (Gmail profile)
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        await gmail.users.getProfile({ userId: 'me' });
+        tokenValid = true;
+      } catch (err: any) {
+        tokenError = err.message?.includes('invalid_grant') ? 'refresh_token_expired'
+          : err.message?.includes('invalid authentication') ? 'access_token_invalid'
+          : 'unknown';
+      }
+
       return reply.send({
         success: true,
-        connected: hasRefreshToken || (primaryToken.expiresAt ? primaryToken.expiresAt > new Date() : true),
+        connected: tokenValid,
+        tokenValid,
+        tokenError,
+        needsReauth: !tokenValid,
         accounts: allTokens.map(t => ({
           id: t.id,
           email: t.email,
@@ -675,7 +709,7 @@ export async function emailRoutes(app: FastifyInstance) {
         classifyByGroup: rawProfile?.classifyByGroup ?? false,
         groupCount: rawProfile ? (rawProfile.groups as any[]).length : 0,
         lastBriefingAt: rawProfile?.lastBriefingAt?.toISOString() || null,
-        message: !hasRefreshToken && primaryToken.expiresAt && primaryToken.expiresAt < new Date() ? 'Gmail 토큰 만료' : `Gmail ${allTokens.length}개 계정 연동됨`,
+        message: !tokenValid ? 'Google 재인증 필요' : `Gmail ${allTokens.length}개 계정 연동됨`,
       });
     } catch (error: any) {
       return reply.code(500).send({ error: 'Gmail 상태 확인 실패', details: error.message });

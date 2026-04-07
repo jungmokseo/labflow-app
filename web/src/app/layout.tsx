@@ -6,6 +6,7 @@ import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { DataPrefetch } from '@/components/DataPrefetch';
 import { ToastProvider } from '@/components/Toast';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
+import { TokenHealthCheck } from '@/components/TokenHealthCheck';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const viewport: Viewport = {
@@ -60,6 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <AuthInit />
           <ServiceWorkerRegister />
           <DataPrefetch />
+          <TokenHealthCheck />
           {showAuthenticatedUI ? (
             <div className="flex h-dvh">
               <Sidebar />
