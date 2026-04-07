@@ -32,6 +32,7 @@ const createCaptureSchema = z.object({
 
 const updateCaptureSchema = z.object({
   content: z.string().min(1).max(5000).optional(),
+  summary: z.string().max(200).optional(),
   category: z.enum(['IDEA', 'TASK', 'MEMO']).optional(),
   tags: z.array(z.string()).optional(),
   priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
@@ -238,6 +239,7 @@ export async function captureRoutes(app: FastifyInstance) {
     // 업데이트 데이터 구성
     const updateData: any = {};
     if (body.content !== undefined) updateData.content = body.content;
+    if (body.summary !== undefined) updateData.summary = body.summary;
     if (body.category !== undefined) updateData.category = body.category as CaptureCategory;
     if (body.tags !== undefined) updateData.tags = body.tags;
     if (body.priority !== undefined) updateData.priority = body.priority as Priority;

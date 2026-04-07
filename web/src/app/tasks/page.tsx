@@ -187,7 +187,7 @@ export default function TasksPage() {
     refreshCompleted(updateFn, { revalidate: false });
     setEditingId(null);
     try {
-      await updateCapture(c.id, { content: updatedContent });
+      await updateCapture(c.id, { content: updatedContent, summary: updatedSummary });
       toast('수정됨', 'success');
       // 서버 응답으로 최신 상태 동기화 (AI 재분류 결과 반영)
       setTimeout(() => { refreshActive(); refreshCompleted(); }, 1500);

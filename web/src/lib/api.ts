@@ -154,7 +154,7 @@ export async function createCapture(content: string, category?: string) {
   });
 }
 
-export async function updateCapture(id: string, data: Partial<Pick<Capture, 'content' | 'completed' | 'category' | 'tags' | 'priority' | 'actionDate' | 'reviewed'>>) {
+export async function updateCapture(id: string, data: Partial<Pick<Capture, 'content' | 'summary' | 'completed' | 'category' | 'tags' | 'priority' | 'actionDate' | 'reviewed'>>) {
   return apiFetch<{ success: boolean; data: Capture }>(`/api/captures/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
