@@ -334,7 +334,8 @@ async function executeGetEmailBriefing(
         const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
         const shadowContent = await compressForShadow(briefingData.markdown, 'email');
         saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(() => {});
-        return briefingData.markdown;
+        // 직접 반환 마커: Claude가 이 결과를 그대로 전달하도록 지시
+        return `[직접반환] 아래 브리핑을 그대로 사용자에게 전달하세요. 요약·재구성 금지.\n\n${briefingData.markdown}`;
       }
     } else if (briefingRes.statusCode === 401) {
       return '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
@@ -361,11 +362,12 @@ async function executeReadEmail(
 
   try {
     const searchTerms = input.search_query || '';
+    const limit = input.limit || 5;
     const queryParam = searchTerms ? `&q=${encodeURIComponent(searchTerms)}` : '';
 
     const emailRes = await ctx.app.inject({
       method: 'GET',
-      url: `/api/email/messages/recent?limit=5${queryParam}`,
+      url: `/api/email/messages/recent?limit=${limit}${queryParam}`,
       headers: {
         authorization: ctx.request.headers.authorization || '',
         'content-type': 'application/json',

@@ -59,7 +59,9 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: 'get_email_briefing',
     description: `Gmail에서 최근 이메일을 가져와 중요도별로 브리핑합니다. 사용자가 이메일/메일/Gmail 확인을 요청할 때 사용하세요.
-예시: "이메일 확인해줘", "메일 뭐 왔어?", "오늘 이메일"`,
+이 도구의 결과는 이미 완성된 브리핑 포맷입니다. 결과를 **그대로 사용자에게 전달**하세요. 요약하거나 재구성하지 마세요.
+예시: "이메일 확인해줘", "메일 뭐 왔어?", "오늘 이메일"
+주의: 사용자가 이메일만 요청한 경우 get_calendar 등 다른 도구를 추가 호출하지 마세요.`,
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -74,13 +76,19 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
     name: 'read_email',
     description: `특정 이메일의 전문(전체 내용)을 가져옵니다. 발신자, 제목, 키워드로 검색합니다.
-예시: "GitHub에서 온 이메일 보여줘", "가장 최근 이메일 전체 내용", "OO교수 메일 읽어줘"`,
+예시: "GitHub에서 온 이메일 보여줘", "가장 최근 이메일 전체 내용", "OO교수 메일 읽어줘"
+주의: "최근 이메일 보여줘"는 이 도구(read_email)를 사용하세요. get_email_briefing이 아닙니다.
+주의: 사용자가 이메일만 요청한 경우 get_calendar 등 다른 도구를 추가 호출하지 마세요.`,
     input_schema: {
       type: 'object' as const,
       properties: {
         search_query: {
           type: 'string',
           description: '발신자, 제목, 키워드 등 검색어. 비우면 가장 최근 이메일.',
+        },
+        limit: {
+          type: 'number',
+          description: '가져올 이메일 수. 사용자가 "1건", "하나만" 등 명시하면 1, 기본값 5.',
         },
       },
       required: [],
@@ -107,8 +115,9 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_calendar',
-    description: `Google Calendar에서 오늘/이번 주 일정을 가져옵니다. 사용자가 일정, 스케줄, 미팅 시간을 물어볼 때 사용하세요.
-예시: "오늘 일정", "이번주 스케줄", "다음 미팅 언제?", "오늘 뭐 있어?"`,
+    description: `Google Calendar에서 오늘/이번 주 일정을 가져옵니다. 사용자가 일정, 스케줄, 미팅 시간을 **명시적으로** 물어볼 때만 사용하세요.
+예시: "오늘 일정", "이번주 스케줄", "다음 미팅 언제?"
+주의: 이메일 요청에 이 도구를 같이 호출하지 마세요. 사용자가 "일정"을 언급한 경우에만 호출하세요.`,
     input_schema: {
       type: 'object' as const,
       properties: {},
