@@ -138,18 +138,29 @@ export default function PapersPage() {
     try {
       const data = await getPaperAlerts();
       const alertList = data.alerts || data.data || [];
+      const themeKws: string[] = (data as any).researchThemes?.flatMap((t: any) => t.keywords || []) || [];
+
       if (alertList.length > 0) {
         const alert = alertList[0];
-        const journals = alert.journals?.length > 0 ? alert.journals : DEFAULT_JOURNALS;
-        const kws = alert.keywords?.length > 0 ? alert.keywords.join(', ') : '';
-        setKeywords(kws);
-        setSelectedJournals(journals);
+        const hasJournals = alert.journals?.length > 0;
+        const hasKeywords = alert.keywords?.length > 0;
+
+        setSelectedJournals(hasJournals ? alert.journals : DEFAULT_JOURNALS);
+        setKeywords(hasKeywords ? alert.keywords.join(', ') : themeKws.join(', '));
         setCustomFeeds((alert as any).customFeeds || []);
-        // 서버에 저널이 비어있으면 기본값으로 자동 저장
-        if (alert.journals?.length === 0) {
-          const themeKws = (data as any).researchThemes?.flatMap((t: any) => t.keywords || []) || [];
-          savePaperAlert({ keywords: themeKws.length > 0 ? themeKws : [], journals: DEFAULT_JOURNALS }).catch(() => {});
+
+        // 저널 또는 키워드가 비어있으면 기본값으로 자동 저장
+        if (!hasJournals || !hasKeywords) {
+          savePaperAlert({
+            keywords: hasKeywords ? alert.keywords : themeKws,
+            journals: hasJournals ? alert.journals : DEFAULT_JOURNALS,
+          }).catch(() => {});
         }
+      } else {
+        // alert 자체가 없으면 기본값으로 생성
+        setSelectedJournals(DEFAULT_JOURNALS);
+        setKeywords(themeKws.join(', '));
+        savePaperAlert({ keywords: themeKws, journals: DEFAULT_JOURNALS }).catch(() => {});
       }
     } catch {}
   }
