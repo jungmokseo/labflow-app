@@ -96,12 +96,29 @@ export default function SettingsPage() {
 
 // ── Status Tab ──────────────────────────────────
 function StatusTab({ health, emailConnected, calendarConnected, calendarMessage, lab }: { health: boolean | null; emailConnected: boolean; calendarConnected: boolean; calendarMessage: string | null; lab: LabProfile | null }) {
+  const [costResult, setCostResult] = useState<string | null>(null);
+  const [costLoading, setCostLoading] = useState(false);
+
   const handleConnectGmail = async () => {
     try {
       const res = await getEmailAuthUrl();
       window.open(res.url, '_blank');
     } catch (err) {
       console.error('Failed to get auth URL:', err);
+    }
+  };
+
+  const handleCostCorrection = async () => {
+    setCostLoading(true);
+    setCostResult(null);
+    try {
+      const { costCorrection } = await import('@/lib/api');
+      const data = await costCorrection();
+      setCostResult(`${data.message} (보정액: $${data.totalCorrected})`);
+    } catch (err: any) {
+      setCostResult(`실패: ${err.message}`);
+    } finally {
+      setCostLoading(false);
     }
   };
 
@@ -116,9 +133,17 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
           <StatusItem label="연구실" status={lab ? 'healthy' : 'disconnected'} detail={lab ? lab.name : '미설정'} />
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
-        <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
-          {emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기'}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
+            {emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기'}
+          </button>
+          <button onClick={handleCostCorrection} disabled={costLoading} className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
+            {costLoading ? '보정 중...' : 'API 비용 보정 (4/1~4/7)'}
+          </button>
+        </div>
+        {costResult && (
+          <p className={`text-sm ${costResult.startsWith('실패') ? 'text-red-400' : 'text-green-400'}`}>{costResult}</p>
+        )}
         {!lab && (
           <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
             온보딩 시작

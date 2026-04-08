@@ -886,6 +886,10 @@ export async function getCostSummary(days = 30): Promise<CostSummary> {
   return apiFetch<CostSummary>(`/api/brain/cost-summary?days=${days}`);
 }
 
+export async function costCorrection() {
+  return apiFetch<{ success: boolean; message: string; totalCorrected: number; corrections: any[] }>('/api/brain/cost-correction', { method: 'POST' });
+}
+
 // ── 헬스 체크 ──────────────────────────────────────
 export async function checkHealth() {
   try {
