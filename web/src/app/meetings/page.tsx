@@ -529,7 +529,7 @@ export default function MeetingsPage() {
                           })}
                         </span>
                         {m.actionItems.length > 0 && (
-                          <span className="text-xs text-amber-500 flex items-center gap-1">
+                          <span className="text-xs text-amber-600 flex items-center gap-1">
                             <ClipboardList className="w-3 h-3" /> {m.actionItems.length} 액션아이템
                           </span>
                         )}
@@ -689,7 +689,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
   return (
     <div className="mt-4 pt-4 border-t border-border/30">
       <h4 className="text-sm font-semibold text-text-heading mb-2 flex items-center gap-1.5">
-        <ClipboardList className="w-4 h-4 text-amber-500" /> 액션 아이템
+        <ClipboardList className="w-4 h-4 text-amber-600" /> 액션 아이템
       </h4>
       <div className="space-y-1.5">
         {localItems.map((item, i) => {

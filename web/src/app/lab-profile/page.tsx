@@ -314,7 +314,7 @@ export default function LabProfilePage() {
 
                 {seedResult.mergedJournals.length > 0 && (
                   <div>
-                    <p className="text-amber-500 text-xs font-medium mb-1">관련 저널 (상위 5개)</p>
+                    <p className="text-amber-600 text-xs font-medium mb-1">관련 저널 (상위 5개)</p>
                     <p className="text-text-muted text-xs">{seedResult.mergedJournals.slice(0, 5).join(' · ')}</p>
                   </div>
                 )}

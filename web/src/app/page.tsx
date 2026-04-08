@@ -67,7 +67,7 @@ export default function DashboardPage() {
           <p className="text-sm text-text-muted mt-1">주간 자동 논문 모니터링</p>
         </a>
         <a href="/meetings" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
-          <Mic className="w-7 h-7 text-amber-500" />
+          <Mic className="w-7 h-7 text-amber-600" />
           <h3 className="text-base font-medium text-text-heading mt-3">회의 노트</h3>
           <p className="text-sm text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
         </a>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
         {/* 최근 회의 */}
         <div className="bg-bg-card rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-amber-500" /> 최근 회의</h3>
+            <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-amber-600" /> 최근 회의</h3>
             <a href="/meetings" className="text-sm text-primary hover:underline">모두 보기 →</a>
           </div>
           {meetings.length === 0 ? (
@@ -93,7 +93,7 @@ export default function DashboardPage() {
                   )}
                   <div className="flex items-center gap-3 mt-2">
                     {m.actionItems.length > 0 && (
-                      <span className="text-xs text-amber-500">{m.actionItems.length} 액션아이템</span>
+                      <span className="text-xs text-amber-600">{m.actionItems.length} 액션아이템</span>
                     )}
                     <span className="text-xs text-text-muted">
                       {new Date(m.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
