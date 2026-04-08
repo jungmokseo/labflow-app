@@ -326,7 +326,7 @@ export async function brainRoutes(app: FastifyInstance) {
         where: { id: { in: allFileIds }, userId, source: 'file-upload' },
       });
       for (const fileMemo of fileMemos) {
-        fileContext += `\n\n[업로드된 파일: ${fileMemo.title}]\n${fileMemo.content.slice(0, 5000)}`;
+        fileContext += `\n\n[업로드된 파일 (fileId: ${fileMemo.id}): ${fileMemo.title}]\n${fileMemo.content.slice(0, 5000)}`;
       }
     }
 
