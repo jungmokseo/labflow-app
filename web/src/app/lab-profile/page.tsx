@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   getLabProfile, createLab, updateLab, addLabMember, removeLabMember, addLabProject, addDictEntry,
-  analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl,
+  analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl, uploadPaperPdf,
   type Lab,
 } from '@/lib/api';
 // Skeleton imports removed — using inline spinner
 import {
   FlaskConical, FileText, BookOpen, Brain, User, Search, CheckCircle,
-  RefreshCw, ClipboardList, Lightbulb, PartyPopper, X,
+  RefreshCw, ClipboardList, Lightbulb, PartyPopper, X, Upload, Loader2,
 } from 'lucide-react';
 
 type OnboardingStep = 1 | 2 | 3 | 4;
@@ -54,6 +54,9 @@ export default function LabProfilePage() {
   const [newProjectFunder, setNewProjectFunder] = useState('');
   const [newDictWrong, setNewDictWrong] = useState('');
   const [newDictCorrect, setNewDictCorrect] = useState('');
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfResult, setPdfResult] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -209,6 +212,19 @@ export default function LabProfilePage() {
     } catch {
       setLab(prev => prev ? { ...prev, domainDict: (prev.domainDict || []).filter((d: any) => d.id !== tempDict.id) } : prev);
     }
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPdfUploading(true);
+    setPdfResult(null);
+    try {
+      const res = await uploadPaperPdf(file);
+      setPdfResult(res.title ? `"${res.title}" 등록 완료` : '논문 등록 완료');
+      loadProfile();
+    } catch (err: any) { setError(err.message); }
+    finally { setPdfUploading(false); if (pdfInputRef.current) pdfInputRef.current.value = ''; }
   }
 
   if (loading) return (
@@ -475,6 +491,18 @@ export default function LabProfilePage() {
                       <span key={f} className="bg-primary-light text-primary px-3 py-1 rounded-full text-xs">{f}</span>
                     )) : <span className="text-text-muted text-xs">미등록 — 대표 논문 DOI를 입력하면 자동 추출됩니다</span>}
                   </div>
+                </div>
+
+                {/* 핵심 논문 PDF 등록 */}
+                <div className="pt-4 border-t border-border/30">
+                  <span className="text-text-muted text-xs">핵심 논문 등록</span>
+                  <p className="text-text-muted text-[11px] mt-0.5 mb-2">PDF를 업로드하면 메타데이터 자동 추출 + Brain 대화에서 참고 가능</p>
+                  <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" />
+                  <button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}
+                    className="px-4 py-2 bg-bg-input text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
+                    {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드
+                  </button>
+                  {pdfResult && <p className="text-green-500 text-xs mt-2">{pdfResult}</p>}
                 </div>
               </div>
             )}

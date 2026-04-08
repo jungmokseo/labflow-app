@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults,
-  getJournalFields, searchJournals, addCustomJournal, uploadPaperPdf,
+  getJournalFields, searchJournals, addCustomJournal,
   resetPaperAlertResults,
   type PaperAlertResult,
 } from '@/lib/api';
@@ -11,7 +11,7 @@ import { useApiData } from '@/lib/use-api';
 import { StepProgress } from '@/components/Skeleton';
 import {
   BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
-  Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight, Upload,
+  Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight,
 } from 'lucide-react';
 
 const MAX_JOURNALS = 15;
@@ -106,8 +106,6 @@ export default function PapersPage() {
   const [searchResultsJ, setSearchResultsJ] = useState<any[]>([]);
 
   // PDF upload
-  const [pdfUploading, setPdfUploading] = useState(false);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   // SWR for paper results (keep full response for metadata)
   const { data: resultsResponse, isLoading: resultsLoading, mutate: refreshResults } = useApiData(
@@ -347,17 +345,6 @@ export default function PapersPage() {
     finally { setAddLoading(false); }
   }
 
-  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPdfUploading(true);
-    try {
-      await uploadPaperPdf(file);
-      await refreshResults();
-    } catch (err: any) { setError(err.message); }
-    finally { setPdfUploading(false); if (pdfInputRef.current) pdfInputRef.current.value = ''; }
-  }
-
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -369,11 +356,6 @@ export default function PapersPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" />
-          <button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}
-            className="px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading">
-            {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드
-          </button>
           <button onClick={handleCrawl} disabled={crawling}
             className="px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
             {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 수집</>}
