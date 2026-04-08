@@ -382,6 +382,7 @@ function classifyByRules(
 async function classifyEmailsWithSonnet(
   emails: Array<{ index: number; subject: string; snippet: string; sender: string; toCC: string; body?: string }>,
   profile: UserProfile | null,
+  userId?: string,
 ): Promise<Map<string, EmailClassification>> {
   const results = new Map<string, EmailClassification>();
   const anthropic = createAnthropicClient();
@@ -421,6 +422,11 @@ async function classifyEmailsWithSonnet(
         },
       ],
     });
+
+    // 실제 토큰 기반 비용 추적
+    if (userId) {
+      trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage), 'email_classify');
+    }
 
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in response');
@@ -954,8 +960,8 @@ export async function emailRoutes(app: FastifyInstance) {
           toCC: e.toCC,
         })),
         profile,
+        userId,
       );
-      trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
 
       // 본문 열람이 필요한 메일 식별 + full body 가져오기
       if (query.includeBody === 'true') {
@@ -988,8 +994,7 @@ export async function emailRoutes(app: FastifyInstance) {
           });
 
           if (enrichedEmails.length > 0) {
-            const reClassifications = await classifyEmailsWithSonnet(enrichedEmails, profile);
-            trackAICost(userId, 'claude-sonnet', COST_PER_CALL['claude-sonnet']);
+            const reClassifications = await classifyEmailsWithSonnet(enrichedEmails, profile, userId);
 
             // 재분류 결과 병합
             reClassifications.forEach((value, key) => {
