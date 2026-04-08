@@ -161,6 +161,65 @@ export function chunkText(text: string, maxChunkSize: number = 1500): string[] {
 
 // ── Supabase 벡터 저장/검색 ─────────────────────────────
 
+let tableEnsured = false;
+
+/** paper_embeddings 테이블이 없으면 자동 생성 */
+async function ensurePaperEmbeddingsTable(prisma: any) {
+  if (tableEnsured) return;
+  try {
+    await prisma.$queryRawUnsafe(`
+      CREATE EXTENSION IF NOT EXISTS vector;
+      CREATE TABLE IF NOT EXISTS paper_embeddings (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        paper_id      TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        authors       TEXT,
+        abstract      TEXT,
+        journal       TEXT,
+        year          INTEGER,
+        doi           TEXT,
+        chunk_index   INTEGER NOT NULL DEFAULT 0,
+        chunk_text    TEXT NOT NULL,
+        embedding     vector(1536) NOT NULL,
+        metadata      JSONB DEFAULT '{}',
+        created_at    TIMESTAMPTZ DEFAULT now(),
+        updated_at    TIMESTAMPTZ DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
+      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_embedding ON paper_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+    `);
+    tableEnsured = true;
+    console.log('[embedding] paper_embeddings table ensured');
+  } catch (err) {
+    // ivfflat index 생성 실패 시 (데이터 부족 등) 무시하고 테이블만 생성
+    try {
+      await prisma.$queryRawUnsafe(`
+        CREATE EXTENSION IF NOT EXISTS vector;
+        CREATE TABLE IF NOT EXISTS paper_embeddings (
+          id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          paper_id      TEXT NOT NULL,
+          title         TEXT NOT NULL,
+          authors       TEXT,
+          abstract      TEXT,
+          journal       TEXT,
+          year          INTEGER,
+          doi           TEXT,
+          chunk_index   INTEGER NOT NULL DEFAULT 0,
+          chunk_text    TEXT NOT NULL,
+          embedding     vector(1536) NOT NULL,
+          metadata      JSONB DEFAULT '{}',
+          created_at    TIMESTAMPTZ DEFAULT now(),
+          updated_at    TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
+      `);
+      tableEnsured = true;
+    } catch (e) {
+      console.error('[embedding] Failed to ensure table:', e);
+    }
+  }
+}
+
 /**
  * Supabase에 논문 청크 임베딩 저장
  * Prisma client 대신 raw SQL 사용 (pgvector 타입 지원)
@@ -170,6 +229,7 @@ export async function storePaperEmbeddings(
   paper: PaperChunk,
   embedding: number[]
 ): Promise<string> {
+  await ensurePaperEmbeddingsTable(prisma);
   const vectorStr = `[${embedding.join(',')}]`;
 
   const result = await prisma.$queryRawUnsafe(`

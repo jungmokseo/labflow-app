@@ -225,17 +225,31 @@ export default function LabProfilePage() {
     if (files.length === 0) return;
     setPdfUploading(true);
     setPdfResult(null);
-    const results: string[] = [];
+    const successes: string[] = [];
+    const failures: string[] = [];
     for (let i = 0; i < files.length; i++) {
-      if (files.length > 1) setPdfProgress(`${i + 1}/${files.length} 처리 중...`);
+      if (files.length > 1) setPdfProgress(`${i + 1}/${files.length} 처리 중... (${files[i].name})`);
+      else setPdfProgress(`처리 중... (${files[i].name})`);
       try {
         const res = await uploadPaperPdf(files[i]);
-        results.push(res.title ? `"${res.title}"` : files[i].name);
+        successes.push(res.title ? `"${res.title}"` : files[i].name);
       } catch (err: any) {
-        results.push(`${files[i].name} (실패: ${err.message})`);
+        // 1회 재시도 (Gemini rate limit 대응)
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const res = await uploadPaperPdf(files[i]);
+          successes.push(res.title ? `"${res.title}"` : files[i].name);
+        } catch (err2: any) {
+          failures.push(files[i].name);
+        }
       }
+      // Gemini rate limit 방지: 파일 간 2초 대기
+      if (i < files.length - 1) await new Promise(r => setTimeout(r, 2000));
     }
-    setPdfResult(`${results.length}건 등록: ${results.join(', ')}`);
+    const parts = [];
+    if (successes.length) parts.push(`성공 ${successes.length}건: ${successes.join(', ')}`);
+    if (failures.length) parts.push(`실패 ${failures.length}건: ${failures.join(', ')}`);
+    setPdfResult(parts.join(' / '));
     setPdfProgress('');
     setPdfUploading(false);
     if (pdfInputRef.current) pdfInputRef.current.value = '';
