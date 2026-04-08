@@ -192,20 +192,20 @@ export default function GraphPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      <div style={{ flex: 1, position: 'relative' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={onNodeClick}
-          fitView
-          minZoom={0.1}
-          maxZoom={2}
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
+    <div style={{ width: '100%', height: 'calc(100dvh - 3rem)' }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        fitView
+        minZoom={0.1}
+        maxZoom={2}
+        proOptions={{ hideAttribution: true }}
+        style={{ background: 'var(--color-bg, #f8fafc)' }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--color-text-muted, #94a3b8)" />
           <Controls />
           <MiniMap
             nodeColor={(n) => TYPE_COLORS[n.data?.type as string] || '#6b7280'}
@@ -291,7 +291,6 @@ export default function GraphPage() {
             </Panel>
           )}
         </ReactFlow>
-      </div>
     </div>
   );
 }
