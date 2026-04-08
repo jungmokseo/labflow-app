@@ -269,6 +269,25 @@ const DEFAULT_RESEARCH_THEMES: ResearchTheme[] = [
   { name: 'Neuromorphic Device', keywords: ['neuromorphic', 'memristor', 'memristive', 'synaptic device', 'synaptic transistor', 'in-memory computing', 'resistive switching', 'artificial synapse', 'spiking neural', 'brain-inspired computing', 'reservoir computing', 'neural interface', 'brain-computer interface', 'neural recording', 'neural electrode'] },
 ];
 
+/**
+ * 수집 범위 안내 메시지 (논문용) — T_last가 오래되었거나 첫 실행일 때 사용자에게 범위 설명
+ */
+function describePaperFetchRange(tLast: Date, isFirstRun: boolean): string | null {
+  const diffMs = Date.now() - tLast.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (isFirstRun) {
+    return '첫 논문 모니터링입니다. 최근 2주간의 논문을 수집합니다.';
+  }
+  if (diffDays >= 14) {
+    return `마지막 모니터링 이후 ${diffDays}일이 경과하여, ${diffDays}일간의 논문을 수집합니다. 양이 많아 처리 시간이 다소 걸릴 수 있습니다.`;
+  }
+  if (diffDays >= 3) {
+    return `마지막 모니터링 이후 ${diffDays}일이 경과하여, ${diffDays}일간의 논문을 수집합니다.`;
+  }
+  return null;
+}
+
 // ── Theme scoring ───────────────────────────────────
 interface ResearchTheme { name: string; keywords: string[]; }
 
@@ -540,7 +559,9 @@ export async function runPaperCrawl(
   const flatKeywords = alert.keywords as string[];
 
   // T_last: lastRunAt 이후 논문만 수집 (첫 실행이면 최근 2주)
+  const isFirstRunPaper = !alert.lastRunAt;
   const tLast = alert.lastRunAt || new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const paperFetchNotice = describePaperFetchRange(tLast, isFirstRunPaper);
 
   // 크롤링 대상
   const feeds: Array<{ name: string; rssUrl: string }> = [];
@@ -693,6 +714,7 @@ export async function runPaperCrawl(
       twoStars: scored.filter(s => s.stars === 2).length,
       oneStar: scored.filter(s => s.stars === 1).length,
     },
+    ...(paperFetchNotice ? { fetchRangeNotice: paperFetchNotice } : {}),
   };
 }
 

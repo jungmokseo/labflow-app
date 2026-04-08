@@ -305,6 +305,31 @@ function domainMatchGroup(sender: string, profile: UserProfile | null): { name: 
 }
 
 /**
+ * 수집 범위 안내 메시지 생성 — T_last가 오래되었거나 첫 실행일 때 사용자에게 범위 설명
+ */
+function describeFetchRange(afterDate: Date, isFirstRun: boolean): string | null {
+  const now = Date.now();
+  const diffMs = now - afterDate.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (isFirstRun) {
+    return '첫 브리핑입니다. 최근 24시간 이메일을 수집합니다.';
+  }
+  if (diffDays >= 7) {
+    return `마지막 브리핑 이후 ${diffDays}일이 경과하여, ${diffDays}일간의 이메일을 수집합니다. 양이 많아 처리 시간이 다소 걸릴 수 있습니다.`;
+  }
+  if (diffDays >= 2) {
+    return `마지막 브리핑 이후 ${diffDays}일이 경과하여, ${diffDays}일간의 이메일을 수집합니다.`;
+  }
+  if (diffHours > 24) {
+    const hours = Math.floor(diffHours);
+    return `마지막 브리핑 이후 약 ${hours}시간이 경과하여, 해당 기간의 이메일을 수집합니다.`;
+  }
+  return null; // 24시간 이내면 별도 안내 불필요
+}
+
+/**
  * Sonnet 없을 때 서사형 브리핑 fallback (텍스트 기반 정리)
  */
 function generateFallbackNarrative(emailData: string[], timezone: string): string {
@@ -824,13 +849,16 @@ export async function emailRoutes(app: FastifyInstance) {
 
       // T_last 결정: query.since > profile.lastBriefingAt > 24시간 전
       let afterDate: Date;
+      let isFirstRun = false;
       if (query.since) {
         afterDate = new Date(query.since);
       } else if (rawProfile?.lastBriefingAt) {
         afterDate = rawProfile.lastBriefingAt;
       } else {
         afterDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 첫 브리핑: 24시간 전
+        isFirstRun = true;
       }
+      const fetchRangeNotice = describeFetchRange(afterDate, isFirstRun);
 
       // Gmail 검색 쿼리 구성
       const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
@@ -1169,6 +1197,7 @@ export async function emailRoutes(app: FastifyInstance) {
           groups: groupCounts,
           classifiedBy: env.ANTHROPIC_API_KEY ? 'sonnet' : 'fallback',
           excludedCount: messages.length - rawEmails.length,
+          ...(fetchRangeNotice ? { fetchRangeNotice } : {}),
         },
       });
     } catch (error: any) {
@@ -1201,16 +1230,18 @@ export async function emailRoutes(app: FastifyInstance) {
       };
       const timezone = profile.timezone;
 
-      // T_last 결정
       // T_last 결정: query.since > profile.lastBriefingAt > 24시간 전
       let afterDate: Date;
+      let isFirstRunNarr = false;
       if (query.since) {
         afterDate = new Date(query.since);
       } else if (rawProfile?.lastBriefingAt) {
         afterDate = rawProfile.lastBriefingAt;
       } else {
         afterDate = new Date(Date.now() - 24 * 60 * 60 * 1000); // 첫 브리핑: 24시간 전
+        isFirstRunNarr = true;
       }
+      const fetchRangeNotice = describeFetchRange(afterDate, isFirstRunNarr);
 
       const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
       const excludeSpam = query.includeSpam === 'false' ? '-category:promotions -category:social' : '';
@@ -1754,6 +1785,7 @@ ${emailDataForPrompt.join('\n\n')}`,
         markdown,
         emailCount,
         generatedAt: now.toISOString(),
+        ...(fetchRangeNotice ? { fetchRangeNotice } : {}),
       });
     } catch (error: any) {
       console.error(`[email] 서사형 이메일 브리핑 실패: ${error.message || error}`, error.stack?.slice(0, 500) || '');

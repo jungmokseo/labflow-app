@@ -368,7 +368,10 @@ async function executeGetEmailBriefing(
         const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
         const shadowContent = await compressForShadow(briefingData.markdown, 'email');
         saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(() => {});
-        return `[양식지정] 아래 브리핑을 그대로 전달하세요.\n\n${briefingData.markdown}`;
+        const rangePrefix = briefingData.fetchRangeNotice
+          ? `> ${briefingData.fetchRangeNotice}\n\n`
+          : '';
+        return `[양식지정] 아래 브리핑을 그대로 전달하세요.\n\n${rangePrefix}${briefingData.markdown}`;
       }
     } else if (briefingRes.statusCode === 401) {
       return '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
