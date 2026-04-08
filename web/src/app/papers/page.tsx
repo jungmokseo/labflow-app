@@ -17,8 +17,8 @@ import {
 const MAX_JOURNALS = 15;
 
 const STAR_INFO: Record<number, { stars: number; label: string; color: string }> = {
-  3: { stars: 3, label: '직접 관련', color: 'text-amber-600' },
-  2: { stars: 2, label: '높은 관련', color: 'text-orange-600' },
+  3: { stars: 3, label: '직접 관련', color: 'text-red-500' },
+  2: { stars: 2, label: '높은 관련', color: 'text-emerald-600' },
   1: { stars: 1, label: '참고', color: 'text-gray-400' },
 };
 
