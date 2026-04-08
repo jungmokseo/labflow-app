@@ -269,7 +269,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             <div><span className="text-text-muted">이름:</span> <span className="text-text-heading">{lab.name}</span></div>
             <div><span className="text-text-muted">기관:</span> <span className="text-text-heading">{lab.institution || '-'}</span></div>
             <div><span className="text-text-muted">학과:</span> <span className="text-text-heading">{lab.department || '-'}</span></div>
-            <div><span className="text-text-muted">온보딩:</span> <span className={lab.onboardingDone ? 'text-green-400' : 'text-yellow-400'}>{lab.onboardingDone ? '완료' : '미완료'}</span></div>
+            <div><span className="text-text-muted">온보딩:</span> <span className={lab.onboardingDone ? 'text-green-400' : 'text-amber-500'}>{lab.onboardingDone ? '완료' : '미완료'}</span></div>
           </div>
         )}
       </section>

@@ -17,7 +17,7 @@ type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   task: <CheckCircle className="w-4 h-4 text-green-400" />,
-  idea: <Lightbulb className="w-4 h-4 text-yellow-400" />,
+  idea: <Lightbulb className="w-4 h-4 text-amber-500" />,
   memo: <FileText className="w-4 h-4 text-gray-400" />,
 };
 
@@ -288,7 +288,7 @@ export default function TasksPage() {
             <div className="text-center py-20">
               <div className="mb-3 flex justify-center">
                 {tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> :
-                 tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-yellow-400" /> :
+                 tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-amber-500" /> :
                  <ClipboardList className="w-10 h-10 text-text-muted" />}
               </div>
               <h3 className="text-text-heading font-medium mb-1">

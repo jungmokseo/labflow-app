@@ -315,10 +315,10 @@ export default function MeetingsPage() {
             <div className="flex flex-col items-center gap-4">
               <button
                 onClick={startRecording}
-                className="w-24 h-24 rounded-full bg-primary hover:bg-primary-hover transition-all duration-200 flex items-center justify-center text-5xl shadow-lg shadow-primary/20 hover:shadow-primary/40 hover:scale-105 active:scale-95"
+                className="w-24 h-24 rounded-full bg-bg-hover hover:bg-border transition-all duration-200 flex items-center justify-center text-5xl shadow-lg shadow-black/5 hover:scale-105 active:scale-95"
                 title="녹음 시작"
               >
-                <Mic className="w-10 h-10 text-text-heading" />
+                <Mic className="w-10 h-10 text-text-muted" />
               </button>
               <p className="text-base text-text-muted">탭하여 녹음 시작</p>
 
@@ -529,7 +529,7 @@ export default function MeetingsPage() {
                           })}
                         </span>
                         {m.actionItems.length > 0 && (
-                          <span className="text-xs text-yellow-400 flex items-center gap-1">
+                          <span className="text-xs text-amber-500 flex items-center gap-1">
                             <ClipboardList className="w-3 h-3" /> {m.actionItems.length} 액션아이템
                           </span>
                         )}
@@ -689,7 +689,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
   return (
     <div className="mt-4 pt-4 border-t border-border/30">
       <h4 className="text-sm font-semibold text-text-heading mb-2 flex items-center gap-1.5">
-        <ClipboardList className="w-4 h-4 text-yellow-400" /> 액션 아이템
+        <ClipboardList className="w-4 h-4 text-amber-500" /> 액션 아이템
       </h4>
       <div className="space-y-1.5">
         {localItems.map((item, i) => {
