@@ -956,6 +956,21 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     const alert = await prisma.paperAlert.findFirst({ where: { labId: lab.id, active: true } });
     if (!alert) return reply.code(404).send({ error: '논문 알림 설정이 없습니다.' });
 
+    // 7일 이내 재실행 차단 (단, 설정 변경 시 예외)
+    if (alert.lastRunAt) {
+      const daysSinceLastRun = (Date.now() - alert.lastRunAt.getTime()) / (1000 * 60 * 60 * 24);
+      const configChanged = alert.updatedAt.getTime() > alert.lastRunAt.getTime();
+
+      if (daysSinceLastRun < 7 && !configChanged) {
+        const nextRunDate = new Date(alert.lastRunAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const daysLeft = Math.ceil(7 - daysSinceLastRun);
+        return reply.code(429).send({
+          error: `논문 모니터링은 주 1회 실행됩니다. ${daysLeft}일 후(${nextRunDate.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })})에 다시 실행할 수 있습니다.`,
+          nextAvailableAt: nextRunDate.toISOString(),
+        });
+      }
+    }
+
     // 즉시 응답 — 수집은 백그라운드에서 진행
     reply.send({ success: true, status: 'started', message: '수집을 시작했습니다. 완료되면 결과가 업데이트됩니다.' });
 
