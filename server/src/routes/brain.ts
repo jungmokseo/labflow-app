@@ -84,6 +84,10 @@ async function getCachedLabContext(labId: string): Promise<string> {
     context += `연구실: ${lab.name}\n`;
     context += `소속: ${lab.institution || '미등록'} ${lab.department || ''}\n`;
     context += `연구 분야: ${lab.researchFields.join(', ') || '미등록'}\n`;
+    const themes = (lab.researchThemes as Array<{ name: string; keywords: string[] }> | null) || [];
+    if (themes.length > 0) {
+      context += `연구 테마:\n${themes.map(t => `- ${t.name}: ${(t.keywords || []).join(', ')}`).join('\n')}\n`;
+    }
     if (lab.members.length > 0) {
       context += `구성원 (${lab.members.length}명): ${lab.members.map(m => `${m.name}(${m.role})`).join(', ')}\n`;
     }
