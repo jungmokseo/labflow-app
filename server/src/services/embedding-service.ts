@@ -168,8 +168,8 @@ let tableEnsured = false;
 async function ensurePaperEmbeddingsTable(prisma: any) {
   if (tableEnsured) return;
   try {
+    await prisma.$queryRawUnsafe(`CREATE EXTENSION IF NOT EXISTS vector`);
     await prisma.$queryRawUnsafe(`
-      CREATE EXTENSION IF NOT EXISTS vector;
       CREATE TABLE IF NOT EXISTS paper_embeddings (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         paper_id      TEXT NOT NULL,
@@ -186,42 +186,17 @@ async function ensurePaperEmbeddingsTable(prisma: any) {
         metadata      JSONB DEFAULT '{}',
         created_at    TIMESTAMPTZ DEFAULT now(),
         updated_at    TIMESTAMPTZ DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
-      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_lab_id ON paper_embeddings(lab_id);
-      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_embedding ON paper_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+      )
     `);
+    await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id)`);
+    await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_paper_embeddings_lab_id ON paper_embeddings(lab_id)`);
+    try {
+      await prisma.$queryRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_paper_embeddings_embedding ON paper_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)`);
+    } catch { /* ivfflat은 데이터 부족 시 실패할 수 있음 */ }
     tableEnsured = true;
     console.log('[embedding] paper_embeddings table ensured');
-  } catch (err) {
-    // ivfflat index 생성 실패 시 (데이터 부족 등) 무시하고 테이블만 생성
-    try {
-      await prisma.$queryRawUnsafe(`
-        CREATE EXTENSION IF NOT EXISTS vector;
-        CREATE TABLE IF NOT EXISTS paper_embeddings (
-          id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          paper_id      TEXT NOT NULL,
-          lab_id        TEXT,
-          title         TEXT NOT NULL,
-          authors       TEXT,
-          abstract      TEXT,
-          journal       TEXT,
-          year          INTEGER,
-          doi           TEXT,
-          chunk_index   INTEGER NOT NULL DEFAULT 0,
-          chunk_text    TEXT NOT NULL,
-          embedding     vector(1536) NOT NULL,
-          metadata      JSONB DEFAULT '{}',
-          created_at    TIMESTAMPTZ DEFAULT now(),
-          updated_at    TIMESTAMPTZ DEFAULT now()
-        );
-        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
-        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_lab_id ON paper_embeddings(lab_id);
-      `);
-      tableEnsured = true;
-    } catch (e) {
-      console.error('[embedding] Failed to ensure table:', e);
-    }
+  } catch (e) {
+    console.error('[embedding] Failed to ensure table:', e);
   }
 }
 
