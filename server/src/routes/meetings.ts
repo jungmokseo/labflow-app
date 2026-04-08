@@ -719,7 +719,8 @@ export async function meetingRoutes(app: FastifyInstance) {
         ...(result.discussions?.map((d: { topic: string; bullets: string[] }) => `${d.topic}: ${d.bullets.join('; ')}`) || []),
         ...result.actionItems,
       ].join('\n');
-      buildGraphFromText(userId, graphText, 'meeting').catch(() => {});
+      buildGraphFromText(userId, graphText, 'meeting')
+        .catch((err: any) => console.error('[background] meeting buildGraphFromText:', err.message || err));
 
       // 일정 감지 → pending events (비동기, 응답 지연 없음)
       const scheduleText = [...result.nextSteps, ...result.actionItems].join('\n');

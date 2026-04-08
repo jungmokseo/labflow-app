@@ -21,7 +21,7 @@ import { aiRateLimiter, trackAICost, COST_PER_CALL, calculateAnthropicCost } fro
 import { env } from '../config/env.js';
 import { hybridSearch, rerank, validateResponse, isRagReady, embedAndStore } from '../services/rag-engine.js';
 import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
-import { getGraphContextForQuery } from '../services/knowledge-graph.js';
+import { getGraphContextForQuery, buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── Modularized imports ──────────────────────────────
 import { buildCoreSystemPrompt } from '../prompts/core-system.js';
@@ -556,6 +556,13 @@ export async function brainRoutes(app: FastifyInstance) {
     maybeGenerateSummary(channelId).catch((err: any) => console.error('[background] maybeGenerateSummary:', err.message || err));
     if (lab) {
       autoExtractInfo(message, responseText, lab.id).catch((err: any) => console.error('[background] autoExtractInfo:', err.message || err));
+    }
+
+    // 비동기 지식 그래프 관계 추출 (채팅에서 엔티티 축적)
+    const graphText = `사용자: ${message}\nAI: ${responseText}`;
+    if (graphText.length > 30) {
+      buildGraphFromText(userId, graphText, 'chat')
+        .catch((err: any) => console.error('[background] chat buildGraphFromText:', err.message || err));
     }
 
     const intent = usedTools[0] || 'general_chat';

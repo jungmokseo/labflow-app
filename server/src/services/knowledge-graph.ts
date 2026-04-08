@@ -95,7 +95,29 @@ export async function extractRelationsFromText(
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return [];
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    // Gemini가 evidence에 따옴표/특수문자를 넣어 JSON이 깨지는 경우 복구 시도
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      // JSON 복구: 제어 문자 제거 + 잘못된 따옴표 이스케이프
+      const sanitized = jsonMatch[0]
+        .replace(/[\x00-\x1f]/g, ' ')
+        .replace(/(?<=:\s*"[^"]*)"(?=[^"]*"[,\s}])/g, '\\"');
+      try {
+        parsed = JSON.parse(sanitized);
+      } catch {
+        // 최후 수단: relations 배열만 추출
+        const relMatch = jsonMatch[0].match(/"relations"\s*:\s*\[([\s\S]*)\]/);
+        if (!relMatch) return [];
+        try {
+          parsed = { relations: JSON.parse(`[${relMatch[1].replace(/[\x00-\x1f]/g, ' ')}]`) };
+        } catch {
+          console.warn('[warn] JSON 복구 실패, 건너뜀');
+          return [];
+        }
+      }
+    }
     if (!Array.isArray(parsed.relations)) return [];
 
     return parsed.relations
@@ -201,21 +223,60 @@ export async function buildGraphFromText(
     const relations = await extractRelationsFromText(text, source);
     if (relations.length === 0) return;
 
+    // entityId 자동 매칭을 위해 Lab 데이터 캐시 (1회 조회)
+    const lab = await prisma.lab.findFirst({ where: { ownerId: userId }, select: { id: true } });
+    let memberMap: Map<string, string> | null = null;
+    let projectMap: Map<string, string> | null = null;
+
+    if (lab) {
+      const [members, projects] = await Promise.all([
+        prisma.labMember.findMany({ where: { labId: lab.id, active: true }, select: { id: true, name: true } }),
+        prisma.project.findMany({ where: { labId: lab.id }, select: { id: true, name: true } }),
+      ]);
+      memberMap = new Map(members.map(m => [m.name, m.id]));
+      projectMap = new Map(projects.map(p => [p.name, p.id]));
+    }
+
     for (const rel of relations) {
       try {
-        const fromNode = await upsertNode(userId, rel.fromEntity.type, rel.fromEntity.name, rel.fromEntity.metadata);
-        const toNode = await upsertNode(userId, rel.toEntity.type, rel.toEntity.name, rel.toEntity.metadata);
+        const fromEntityId = resolveEntityId(rel.fromEntity.type, rel.fromEntity.name, memberMap, projectMap);
+        const toEntityId = resolveEntityId(rel.toEntity.type, rel.toEntity.name, memberMap, projectMap);
+        const fromNode = await upsertNode(userId, rel.fromEntity.type, rel.fromEntity.name, rel.fromEntity.metadata, fromEntityId);
+        const toNode = await upsertNode(userId, rel.toEntity.type, rel.toEntity.name, rel.toEntity.metadata, toEntityId);
         await upsertEdge(fromNode.id, toNode.id, rel.relation, source, rel.evidence, userId);
       } catch (err) {
-        // 개별 관계 저장 실패는 무시 (unique constraint 등)
         console.warn('[warn] 관계 저장 스킵:', err);
       }
     }
 
     console.log(`[knowledge-graph] ${relations.length}개 관계 추출됨 (source: ${source})`);
   } catch (error) {
-    console.warn('[warn] 그래프 구축 실패 (비치명적):', error);
+    console.error('[knowledge-graph] 그래프 구축 실패:', error);
   }
+}
+
+/** 엔티티 이름으로 실제 DB 레코드 ID 매칭 (부분 매칭 포함) */
+function resolveEntityId(
+  type: string,
+  name: string,
+  memberMap: Map<string, string> | null,
+  projectMap: Map<string, string> | null,
+): string | undefined {
+  if (type === 'person' && memberMap) {
+    // 정확 매칭
+    if (memberMap.has(name)) return memberMap.get(name);
+    // 부분 매칭 (예: "김태영" ⊂ "김태영 학생")
+    for (const [mName, mId] of memberMap) {
+      if (name.includes(mName) || mName.includes(name)) return mId;
+    }
+  }
+  if (type === 'project' && projectMap) {
+    if (projectMap.has(name)) return projectMap.get(name);
+    for (const [pName, pId] of projectMap) {
+      if (name.includes(pName) || pName.includes(name)) return pId;
+    }
+  }
+  return undefined;
 }
 
 // ── 그래프 조회: 전체 ──────────────────────────────────

@@ -1091,7 +1091,8 @@ export async function emailRoutes(app: FastifyInstance) {
         .map((b: any) => `${b.senderName || b.sender}: ${b.subject} — ${b.summary || ''}`)
         .join('\n');
       if (emailGraphText.length > 20) {
-        buildGraphFromText(userId, emailGraphText, 'email').catch(() => {});
+        buildGraphFromText(userId, emailGraphText, 'email')
+          .catch((err: any) => console.error('[background] email buildGraphFromText:', err.message || err));
       }
 
       // 일정 메일에서 이벤트 감지 → pending events
