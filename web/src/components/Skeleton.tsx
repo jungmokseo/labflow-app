@@ -1,8 +1,17 @@
 // ── Skeleton Building Blocks ─────────────────────
 
-/** Animated shimmer bar — YouTube 스타일 콘텐츠 placeholder */
-function Bone({ className = '' }: { className?: string }) {
-  return <div className={`bg-bg-hover/60 rounded animate-pulse ${className}`} />;
+/** Animated shimmer bar — YouTube 스타일 wave effect */
+function Bone({ className = '', delay = 0 }: { className?: string; delay?: number }) {
+  return (
+    <div
+      className={`rounded animate-shimmer ${className}`}
+      style={{
+        background: 'linear-gradient(90deg, var(--color-bg-hover) 25%, var(--color-border) 50%, var(--color-bg-hover) 75%)',
+        backgroundSize: '200% 100%',
+        animationDelay: `${delay}ms`,
+      }}
+    />
+  );
 }
 
 /** Card-shaped skeleton with optional children */
@@ -21,29 +30,29 @@ export function SettingsSkeleton() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <Bone className="h-8 w-32" />
-        <Bone className="h-4 w-48 mt-2" />
+        <Bone className="h-8 w-32" delay={0} />
+        <Bone className="h-4 w-48 mt-2" delay={80} />
       </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border">
-        {[1, 2, 3, 4].map(i => (
+        {[0, 1, 2, 3].map(i => (
           <div key={i} className="flex-1 py-2 px-3">
-            <Bone className={`h-5 mx-auto ${i === 1 ? 'w-20 bg-primary/30' : 'w-16'}`} />
+            <Bone className="h-5 w-16 mx-auto" delay={150 + i * 60} />
           </div>
         ))}
       </div>
 
       {/* Status cards grid */}
       <SkeletonCard>
-        <Bone className="h-5 w-24 mb-4" />
+        <Bone className="h-5 w-24 mb-4" delay={400} />
         <div className="grid grid-cols-2 gap-4">
-          {[1, 2, 3, 4, 5].map(i => (
+          {[0, 1, 2, 3, 4].map(i => (
             <div key={i} className="flex items-center gap-3 bg-bg-input rounded-lg p-3">
-              <Bone className="w-2.5 h-2.5 rounded-full" />
+              <Bone className="w-2.5 h-2.5 rounded-full" delay={480 + i * 80} />
               <div className="flex-1">
-                <Bone className="h-3 w-16 mb-1" />
-                <Bone className="h-3 w-12" />
+                <Bone className="h-3 w-16 mb-1" delay={500 + i * 80} />
+                <Bone className="h-3 w-12" delay={520 + i * 80} />
               </div>
             </div>
           ))}
@@ -61,19 +70,19 @@ export function DashboardSkeleton() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Bone className="h-8 w-48" />
-          <Bone className="h-4 w-36 mt-2" />
+          <Bone className="h-8 w-48" delay={0} />
+          <Bone className="h-4 w-36 mt-2" delay={80} />
         </div>
-        <Bone className="h-7 w-20 rounded-full" />
+        <Bone className="h-7 w-20 rounded-full" delay={120} />
       </div>
 
       {/* Shortcut cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map(i => (
+        {[0, 1, 2, 3].map(i => (
           <SkeletonCard key={i}>
-            <Bone className="w-7 h-7 rounded" />
-            <Bone className="h-5 w-20 mt-3" />
-            <Bone className="h-4 w-full mt-2" />
+            <Bone className="w-7 h-7 rounded" delay={200 + i * 100} />
+            <Bone className="h-5 w-20 mt-3" delay={240 + i * 100} />
+            <Bone className="h-4 w-full mt-2" delay={280 + i * 100} />
           </SkeletonCard>
         ))}
       </div>
@@ -83,14 +92,14 @@ export function DashboardSkeleton() {
         {/* Recent meetings */}
         <SkeletonCard>
           <div className="flex justify-between mb-4">
-            <Bone className="h-5 w-24" />
-            <Bone className="h-4 w-16" />
+            <Bone className="h-5 w-24" delay={600} />
+            <Bone className="h-4 w-16" delay={650} />
           </div>
-          {[1, 2, 3].map(i => (
+          {[0, 1, 2].map(i => (
             <div key={i} className="p-3 rounded-lg bg-bg-input mb-2">
-              <Bone className="h-4 w-3/4" />
-              <Bone className="h-3 w-full mt-2" />
-              <Bone className="h-3 w-20 mt-2" />
+              <Bone className="h-4 w-3/4" delay={700 + i * 100} />
+              <Bone className="h-3 w-full mt-2" delay={740 + i * 100} />
+              <Bone className="h-3 w-20 mt-2" delay={780 + i * 100} />
             </div>
           ))}
         </SkeletonCard>
@@ -98,22 +107,22 @@ export function DashboardSkeleton() {
         {/* Cost */}
         <SkeletonCard>
           <div className="flex justify-between mb-4">
-            <Bone className="h-5 w-24" />
-            <Bone className="h-4 w-16" />
+            <Bone className="h-5 w-24" delay={650} />
+            <Bone className="h-4 w-16" delay={700} />
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
-            {[1, 2].map(i => (
+            {[0, 1].map(i => (
               <div key={i} className="bg-bg-input rounded-lg p-3">
-                <Bone className="h-3 w-10 mb-1" />
-                <Bone className="h-6 w-16" />
+                <Bone className="h-3 w-10 mb-1" delay={750 + i * 80} />
+                <Bone className="h-6 w-16" delay={790 + i * 80} />
               </div>
             ))}
           </div>
-          <Bone className="h-3 w-24 mb-2" />
-          {[1, 2, 3].map(i => (
+          <Bone className="h-3 w-24 mb-2" delay={900} />
+          {[0, 1, 2].map(i => (
             <div key={i} className="mb-2">
-              <Bone className="h-3 w-full" />
-              <Bone className="h-1.5 w-full mt-1 rounded-full" />
+              <Bone className="h-3 w-full" delay={950 + i * 80} />
+              <Bone className="h-1.5 w-full mt-1 rounded-full" delay={990 + i * 80} />
             </div>
           ))}
         </SkeletonCard>
