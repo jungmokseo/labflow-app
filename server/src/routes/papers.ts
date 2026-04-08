@@ -121,13 +121,15 @@ export async function paperRoutes(app: FastifyInstance) {
    */
   app.post('/api/papers/search', async (req: FastifyRequest, reply: FastifyReply) => {
     const body = SearchPapersSchema.parse(req.body);
+    const userId = req.userId!;
+    const lab = await prisma.lab.findUnique({ where: { ownerId: userId }, select: { id: true } });
 
     try {
       // 1. 쿼리 임베딩 생성
       const { embedding } = await generateEmbedding(body.query);
 
-      // 2. pgvector 검색
-      const results = await searchPapers(prisma, embedding, body.limit, body.threshold);
+      // 2. pgvector 검색 (lab 격리)
+      const results = await searchPapers(prisma, embedding, body.limit, body.threshold, lab?.id);
 
       // 3. 논문 단위로 그룹핑 (복수 청크가 같은 논문에서 나올 수 있으므로)
       const paperMap = new Map<string, {
@@ -179,9 +181,11 @@ export async function paperRoutes(app: FastifyInstance) {
   /**
    * GET /api/papers — 저장된 논문 목록
    */
-  app.get('/api/papers', async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/papers', async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = req.userId!;
+    const lab = await prisma.lab.findUnique({ where: { ownerId: userId }, select: { id: true } });
     try {
-      const papers = await listStoredPapers(prisma);
+      const papers = await listStoredPapers(prisma, lab?.id);
       return reply.send({ papers, total: papers.length });
     } catch (err) {
       return reply.code(500).send({
@@ -306,6 +310,7 @@ export async function paperRoutes(app: FastifyInstance) {
             const { embedding } = await generateEmbedding(contextualText);
             await storePaperEmbeddings(prisma, {
               paperId,
+              labId: lab.id,
               title: meta.title,
               authors: meta.authors,
               abstract: meta.abstract,

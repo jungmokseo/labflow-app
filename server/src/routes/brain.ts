@@ -854,7 +854,7 @@ export async function brainRoutes(app: FastifyInstance) {
     if (env.OPENAI_API_KEY) {
       try {
         const { embedding } = await generateEmbedding(query);
-        results.paperChunks = await searchPapers(prisma, embedding, 5, 0.3);
+        results.paperChunks = await searchPapers(prisma, embedding, 5, 0.3, lab?.id);
       } catch {}
     }
 

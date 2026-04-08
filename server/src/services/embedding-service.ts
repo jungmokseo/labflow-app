@@ -12,6 +12,7 @@ import { env } from '../config/env.js';
 
 export interface PaperChunk {
   paperId: string;
+  labId?: string;
   title: string;
   authors?: string;
   abstract?: string;
@@ -172,6 +173,7 @@ async function ensurePaperEmbeddingsTable(prisma: any) {
       CREATE TABLE IF NOT EXISTS paper_embeddings (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         paper_id      TEXT NOT NULL,
+        lab_id        TEXT,
         title         TEXT NOT NULL,
         authors       TEXT,
         abstract      TEXT,
@@ -186,6 +188,7 @@ async function ensurePaperEmbeddingsTable(prisma: any) {
         updated_at    TIMESTAMPTZ DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
+      CREATE INDEX IF NOT EXISTS idx_paper_embeddings_lab_id ON paper_embeddings(lab_id);
       CREATE INDEX IF NOT EXISTS idx_paper_embeddings_embedding ON paper_embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
     `);
     tableEnsured = true;
@@ -198,6 +201,7 @@ async function ensurePaperEmbeddingsTable(prisma: any) {
         CREATE TABLE IF NOT EXISTS paper_embeddings (
           id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           paper_id      TEXT NOT NULL,
+          lab_id        TEXT,
           title         TEXT NOT NULL,
           authors       TEXT,
           abstract      TEXT,
@@ -212,6 +216,7 @@ async function ensurePaperEmbeddingsTable(prisma: any) {
           updated_at    TIMESTAMPTZ DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS idx_paper_embeddings_paper_id ON paper_embeddings(paper_id);
+        CREATE INDEX IF NOT EXISTS idx_paper_embeddings_lab_id ON paper_embeddings(lab_id);
       `);
       tableEnsured = true;
     } catch (e) {
@@ -233,11 +238,12 @@ export async function storePaperEmbeddings(
   const vectorStr = `[${embedding.join(',')}]`;
 
   const result = await prisma.$queryRawUnsafe(`
-    INSERT INTO paper_embeddings (paper_id, title, authors, abstract, journal, year, doi, chunk_index, chunk_text, embedding, metadata)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::vector, $11::jsonb)
+    INSERT INTO paper_embeddings (paper_id, lab_id, title, authors, abstract, journal, year, doi, chunk_index, chunk_text, embedding, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::vector, $12::jsonb)
     RETURNING id::text
   `,
     paper.paperId,
+    paper.labId || null,
     paper.title,
     paper.authors || null,
     paper.abstract || null,
@@ -261,9 +267,14 @@ export async function searchPapers(
   prisma: any,
   queryEmbedding: number[],
   limit: number = 5,
-  threshold: number = 0.5
+  threshold: number = 0.5,
+  labId?: string,
 ): Promise<PaperSearchResult[]> {
   const vectorStr = `[${queryEmbedding.join(',')}]`;
+
+  const labFilter = labId ? `AND lab_id = $4` : '';
+  const params: any[] = [vectorStr, threshold, limit];
+  if (labId) params.push(labId);
 
   const results = await prisma.$queryRawUnsafe(`
     SELECT
@@ -275,13 +286,11 @@ export async function searchPapers(
       chunk_text as "chunkText",
       1 - (embedding <=> $1::vector) as similarity
     FROM paper_embeddings
-    WHERE 1 - (embedding <=> $1::vector) > $2
+    WHERE 1 - (embedding <=> $1::vector) > $2 ${labFilter}
     ORDER BY embedding <=> $1::vector
     LIMIT $3
   `,
-    vectorStr,
-    threshold,
-    limit
+    ...params
   );
 
   return results as PaperSearchResult[];
@@ -304,8 +313,11 @@ export async function deletePaperEmbeddings(
  * 저장된 논문 목록 조회 (중복 제거)
  */
 export async function listStoredPapers(
-  prisma: any
+  prisma: any,
+  labId?: string,
 ): Promise<Array<{ paperId: string; title: string; authors: string | null; chunkCount: number }>> {
+  const labFilter = labId ? `WHERE lab_id = $1` : '';
+  const params = labId ? [labId] : [];
   const results = await prisma.$queryRawUnsafe(`
     SELECT
       paper_id as "paperId",
@@ -313,9 +325,10 @@ export async function listStoredPapers(
       MAX(authors) as authors,
       COUNT(*)::int as "chunkCount"
     FROM paper_embeddings
+    ${labFilter}
     GROUP BY paper_id
     ORDER BY MAX(created_at) DESC
-  `);
+  `, ...params);
 
   return results as Array<{ paperId: string; title: string; authors: string | null; chunkCount: number }>;
 }
