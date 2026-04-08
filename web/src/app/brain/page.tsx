@@ -180,9 +180,12 @@ export default function BrainPage() {
   const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState<UploadResult[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{
+    id: string; name: string; size: number;
+    status: 'uploading' | 'ready' | 'error';
+    result?: UploadResult; error?: string;
+  }>>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
@@ -320,55 +323,47 @@ export default function BrainPage() {
     }
   }
 
-  async function processFiles(files: File[]) {
+  function addFiles(files: File[]) {
     if (files.length === 0) return;
-    setUploading(true);
-    const results: UploadResult[] = [];
-    for (let i = 0; i < files.length; i++) {
-      setUploadProgress(files.length > 1 ? `${i + 1}/${files.length} 처리 중...` : '');
-      try {
-        const result = await brainUpload(files[i]);
-        results.push(result);
-        addMessageToActive({
-          id: `file-${Date.now()}-${i}`,
-          role: 'assistant',
-          content: result.message,
-          createdAt: new Date().toISOString(),
-        });
-      } catch (err: any) {
-        addMessageToActive({
-          id: `err-${Date.now()}-${i}`,
-          role: 'assistant',
-          content: `파일 처리 실패 (${files[i].name}): ${err.message}`,
-          createdAt: new Date().toISOString(),
-        });
-      }
+    // 각 파일에 대해 칩 추가 + 백그라운드 업로드
+    for (const file of files) {
+      const fileId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      setAttachedFiles(prev => [...prev, { id: fileId, name: file.name, size: file.size, status: 'uploading' }]);
+      // 백그라운드 업로드
+      brainUpload(file).then(result => {
+        setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'ready' as const, result } : f));
+      }).catch(err => {
+        setAttachedFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error' as const, error: err.message } : f));
+      });
     }
-    setUploadedFiles(prev => [...prev, ...results]);
-    setUploading(false);
-    setUploadProgress('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
+  function removeAttachedFile(id: string) {
+    setAttachedFiles(prev => prev.filter(f => f.id !== id));
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    await processFiles(files);
+    addFiles(Array.from(e.target.files || []));
   }
 
   async function handleSend() {
     if (!input.trim() || loading) return;
     const msg = input;
-    const currentFileIds = uploadedFiles.map(f => f.fileId);
+    const readyFiles = attachedFiles.filter(f => f.status === 'ready' && f.result);
+    const currentFileIds = readyFiles.map(f => f.result!.fileId);
+    const fileNames = readyFiles.map(f => f.name);
     const isNewSession = !activeChannelId;
     const channelIdAtSend = activeChannelId;
     setInput('');
-    setUploadedFiles([]);
+    setAttachedFiles([]);
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
 
-    const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg, createdAt: new Date().toISOString() };
+    const attachmentNote = fileNames.length > 0 ? `\n\n📎 ${fileNames.join(', ')}` : '';
+    const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg + attachmentNote, createdAt: new Date().toISOString() };
 
     if (channelIdAtSend) {
       storeAddMessage(channelIdAtSend, userMsg);
@@ -578,12 +573,11 @@ export default function BrainPage() {
     dragCounter.current--;
     if (dragCounter.current === 0) setIsDragging(false);
   }
-  async function handleDrop(e: React.DragEvent) {
+  function handleDrop(e: React.DragEvent) {
     e.preventDefault(); e.stopPropagation();
     dragCounter.current = 0;
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files || []);
-    await processFiles(files);
+    addFiles(Array.from(e.dataTransfer.files || []));
   }
 
   return (
@@ -826,21 +820,33 @@ export default function BrainPage() {
 
             {/* Input area */}
             <div className="border-t border-border">
-              {uploadedFiles.length > 0 && (
-                <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
-                  {uploadedFiles.map((f, i) => (
-                    <span key={f.fileId} className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
-                      <Paperclip className="w-3 h-3" /> {f.filename}
-                      <button onClick={() => setUploadedFiles(prev => prev.filter((_, j) => j !== i))} className="ml-1 text-blue-400/50 hover:text-blue-400">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {uploadProgress && (
-                <div className="px-4 pt-2">
-                  <span className="text-text-muted text-xs">{uploadProgress}</span>
+              {/* 첨부 파일 칩 — Claude Desktop 스타일 */}
+              {attachedFiles.length > 0 && (
+                <div className="px-4 pt-3 max-w-4xl mx-auto w-full">
+                  <div className="flex flex-wrap gap-2">
+                    {attachedFiles.map(f => (
+                      <div key={f.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border transition-all ${
+                        f.status === 'uploading' ? 'bg-bg-hover border-border/50 animate-pulse' :
+                        f.status === 'error' ? 'bg-red-500/10 border-red-500/30' :
+                        'bg-bg-hover border-border/30'
+                      }`}>
+                        {f.status === 'uploading' ? (
+                          <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin flex-shrink-0" />
+                        ) : f.status === 'error' ? (
+                          <FileText className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                        ) : (
+                          <FileText className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                        )}
+                        <span className={`max-w-[180px] truncate ${f.status === 'error' ? 'text-red-400' : 'text-text-heading'}`}>
+                          {f.name}
+                        </span>
+                        <span className="text-text-muted">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                        <button onClick={() => removeAttachedFile(f.id)} className="text-text-muted hover:text-text-heading ml-0.5">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="px-4 pb-4 pt-3 max-w-4xl mx-auto w-full">
@@ -891,7 +897,7 @@ export default function BrainPage() {
                       <span className="text-xs text-text-muted/50">Shift+Enter 줄바꿈</span>
                       <button
                         onClick={handleSend}
-                        disabled={loading || !input.trim()}
+                        disabled={loading || !input.trim() || attachedFiles.some(f => f.status === 'uploading')}
                         className="p-2 bg-primary text-white rounded-lg disabled:opacity-30 hover:bg-primary/90 transition-colors"
                       >
                         <Send className="w-4 h-4" />
