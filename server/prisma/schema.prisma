@@ -358,6 +358,7 @@ model Publication {
   year          Int?
   doi           String?
   abstract      String?
+  fullText      String?   @map("full_text")        // 논문 전문 (Gemini 추출)
   projectId     String?   @map("project_id")       // 레거시 단일 FK (하위 호환)
   indexed       Boolean   @default(false)
   nickname      String?

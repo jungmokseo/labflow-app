@@ -285,7 +285,7 @@ export async function paperRoutes(app: FastifyInstance) {
       });
       const fullText = fullResult.response.text().trim();
 
-      // 3. Publication DB 저장
+      // 3. Publication DB 저장 (전문 포함)
       const pub = await prisma.publication.create({
         data: {
           labId: lab.id,
@@ -295,6 +295,7 @@ export async function paperRoutes(app: FastifyInstance) {
           year: meta.year || null,
           doi: meta.doi || null,
           abstract: meta.abstract || null,
+          fullText: fullText || null,
           nickname,
           indexed: false,
         },

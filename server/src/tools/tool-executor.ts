@@ -1100,9 +1100,9 @@ async function executeRegisterUploadedPapers(
       });
       if (existing) { results.push(`"${meta.title}" — 이미 등록됨 (스킵)`); continue; }
 
-      // Publication 생성
+      // Publication 생성 (전문 포함)
       const pub = await prisma.publication.create({
-        data: { labId: ctx.labId, title: meta.title || memo.title, authors: meta.authors, journal: meta.journal, year: meta.year, doi: meta.doi, abstract: meta.abstract, indexed: false },
+        data: { labId: ctx.labId, title: meta.title || memo.title, authors: meta.authors, journal: meta.journal, year: meta.year, doi: meta.doi, abstract: meta.abstract, fullText: memo.content || null, indexed: false },
       });
 
       // 벡터 임베딩 (비동기)
@@ -1139,7 +1139,7 @@ async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
   // 모든 논문 가져오기 (indexed 여부 무관 — 전문이 있으면 재인덱싱)
   const allPubs = await prisma.publication.findMany({
     where: { labId: ctx.labId },
-    select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true, indexed: true },
+    select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true, fullText: true, indexed: true },
   });
 
   if (allPubs.length === 0) return '등록된 논문이 없습니다.';
@@ -1150,24 +1150,31 @@ async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
     const pub = allPubs[i];
     ctx.sendProgress(`${i + 1}/${allPubs.length} 인덱싱 중: ${pub.title.slice(0, 40)}...`);
     try {
-      // 제목으로 Memo에서 전문 찾기
-      const memo = await prisma.memo.findFirst({
-        where: {
-          userId: ctx.userId,
-          source: 'file-upload',
-          OR: [
-            { title: { contains: pub.title.slice(0, 30), mode: 'insensitive' } },
-            { content: { contains: pub.title.slice(0, 50), mode: 'insensitive' } },
-          ],
-        },
-        select: { content: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      // 전문 소스: 1) Publication.fullText → 2) Memo → 3) 메타데이터 fallback
+      let fullText = pub.fullText || '';
+      if (!fullText || fullText.length < 500) {
+        const memo = await prisma.memo.findFirst({
+          where: {
+            userId: ctx.userId,
+            source: 'file-upload',
+            OR: [
+              { title: { contains: pub.title.slice(0, 30), mode: 'insensitive' } },
+              { content: { contains: pub.title.slice(0, 50), mode: 'insensitive' } },
+            ],
+          },
+          select: { content: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (memo?.content && memo.content.length > (fullText?.length || 0)) {
+          fullText = memo.content;
+          // Publication에도 전문 저장 (다음 인덱싱 시 Memo 검색 불필요)
+          await prisma.publication.update({ where: { id: pub.id }, data: { fullText } }).catch(() => {});
+        }
+      }
 
-      const fullText = memo?.content || '';
       const text = fullText.length > 500
-        ? fullText  // Memo 전문 사용
-        : [         // 메타데이터 fallback
+        ? fullText
+        : [
             `Title: ${pub.title}`,
             pub.authors ? `Authors: ${pub.authors}` : '',
             pub.journal ? `Journal: ${pub.journal}` : '',
