@@ -613,6 +613,21 @@ async function executeGetCalendar(
     const rawResult = sections.join('\n');
     saveShadowMessage(shadowChannelId, 'calendar query', rawResult.slice(0, 1000)).catch(() => {});
 
+    // 캘린더 일정을 RAG 벡터 인덱스에 저장 (일 단위 캐시, cross-domain 검색 지원)
+    if (allEvents.length > 0) {
+      const calDate = new Date().toLocaleDateString('en-CA');
+      embedAndStore(basePrismaClient, {
+        sourceType: 'memo' as any,
+        sourceId: `calendar-${calDate}`,
+        userId: ctx.userId,
+        labId: ctx.labId || undefined,
+        title: `캘린더 일정 ${calDate}`,
+        content: rawResult,
+        tags: ['calendar', calDate],
+        source: 'calendar',
+      }).catch((err: any) => console.error('[background] calendar embedAndStore:', err.message || err));
+    }
+
     return `[양식지정] 아래 일정을 양식 그대로 전달하세요. 각 일정은 별도 불릿(-), 시간은 **볼드**, 빈 줄로 구분.\n\n${rawResult}`;
   } catch (err: any) {
     const msg = err?.message || '';

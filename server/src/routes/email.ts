@@ -24,11 +24,12 @@ import { z } from 'zod';
 import { google } from 'googleapis';
 import { createHmac } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
-import { prisma } from '../config/prisma.js';
+import { prisma, basePrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { embedAndStore } from '../services/rag-engine.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
 
@@ -1093,6 +1094,26 @@ export async function emailRoutes(app: FastifyInstance) {
       if (emailGraphText.length > 20) {
         buildGraphFromText(userId, emailGraphText, 'email')
           .catch((err: any) => console.error('[background] email buildGraphFromText:', err.message || err));
+      }
+
+      // 비동기 RAG 임베딩 — 이메일 브리핑을 벡터 인덱스에 저장 (cross-domain 검색 지원)
+      const today = now.toISOString().split('T')[0];
+      const embContent = briefings
+        .filter((b: any) => b.category !== 'ads')
+        .slice(0, 15)
+        .map((b: any) => `[${b.category}] ${b.senderName || b.sender}: ${b.subject}\n${b.summary || ''}`)
+        .join('\n\n');
+      if (embContent.length > 30) {
+        embedAndStore(basePrismaClient, {
+          sourceType: 'email' as any,
+          sourceId: `email-briefing-${today}`,
+          userId,
+          labId: request.labId || undefined,
+          title: `이메일 브리핑 ${today}`,
+          content: embContent,
+          tags: ['email', 'briefing', today],
+          source: 'email',
+        }).catch((err: any) => console.error('[background] email embedAndStore:', err.message || err));
       }
 
       // 일정 메일에서 이벤트 감지 → pending events

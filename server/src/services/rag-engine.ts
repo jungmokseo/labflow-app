@@ -15,7 +15,7 @@ import { env } from '../config/env.js';
 // ── Types ──────────────────────────────────────────
 
 export interface EmbeddableRecord {
-  sourceType: 'memo' | 'member' | 'project' | 'publication';
+  sourceType: 'memo' | 'member' | 'project' | 'publication' | 'email' | 'meeting' | 'capture';
   sourceId: string;
   labId?: string | null;
   userId?: string | null;
