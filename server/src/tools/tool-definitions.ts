@@ -17,7 +17,8 @@ export type ToolName =
   | 'save_capture'
   | 'get_daily_brief'
   | 'get_weekly_review'
-  | 'link_paper_grants';
+  | 'link_paper_grants'
+  | 'import_structured_data';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -169,6 +170,27 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       type: 'object' as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'import_structured_data',
+    description: '업로드된 엑셀/문서에서 파싱된 데이터를 DB에 저장합니다. 과제, 구성원, 논문, 참여율, 규정 등을 자동 분류하여 적절한 테이블에 저장합니다. 사용자가 파일을 업로드한 후 "저장해줘"라고 하면 사용하세요.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        file_id: { type: 'string', description: '업로드된 파일의 memo ID (fileId)' },
+        data_type: {
+          type: 'string',
+          enum: ['project', 'member', 'publication', 'regulation', 'participation_rate', 'acknowledgment', 'auto'],
+          description: '데이터 유형. auto면 AI가 자동 판별.',
+        },
+        items: {
+          type: 'array',
+          items: { type: 'object' },
+          description: '저장할 데이터 배열. 각 항목은 해당 타입의 필드를 포함. 파싱된 structured.rows를 그대로 넘기거나, 대화에서 추출한 데이터를 정리해서 넘기세요.',
+        },
+      },
+      required: ['data_type', 'items'],
     },
   },
   {

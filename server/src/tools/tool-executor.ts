@@ -53,6 +53,8 @@ export async function executeToolCall(
       return executeGetWeeklyReview(ctx);
     case 'link_paper_grants':
       return executeLinkPaperGrants(input, ctx);
+    case 'import_structured_data':
+      return executeImportStructuredData(input, ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -806,6 +808,143 @@ async function executeGetWeeklyReview(
   ctx.sendProgress('한 주의 활동을 정리하고 있습니다...');
   const { weeklyReview } = await import('../services/knowledge-graph.js');
   return await weeklyReview(ctx.userId);
+}
+
+// ── import_structured_data — 엑셀/문서 데이터 자동 저장 ────────
+
+async function executeImportStructuredData(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const { data_type, items } = input;
+  if (!ctx.labId) return '연구실 설정이 필요합니다.';
+  if (!Array.isArray(items) || items.length === 0) return '저장할 데이터가 없습니다.';
+
+  const labId = ctx.labId;
+  const results: string[] = [];
+
+  switch (data_type) {
+    case 'project': {
+      let created = 0, skipped = 0;
+      for (const item of items) {
+        const name = item.name || item['과제명'] || item.title;
+        if (!name) { skipped++; continue; }
+        const existing = await prisma.project.findFirst({ where: { labId, name } });
+        if (existing) { skipped++; continue; }
+        await prisma.project.create({
+          data: {
+            labId,
+            name,
+            number: item.number || item['약칭'] || item['과제번호'] || undefined,
+            funder: item.funder || item['지원기관'] || item['전문기관'] || undefined,
+            period: item.period || item['기간'] || undefined,
+            pi: item.pi || item.PI || item['연구책임자'] || undefined,
+            pm: item.pm || item.PM || item['담당자'] || undefined,
+            acknowledgment: item.acknowledgment || item['사사문구'] || undefined,
+            status: item.status || item['상태'] || 'active',
+          },
+        });
+        created++;
+      }
+      results.push(`과제 ${created}건 저장 완료${skipped > 0 ? ` (${skipped}건 중복/스킵)` : ''}`);
+      break;
+    }
+
+    case 'member': {
+      let created = 0, skipped = 0;
+      for (const item of items) {
+        const name = item.name || item['이름'];
+        if (!name) { skipped++; continue; }
+        const existing = await prisma.labMember.findFirst({ where: { labId, name } });
+        if (existing) { skipped++; continue; }
+        await prisma.labMember.create({
+          data: {
+            labId,
+            name,
+            email: item.email || item['이메일'] || undefined,
+            role: item.role || item['직위'] || item['역할'] || '학생',
+            team: item.team || item['팀'] || undefined,
+            phone: item.phone || item['연락처'] || undefined,
+          },
+        });
+        created++;
+      }
+      results.push(`구성원 ${created}명 저장 완료${skipped > 0 ? ` (${skipped}명 중복/스킵)` : ''}`);
+      break;
+    }
+
+    case 'publication': {
+      let created = 0, skipped = 0;
+      for (const item of items) {
+        const title = item.title || item['제목'] || item['논문명'];
+        if (!title) { skipped++; continue; }
+        const existing = await prisma.publication.findFirst({ where: { labId, title } });
+        if (existing) { skipped++; continue; }
+        await prisma.publication.create({
+          data: {
+            labId,
+            title,
+            journal: item.journal || item['저널'] || undefined,
+            year: parseInt(item.year || item['연도']) || undefined,
+            authors: item.authors || item['저자'] || undefined,
+            doi: item.doi || item.DOI || undefined,
+          },
+        });
+        created++;
+      }
+      results.push(`논문 ${created}편 저장 완료${skipped > 0 ? ` (${skipped}편 중복/스킵)` : ''}`);
+      break;
+    }
+
+    case 'regulation':
+    case 'participation_rate':
+    case 'acknowledgment': {
+      // 규정, 참여율, 사사문구 → 구조화된 메모로 저장
+      const typeLabelMap: Record<string, string> = { regulation: '규정', participation_rate: '참여율', acknowledgment: '사사문구' };
+      const typeLabel = typeLabelMap[data_type] || data_type;
+      let created = 0;
+      for (const item of items) {
+        const title = item.title || item['제목'] || item['항목'] || `${typeLabel} #${created + 1}`;
+        const content = item.content || item['내용'] || JSON.stringify(item, null, 2);
+        await prisma.memo.create({
+          data: {
+            userId: ctx.userId,
+            labId,
+            title,
+            content,
+            tags: [data_type, ...(item.tags || [])],
+            source: data_type,
+          },
+        });
+
+        // RAG 임베딩
+        embedAndStore(basePrismaClient, {
+          sourceType: 'memo' as any,
+          sourceId: `${data_type}-${Date.now()}-${created}`,
+          userId: ctx.userId,
+          labId,
+          title,
+          content,
+          tags: [data_type],
+        }).catch(() => {});
+
+        created++;
+      }
+      results.push(`${typeLabel} ${created}건 저장 완료`);
+      break;
+    }
+
+    case 'auto': {
+      // AI가 판별한 타입에 따라 위 분기로 재귀 호출
+      results.push('data_type을 지정해주세요. 데이터를 보고 project/member/publication/regulation/participation_rate/acknowledgment 중 하나를 선택하세요.');
+      break;
+    }
+
+    default:
+      results.push(`알 수 없는 데이터 타입: ${data_type}`);
+  }
+
+  return results.join('\n');
 }
 
 // ── link_paper_grants — 논문↔사사 과제 연결 ────────────────
