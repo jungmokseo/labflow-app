@@ -101,14 +101,15 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
 
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-    // 오늘 기준 unread 이메일 (최대 20개)
+    // 오늘 기준 이메일 (읽음+안읽음 모두 포함, 최대 20개)
+    // 급한 이메일은 이미 읽었지만 브리핑에 포함해야 함
     const today = new Date();
     const afterStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
 
     const listRes = await gmail.users.messages.list({
       userId: 'me',
       maxResults: 20,
-      q: `is:unread after:${afterStr} -category:promotions -category:social`,
+      q: `after:${afterStr} -category:promotions -category:social`,
     });
 
     const messages = listRes.data.messages || [];
