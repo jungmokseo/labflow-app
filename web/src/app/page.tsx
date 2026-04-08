@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getMeetings, checkHealth, getCostSummary, Meeting, CostSummary } from '@/lib/api';
+import { DashboardSkeleton } from '@/components/Skeleton';
 import { Brain, ClipboardList, BookOpen, Mic, DollarSign } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -33,13 +34,7 @@ export default function DashboardPage() {
     load();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <DashboardSkeleton />;
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">

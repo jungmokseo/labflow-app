@@ -287,10 +287,14 @@ export async function getFullGraph(
   const where: any = { userId };
   if (opts?.entityType) where.entityType = opts.entityType;
 
-  const [nodes, totalNodes] = await Promise.all([
+  // PI(본인) 노드 제외 — 모든 연결이 PI 중심이라 그래프가 무의미해짐
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+  const piName = user?.name?.trim().toLowerCase();
+
+  const [allNodes, totalNodes] = await Promise.all([
     prisma.knowledgeNode.findMany({
       where,
-      take: opts?.limit || 200,
+      take: (opts?.limit || 200) + 10, // PI 제외 후 부족분 대비 여유
       skip: opts?.offset || 0,
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -301,16 +305,26 @@ export async function getFullGraph(
     prisma.knowledgeNode.count({ where }),
   ]);
 
-  // 노드 ID 집합
-  const nodeIds = new Set(nodes.map(n => n.id));
+  // PI 노드 필터링: person 타입이면서 이름이 PI와 일치하는 노드 제외
+  const piNodeIds = new Set<string>();
+  const nodes = allNodes.filter(n => {
+    if (n.entityType === 'person' && piName) {
+      const nodeName = n.name.trim().toLowerCase();
+      if (nodeName === piName || piName.includes(nodeName) || nodeName.includes(piName)) {
+        piNodeIds.add(n.id);
+        return false;
+      }
+    }
+    return true;
+  }).slice(0, opts?.limit || 200);
 
-  // 표시 범위 내 엣지만 수집
+  // 표시 범위 내 엣지만 수집 (PI 노드 연결 제외)
   const edges: any[] = [];
   const edgeIds = new Set<string>();
 
   for (const node of nodes) {
     for (const e of [...node.outEdges, ...node.inEdges]) {
-      if (!edgeIds.has(e.id)) {
+      if (!edgeIds.has(e.id) && !piNodeIds.has(e.fromNodeId) && !piNodeIds.has(e.toNodeId)) {
         edgeIds.add(e.id);
         edges.push(e);
       }
@@ -324,7 +338,9 @@ export async function getFullGraph(
       entityType: n.entityType,
       entityId: n.entityId,
       metadata: n.metadata,
-      edgeCount: n.outEdges.length + n.inEdges.length,
+      edgeCount:
+        n.outEdges.filter(e => !piNodeIds.has(e.toNodeId)).length +
+        n.inEdges.filter(e => !piNodeIds.has(e.fromNodeId)).length,
       updatedAt: n.updatedAt.toISOString(),
     })),
     edges: edges.map(e => ({
@@ -336,7 +352,7 @@ export async function getFullGraph(
       source: e.source,
       evidence: e.evidence,
     })),
-    meta: { totalNodes, returnedNodes: nodes.length, totalEdges: edges.length },
+    meta: { totalNodes: totalNodes - piNodeIds.size, returnedNodes: nodes.length, totalEdges: edges.length },
   };
 }
 

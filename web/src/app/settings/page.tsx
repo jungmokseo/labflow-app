@@ -7,7 +7,7 @@ import {
   getLabDictionary, addDictEntry, getLabCompleteness,
   updateEmailProfile, LabProfile,
 } from '@/lib/api';
-// Skeleton imports removed — using inline spinner
+import { SettingsSkeleton } from '@/components/Skeleton';
 import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon } from 'lucide-react';
 
 type Tab = 'status' | 'lab' | 'email' | 'dictionary';
@@ -43,13 +43,7 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <SettingsSkeleton />;
 
   const TAB_ICONS: Record<Tab, React.ReactNode> = {
     status: <BarChart3 className="w-4 h-4 inline mr-1" />,
