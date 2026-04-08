@@ -1131,34 +1131,59 @@ async function executeRegisterUploadedPapers(
 
 async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
   if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
-  ctx.sendProgress('미인덱싱 논문 확인 중...');
+  ctx.sendProgress('논문 인덱싱 상태 확인 중...');
 
-  const unindexed = await prisma.publication.findMany({
-    where: { labId: ctx.labId, indexed: false },
-    select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true },
-  });
-
-  if (unindexed.length === 0) return '모든 논문이 이미 인덱싱되어 있습니다. Brain 대화에서 검색 가능합니다.';
-
-  const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
+  const { chunkText, generateEmbedding, storePaperEmbeddings, deletePaperEmbeddings } = await import('../services/embedding-service.js');
   const { buildGraphFromText } = await import('../services/knowledge-graph.js');
 
+  // 모든 논문 가져오기 (indexed 여부 무관 — 전문이 있으면 재인덱싱)
+  const allPubs = await prisma.publication.findMany({
+    where: { labId: ctx.labId },
+    select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true, indexed: true },
+  });
+
+  if (allPubs.length === 0) return '등록된 논문이 없습니다.';
+
+  // 각 논문에 대해 Memo(전문)이 있으면 전문으로 인덱싱, 없으면 메타데이터로
   const results: string[] = [];
-  for (let i = 0; i < unindexed.length; i++) {
-    const pub = unindexed[i];
-    ctx.sendProgress(`${i + 1}/${unindexed.length} 인덱싱 중: ${pub.title.slice(0, 40)}...`);
+  for (let i = 0; i < allPubs.length; i++) {
+    const pub = allPubs[i];
+    ctx.sendProgress(`${i + 1}/${allPubs.length} 인덱싱 중: ${pub.title.slice(0, 40)}...`);
     try {
-      const text = [
-        `Title: ${pub.title}`,
-        pub.authors ? `Authors: ${pub.authors}` : '',
-        pub.journal ? `Journal: ${pub.journal}` : '',
-        pub.year ? `Year: ${pub.year}` : '',
-        pub.abstract ? `Abstract: ${pub.abstract}` : '',
-      ].filter(Boolean).join('\n');
+      // 제목으로 Memo에서 전문 찾기
+      const memo = await prisma.memo.findFirst({
+        where: {
+          userId: ctx.userId,
+          source: 'file-upload',
+          OR: [
+            { title: { contains: pub.title.slice(0, 30), mode: 'insensitive' } },
+            { content: { contains: pub.title.slice(0, 50), mode: 'insensitive' } },
+          ],
+        },
+        select: { content: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const fullText = memo?.content || '';
+      const text = fullText.length > 500
+        ? fullText  // Memo 전문 사용
+        : [         // 메타데이터 fallback
+            `Title: ${pub.title}`,
+            pub.authors ? `Authors: ${pub.authors}` : '',
+            pub.journal ? `Journal: ${pub.journal}` : '',
+            pub.year ? `Year: ${pub.year}` : '',
+            pub.abstract ? `Abstract: ${pub.abstract}` : '',
+          ].filter(Boolean).join('\n');
+
+      // 기존 임베딩 삭제 후 재생성
+      if (pub.indexed) {
+        try { await deletePaperEmbeddings(prisma, pub.id); } catch {}
+      }
 
       const chunks = chunkText(text);
       for (let ci = 0; ci < chunks.length; ci++) {
-        const { embedding } = await generateEmbedding(chunks[ci]);
+        const contextualText = `Title: ${pub.title}\nAuthors: ${pub.authors || ''}\n${chunks[ci]}`;
+        const { embedding } = await generateEmbedding(contextualText);
         await storePaperEmbeddings(prisma, {
           paperId: pub.id, labId: ctx.labId!, title: pub.title,
           authors: pub.authors || undefined, abstract: pub.abstract || undefined,
@@ -1168,7 +1193,8 @@ async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
       }
       await prisma.publication.update({ where: { id: pub.id }, data: { indexed: true } });
       await buildGraphFromText(ctx.userId, `논문 "${pub.title}" (${pub.journal || ''}, ${pub.year || ''})의 저자: ${pub.authors || ''}`, 'paper_alert');
-      results.push(`"${pub.title}" — 인덱싱 완료`);
+      const source = fullText.length > 500 ? '전문' : '메타데이터';
+      results.push(`"${pub.title}" — ${source} 기반 인덱싱 완료 (${chunks.length}청크)`);
     } catch (err: any) {
       results.push(`"${pub.title}" — 실패: ${err.message}`);
     }
