@@ -14,7 +14,7 @@ import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
-  PanelLeftClose, PanelLeft, LogOut,
+  PanelLeftClose, PanelLeft, LogOut, Network,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -35,6 +35,7 @@ const NAV_ITEMS = [
   { href: '/papers', icon: BookOpen, label: '연구동향' },
   { href: '/meetings', icon: Mic, label: '회의 노트' },
   { href: '/lab-profile', icon: FlaskConical, label: '연구실 프로필' },
+  { href: '/graph', icon: Network, label: '지식 그래프' },
   { href: '/settings', icon: Settings, label: '설정' },
 ];
 
