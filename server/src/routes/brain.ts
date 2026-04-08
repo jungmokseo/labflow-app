@@ -216,7 +216,7 @@ export async function brainRoutes(app: FastifyInstance) {
     const buffer = Buffer.concat(chunks);
 
     if (buffer.length === 0) return reply.code(400).send({ error: '빈 파일입니다' });
-    if (buffer.length > 20 * 1024 * 1024) return reply.code(413).send({ error: '파일이 너무 큽니다 (최대 20MB)' });
+    if (buffer.length > 50 * 1024 * 1024) return reply.code(413).send({ error: '파일이 너무 큽니다 (최대 50MB)' });
 
     const { processUploadedFile } = await import('../services/file-processor.js');
     const result = await processUploadedFile(buffer, data.filename || 'upload', data.mimetype || 'application/octet-stream');

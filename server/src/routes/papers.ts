@@ -237,7 +237,7 @@ export async function paperRoutes(app: FastifyInstance) {
       chunks.push(Buffer.from(chunk as Uint8Array));
     }
     const buffer = Buffer.concat(chunks);
-    if (buffer.length > 30 * 1024 * 1024) return reply.code(413).send({ error: '최대 30MB' });
+    if (buffer.length > 50 * 1024 * 1024) return reply.code(413).send({ error: '최대 50MB' });
 
     // 별칭 (multipart field)
     const nicknameField = (data.fields as any)?.nickname;
