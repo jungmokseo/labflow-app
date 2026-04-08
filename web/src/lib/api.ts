@@ -399,9 +399,10 @@ export async function brainChatStream(
   channelId?: string,
   fileId?: string,
   newSession?: boolean,
+  fileIds?: string[],
 ): Promise<BrainChatResult> {
   const API_BASE_URL = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
-  const body = JSON.stringify({ message, channelId, fileId, newSession, stream: true });
+  const body = JSON.stringify({ message, channelId, fileId, fileIds, newSession, stream: true });
 
   // Retry with progressive backoff (handles Railway cold start)
   let res: Response | null = null;

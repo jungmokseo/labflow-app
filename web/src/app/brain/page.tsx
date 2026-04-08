@@ -180,8 +180,9 @@ export default function BrainPage() {
   const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<UploadResult | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadResult[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [thinkingSteps, setThinkingSteps] = useState<string[]>([]);
@@ -319,40 +320,49 @@ export default function BrainPage() {
     }
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function processFiles(files: File[]) {
+    if (files.length === 0) return;
     setUploading(true);
-    try {
-      const result = await brainUpload(file);
-      setUploadedFile(result);
-      addMessageToActive({
-        id: `file-${Date.now()}`,
-        role: 'assistant',
-        content: result.message,
-        createdAt: new Date().toISOString(),
-      });
-    } catch (err: any) {
-      addMessageToActive({
-        id: `err-${Date.now()}`,
-        role: 'assistant',
-        content: `파일 처리 실패: ${err.message}`,
-        createdAt: new Date().toISOString(),
-      });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    const results: UploadResult[] = [];
+    for (let i = 0; i < files.length; i++) {
+      setUploadProgress(files.length > 1 ? `${i + 1}/${files.length} 처리 중...` : '');
+      try {
+        const result = await brainUpload(files[i]);
+        results.push(result);
+        addMessageToActive({
+          id: `file-${Date.now()}-${i}`,
+          role: 'assistant',
+          content: result.message,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err: any) {
+        addMessageToActive({
+          id: `err-${Date.now()}-${i}`,
+          role: 'assistant',
+          content: `파일 처리 실패 (${files[i].name}): ${err.message}`,
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
+    setUploadedFiles(prev => [...prev, ...results]);
+    setUploading(false);
+    setUploadProgress('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    await processFiles(files);
   }
 
   async function handleSend() {
     if (!input.trim() || loading) return;
     const msg = input;
-    const currentFileId = uploadedFile?.fileId;
+    const currentFileIds = uploadedFiles.map(f => f.fileId);
     const isNewSession = !activeChannelId;
     const channelIdAtSend = activeChannelId;
     setInput('');
-    setUploadedFile(null);
+    setUploadedFiles([]);
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -383,8 +393,9 @@ export default function BrainPage() {
           setStreamingContent(prev => prev + token);
         },
         channelIdAtSend || undefined,
-        currentFileId,
+        currentFileIds[0],
         isNewSession ? true : undefined,
+        currentFileIds.length > 1 ? currentFileIds : undefined,
       );
       setThinkingSteps([]);
       setStreamingContent('');
@@ -571,16 +582,8 @@ export default function BrainPage() {
     e.preventDefault(); e.stopPropagation();
     dragCounter.current = 0;
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const result = await brainUpload(file);
-      setUploadedFile(result);
-      addMessageToActive({ id: `file-${Date.now()}`, role: 'assistant', content: result.message, createdAt: new Date().toISOString() });
-    } catch (err: any) {
-      addMessageToActive({ id: `err-${Date.now()}`, role: 'assistant', content: `파일 처리 실패: ${err.message}`, createdAt: new Date().toISOString() });
-    } finally { setUploading(false); }
+    const files = Array.from(e.dataTransfer.files || []);
+    await processFiles(files);
   }
 
   return (
@@ -823,18 +826,25 @@ export default function BrainPage() {
 
             {/* Input area */}
             <div className="border-t border-border">
-              {uploadedFile && (
-                <div className="px-4 pt-3 flex items-center gap-2">
-                  <span className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
-                    <Paperclip className="w-3 h-3" /> {uploadedFile.filename}
-                    <button onClick={() => setUploadedFile(null)} className="ml-1 text-blue-400/50 hover:text-blue-400">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
+              {uploadedFiles.length > 0 && (
+                <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
+                  {uploadedFiles.map((f, i) => (
+                    <span key={f.fileId} className="flex items-center gap-1 px-2.5 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-xs">
+                      <Paperclip className="w-3 h-3" /> {f.filename}
+                      <button onClick={() => setUploadedFiles(prev => prev.filter((_, j) => j !== i))} className="ml-1 text-blue-400/50 hover:text-blue-400">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {uploadProgress && (
+                <div className="px-4 pt-2">
+                  <span className="text-text-muted text-xs">{uploadProgress}</span>
                 </div>
               )}
               <div className="px-4 pb-4 pt-3 max-w-4xl mx-auto w-full">
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden"
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple
                   accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
                 {/* 텍스트 입력 영역 (Claude 스타일) */}
                 <div className="bg-bg-input rounded-2xl border border-border/30 focus-within:ring-2 focus-within:ring-primary/50 transition-all">

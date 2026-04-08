@@ -55,6 +55,7 @@ export default function LabProfilePage() {
   const [newDictWrong, setNewDictWrong] = useState('');
   const [newDictCorrect, setNewDictCorrect] = useState('');
   const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState('');
   const [pdfResult, setPdfResult] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
@@ -215,16 +216,25 @@ export default function LabProfilePage() {
   }
 
   async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setPdfUploading(true);
     setPdfResult(null);
-    try {
-      const res = await uploadPaperPdf(file);
-      setPdfResult(res.title ? `"${res.title}" 등록 완료` : '논문 등록 완료');
-      loadProfile();
-    } catch (err: any) { setError(err.message); }
-    finally { setPdfUploading(false); if (pdfInputRef.current) pdfInputRef.current.value = ''; }
+    const results: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      if (files.length > 1) setPdfProgress(`${i + 1}/${files.length} 처리 중...`);
+      try {
+        const res = await uploadPaperPdf(files[i]);
+        results.push(res.title ? `"${res.title}"` : files[i].name);
+      } catch (err: any) {
+        results.push(`${files[i].name} (실패: ${err.message})`);
+      }
+    }
+    setPdfResult(`${results.length}건 등록: ${results.join(', ')}`);
+    setPdfProgress('');
+    setPdfUploading(false);
+    if (pdfInputRef.current) pdfInputRef.current.value = '';
+    loadProfile();
   }
 
   if (loading) return (
@@ -497,11 +507,12 @@ export default function LabProfilePage() {
                 <div className="pt-4 border-t border-border/30">
                   <span className="text-text-muted text-xs">핵심 논문 등록</span>
                   <p className="text-text-muted text-[11px] mt-0.5 mb-2">PDF를 업로드하면 메타데이터 자동 추출 + Brain 대화에서 참고 가능</p>
-                  <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" />
+                  <input type="file" ref={pdfInputRef} onChange={handlePdfUpload} className="hidden" accept=".pdf" multiple />
                   <button onClick={() => pdfInputRef.current?.click()} disabled={pdfUploading}
                     className="px-4 py-2 bg-bg-input text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
-                    {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드
+                    {pdfUploading ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Upload className="w-4 h-4 inline mr-1" />} PDF 업로드 (다중 선택 가능)
                   </button>
+                  {pdfProgress && <p className="text-text-muted text-xs mt-2">{pdfProgress}</p>}
                   {pdfResult && <p className="text-green-500 text-xs mt-2">{pdfResult}</p>}
                 </div>
               </div>

@@ -36,6 +36,7 @@ const chatSchema = z.object({
   channelId: z.string().optional(),
   message: z.string().min(1),
   fileId: z.string().optional(),
+  fileIds: z.array(z.string()).optional(),
   newSession: z.boolean().optional(),
   stream: z.boolean().optional(),
 });
@@ -285,7 +286,7 @@ export async function brainRoutes(app: FastifyInstance) {
 
   // ── Chat (Claude Tool-Use 기반) ──────
   app.post('/api/brain/chat', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { channelId: inputChannelId, message, fileId, newSession, stream } = chatSchema.parse(request.body);
+    const { channelId: inputChannelId, message, fileId, fileIds, newSession, stream } = chatSchema.parse(request.body);
     const userId = request.userId!;
 
     const sendProgress = stream
@@ -315,12 +316,13 @@ export async function brainRoutes(app: FastifyInstance) {
 
     // ── 파일 컨텍스트 주입 ──────────
     let fileContext = '';
-    if (fileId) {
-      const fileMemo = await prisma.memo.findFirst({
-        where: { id: fileId, userId, source: 'file-upload' },
+    const allFileIds = fileIds?.length ? fileIds : fileId ? [fileId] : [];
+    if (allFileIds.length > 0) {
+      const fileMemos = await prisma.memo.findMany({
+        where: { id: { in: allFileIds }, userId, source: 'file-upload' },
       });
-      if (fileMemo) {
-        fileContext = `\n\n[업로드된 파일: ${fileMemo.title}]\n${fileMemo.content.slice(0, 5000)}`;
+      for (const fileMemo of fileMemos) {
+        fileContext += `\n\n[업로드된 파일: ${fileMemo.title}]\n${fileMemo.content.slice(0, 5000)}`;
       }
     }
 
