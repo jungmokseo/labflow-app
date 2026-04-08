@@ -508,71 +508,188 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     };
   });
 
-  // ── POST /api/lab/members/fetch-en-names — 홈페이지에서 영문 이름 자동 추출 ──
-  app.post('/api/lab/members/fetch-en-names', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
+  // ── POST /api/lab/homepage/extract — 홈페이지에서 연구실 정보 종합 추출 (미리보기) ──
+  app.post('/api/lab/homepage/extract', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
 
-    const labData = await prisma.lab.findUnique({ where: { id: lab.id }, select: { homepageUrl: true } });
+    const labData = await prisma.lab.findUnique({
+      where: { id: lab.id },
+      select: { homepageUrl: true, researchFields: true, name: true },
+    });
     if (!labData?.homepageUrl) return reply.code(400).send({ error: '연구실 홈페이지 URL이 설정되어 있지 않습니다.' });
 
-    // Fetch homepage content
-    let pageText = '';
-    try {
-      const res = await fetch(labData.homepageUrl, { signal: AbortSignal.timeout(10000) });
-      pageText = await res.text();
-    } catch {
-      return reply.code(502).send({ error: '홈페이지에 접속할 수 없습니다.' });
+    // Fetch homepage — 여러 페이지 시도 (메인 + /members, /people, /publications 등)
+    const baseUrl = labData.homepageUrl.replace(/\/$/, '');
+    const pagesToTry = [
+      baseUrl,
+      `${baseUrl}/members`, `${baseUrl}/people`, `${baseUrl}/team`,
+      `${baseUrl}/publications`, `${baseUrl}/research`,
+    ];
+
+    let combinedText = '';
+    for (const url of pagesToTry) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'LabFlow/1.0' } });
+        if (res.ok) {
+          const html = await res.text();
+          combinedText += `\n\n--- PAGE: ${url} ---\n${html}`;
+        }
+      } catch { /* skip unreachable pages */ }
     }
 
-    // Get current members
-    const members = await prisma.labMember.findMany({
-      where: { labId: lab.id, active: true },
-      select: { id: true, name: true, nameEn: true },
-    });
-    const membersWithoutEn = members.filter(m => !m.nameEn);
-    if (membersWithoutEn.length === 0) return reply.send({ updated: 0, message: '모든 멤버의 영문 이름이 이미 등록되어 있습니다.' });
+    if (!combinedText) return reply.code(502).send({ error: '홈페이지에 접속할 수 없습니다.' });
 
-    // Use Gemini to match Korean names to English names from the page
+    // Get existing data for diff
+    const [existingMembers, existingProjects] = await Promise.all([
+      prisma.labMember.findMany({ where: { labId: lab.id, active: true }, select: { id: true, name: true, nameEn: true, role: true, email: true } }),
+      prisma.project.findMany({ where: { labId: lab.id }, select: { name: true } }),
+    ]);
+
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const { env } = await import('../config/env.js');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    const prompt = `아래 웹페이지 HTML에서 연구실 멤버들의 영문 이름을 찾아주세요.
+    const prompt = `아래 연구실 홈페이지 HTML에서 가능한 모든 정보를 구조화하여 추출하세요.
 
-멤버 목록 (한국어 이름):
-${membersWithoutEn.map(m => `- ${m.name}`).join('\n')}
+현재 DB에 등록된 정보:
+- 멤버: ${existingMembers.map(m => `${m.name}${m.nameEn ? ` (${m.nameEn})` : ''} [${m.role}]`).join(', ') || '없음'}
+- 연구분야: ${(labData.researchFields || []).join(', ') || '없음'}
+- 과제: ${existingProjects.map(p => p.name).join(', ') || '없음'}
 
-웹페이지 내용 (HTML):
-${pageText.slice(0, 30000)}
+웹페이지 내용:
+${combinedText.slice(0, 50000)}
 
-각 한국어 이름에 대응하는 영문 이름을 찾아 JSON 배열로만 응답하세요. 찾을 수 없는 경우 null:
-[{"name": "한국어이름", "nameEn": "English Name" | null}]`;
+아래 JSON 형식으로만 응답하세요. 각 항목에서 "isNew"는 현재 DB에 없는 새 정보인지 여부입니다:
+{
+  "members": [
+    {"name": "한국어이름", "nameEn": "English Name", "role": "석사과정|박사과정|포닥|교수 등", "email": "email@example.com 또는 null", "isNew": true, "existingId": "기존멤버ID 또는 null"}
+  ],
+  "researchKeywords": ["keyword1", "keyword2"],
+  "publications": [
+    {"title": "논문 제목", "authors": "저자 목록", "journal": "저널명", "year": 2024, "doi": "10.xxx 또는 null"}
+  ],
+  "labDescription": "연구실 소개 텍스트 (있으면)",
+  "equipment": ["장비1", "장비2"]
+}
+
+규칙:
+- 기존 멤버의 영문 이름이 비어있으면 채워주세요 (existingId에 해당 멤버 ID 기입)
+- 새로운 멤버는 isNew: true
+- 연구 키워드는 기존에 없는 것만 포함
+- 논문은 제목, 저자, 저널, 연도가 확인 가능한 것만
+- 찾을 수 없는 카테고리는 빈 배열로`;
 
     try {
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
       });
       const text = result.response.text().trim();
-      const match = text.match(/\[[\s\S]*\]/);
-      if (!match) return reply.code(500).send({ error: '영문 이름 추출 실패' });
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) return reply.code(500).send({ error: '정보 추출 실패' });
 
-      const mappings: Array<{ name: string; nameEn: string | null }> = JSON.parse(match[0]);
-      let updated = 0;
-      for (const mapping of mappings) {
-        if (!mapping.nameEn) continue;
-        const member = membersWithoutEn.find(m => m.name === mapping.name);
-        if (member) {
-          await prisma.labMember.update({ where: { id: member.id }, data: { nameEn: mapping.nameEn } });
-          updated++;
+      const extracted = JSON.parse(match[0]);
+
+      // existingMembers의 ID 매칭 보정
+      if (extracted.members) {
+        for (const m of extracted.members) {
+          if (!m.isNew && !m.existingId && m.name) {
+            const found = existingMembers.find(em => em.name === m.name || (m.nameEn && em.nameEn === m.nameEn));
+            if (found) m.existingId = found.id;
+          }
         }
       }
-      return reply.send({ updated, mappings });
+
+      return reply.send({ success: true, extracted, homepageUrl: labData.homepageUrl });
     } catch (err: any) {
-      return reply.code(500).send({ error: '영문 이름 추출 실패', details: err.message });
+      return reply.code(500).send({ error: '홈페이지 정보 추출 실패', details: err.message });
     }
+  });
+
+  // ── POST /api/lab/homepage/apply — 선택된 홈페이지 정보 DB 반영 ──
+  app.post('/api/lab/homepage/apply', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const lab = await requireLab(request.userId!, reply);
+    if (!lab) return;
+
+    const applySchema = z.object({
+      members: z.array(z.object({
+        name: z.string(),
+        nameEn: z.string().optional(),
+        role: z.string().optional(),
+        email: z.string().optional(),
+        isNew: z.boolean(),
+        existingId: z.string().nullable().optional(),
+      })).optional(),
+      researchKeywords: z.array(z.string()).optional(),
+      publications: z.array(z.object({
+        title: z.string(),
+        authors: z.string().optional(),
+        journal: z.string().optional(),
+        year: z.number().optional(),
+        doi: z.string().optional(),
+      })).optional(),
+      labDescription: z.string().optional(),
+    });
+
+    const body = applySchema.parse(request.body);
+    const results = { members: 0, keywords: 0, publications: 0, description: false };
+
+    // 1. Members
+    if (body.members) {
+      for (const m of body.members) {
+        if (m.isNew) {
+          await prisma.labMember.create({
+            data: { labId: lab.id, name: m.name, nameEn: m.nameEn || null, role: m.role || '학생', email: m.email || null },
+          });
+          results.members++;
+        } else if (m.existingId && m.nameEn) {
+          await prisma.labMember.update({ where: { id: m.existingId }, data: { nameEn: m.nameEn } });
+          results.members++;
+        }
+      }
+    }
+
+    // 2. Research keywords
+    if (body.researchKeywords?.length) {
+      const labData = await prisma.lab.findUnique({ where: { id: lab.id }, select: { researchFields: true } });
+      const existing = new Set(labData?.researchFields || []);
+      const newKeywords = body.researchKeywords.filter(k => !existing.has(k));
+      if (newKeywords.length > 0) {
+        await prisma.lab.update({
+          where: { id: lab.id },
+          data: { researchFields: [...Array.from(existing), ...newKeywords] },
+        });
+        results.keywords = newKeywords.length;
+      }
+    }
+
+    // 3. Publications
+    if (body.publications?.length) {
+      for (const pub of body.publications) {
+        // Skip if already exists by title
+        const exists = await prisma.publication.findFirst({
+          where: { labId: lab.id, title: { equals: pub.title, mode: 'insensitive' } },
+        });
+        if (!exists) {
+          await prisma.publication.create({
+            data: { labId: lab.id, title: pub.title, authors: pub.authors, journal: pub.journal, year: pub.year, doi: pub.doi, indexed: false },
+          });
+          results.publications++;
+        }
+      }
+    }
+
+    // 4. Description → instructions 필드에 저장
+    if (body.labDescription) {
+      const existing = await prisma.lab.findUnique({ where: { id: lab.id }, select: { instructions: true } });
+      const prefix = existing?.instructions ? `${existing.instructions}\n\n` : '';
+      await prisma.lab.update({ where: { id: lab.id }, data: { instructions: `${prefix}[연구실 소개]\n${body.labDescription}` } });
+      results.description = true;
+    }
+
+    return reply.send({ success: true, results });
   });
 
   // ── Projects CRUD ─────────────────────────────────

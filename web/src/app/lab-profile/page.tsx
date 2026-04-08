@@ -58,8 +58,10 @@ export default function LabProfilePage() {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfProgress, setPdfProgress] = useState('');
   const [pdfResult, setPdfResult] = useState<string | null>(null);
-  const [fetchingEnNames, setFetchingEnNames] = useState(false);
-  const [enNameResult, setEnNameResult] = useState<string | null>(null);
+  const [fetchingHomepage, setFetchingHomepage] = useState(false);
+  const [homepageData, setHomepageData] = useState<any>(null);
+  const [homepageChecked, setHomepageChecked] = useState<Record<string, boolean>>({});
+  const [applyingHomepage, setApplyingHomepage] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadProfile(); }, []);
@@ -240,17 +242,46 @@ export default function LabProfilePage() {
     loadProfile();
   }
 
-  async function handleFetchEnNames() {
-    setFetchingEnNames(true);
-    setEnNameResult(null);
+  async function handleFetchHomepage() {
+    setFetchingHomepage(true);
+    setHomepageData(null);
     try {
-      const res = await apiFetch<{ updated: number; mappings?: Array<{ name: string; nameEn: string | null }> }>('/api/lab/members/fetch-en-names', { method: 'POST' });
-      setEnNameResult(`${res.updated}명의 영문 이름이 업데이트되었습니다.`);
+      const res = await apiFetch<{ success: boolean; extracted: any }>('/api/lab/homepage/extract', { method: 'POST' });
+      setHomepageData(res.extracted);
+      // Default: check all items
+      const checks: Record<string, boolean> = {};
+      (res.extracted.members || []).forEach((_: any, i: number) => { checks[`member-${i}`] = true; });
+      (res.extracted.researchKeywords || []).forEach((_: any, i: number) => { checks[`keyword-${i}`] = true; });
+      (res.extracted.publications || []).forEach((_: any, i: number) => { checks[`pub-${i}`] = true; });
+      if (res.extracted.labDescription) checks['description'] = true;
+      setHomepageChecked(checks);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setFetchingHomepage(false);
+    }
+  }
+
+  async function handleApplyHomepage() {
+    if (!homepageData) return;
+    setApplyingHomepage(true);
+    try {
+      const payload: any = {};
+      const checkedMembers = (homepageData.members || []).filter((_: any, i: number) => homepageChecked[`member-${i}`]);
+      if (checkedMembers.length) payload.members = checkedMembers;
+      const checkedKeywords = (homepageData.researchKeywords || []).filter((_: any, i: number) => homepageChecked[`keyword-${i}`]);
+      if (checkedKeywords.length) payload.researchKeywords = checkedKeywords;
+      const checkedPubs = (homepageData.publications || []).filter((_: any, i: number) => homepageChecked[`pub-${i}`]);
+      if (checkedPubs.length) payload.publications = checkedPubs;
+      if (homepageChecked['description'] && homepageData.labDescription) payload.labDescription = homepageData.labDescription;
+
+      await apiFetch('/api/lab/homepage/apply', { method: 'POST', body: JSON.stringify(payload) });
+      setHomepageData(null);
       loadProfile();
     } catch (err: any) {
-      setEnNameResult(`실패: ${err.message}`);
+      setError(err.message);
     } finally {
-      setFetchingEnNames(false);
+      setApplyingHomepage(false);
     }
   }
 
@@ -559,14 +590,14 @@ export default function LabProfilePage() {
               </div>
             ))}
             {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. Brain 대화에서도 가능해요: "김태영 박사과정 추가해줘"</p>}
-            {(lab.members || []).some((m: any) => !m.nameEn) && lab.homepageUrl && (
+            {lab.homepageUrl && (
               <div className="pt-3 border-t border-border/30">
-                <button onClick={handleFetchEnNames} disabled={fetchingEnNames}
+                <button onClick={handleFetchHomepage} disabled={fetchingHomepage}
                   className="px-4 py-2 bg-bg-input text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
-                  {fetchingEnNames ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Search className="w-4 h-4 inline mr-1" />}
-                  홈페이지에서 영문 이름 가져오기
+                  {fetchingHomepage ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Search className="w-4 h-4 inline mr-1" />}
+                  홈페이지에서 정보 가져오기
                 </button>
-                {enNameResult && <p className="text-green-500 text-xs mt-2">{enNameResult}</p>}
+                <p className="text-text-muted text-[11px] mt-1">멤버 영문 이름, 연구 키워드, 논문 등을 자동 추출합니다</p>
               </div>
             )}
           </div>
@@ -613,6 +644,116 @@ export default function LabProfilePage() {
           </div>
         )}
       </div>
+
+      {/* 홈페이지 정보 미리보기 모달 */}
+      {homepageData && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setHomepageData(null)}>
+          <div className="bg-bg-card rounded-xl border border-border max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-bg-card z-10">
+              <h3 className="text-text-heading font-medium">홈페이지에서 추출된 정보</h3>
+              <button onClick={() => setHomepageData(null)} className="text-text-muted hover:text-text-heading"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 space-y-5">
+
+              {/* 멤버 */}
+              {(homepageData.members || []).length > 0 && (
+                <div>
+                  <h4 className="text-text-heading text-sm font-medium mb-2">구성원 ({homepageData.members.length})</h4>
+                  <div className="space-y-1.5">
+                    {homepageData.members.map((m: any, i: number) => (
+                      <label key={i} className="flex items-center gap-2 p-2 rounded-lg hover:bg-bg-hover cursor-pointer">
+                        <input type="checkbox" checked={!!homepageChecked[`member-${i}`]}
+                          onChange={e => setHomepageChecked(prev => ({ ...prev, [`member-${i}`]: e.target.checked }))}
+                          className="rounded" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-text-heading text-sm">{m.name}{m.nameEn ? ` (${m.nameEn})` : ''}</span>
+                          <span className="text-text-muted text-xs ml-2">{m.role}</span>
+                          {m.email && <span className="text-text-muted text-xs ml-2">{m.email}</span>}
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.isNew ? 'bg-green-500/10 text-green-500' : 'bg-blue-500/10 text-blue-400'}`}>
+                          {m.isNew ? '신규' : '업데이트'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 연구 키워드 */}
+              {(homepageData.researchKeywords || []).length > 0 && (
+                <div>
+                  <h4 className="text-text-heading text-sm font-medium mb-2">연구 키워드 ({homepageData.researchKeywords.length})</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {homepageData.researchKeywords.map((kw: string, i: number) => (
+                      <label key={i} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-hover cursor-pointer hover:bg-bg-input">
+                        <input type="checkbox" checked={!!homepageChecked[`keyword-${i}`]}
+                          onChange={e => setHomepageChecked(prev => ({ ...prev, [`keyword-${i}`]: e.target.checked }))}
+                          className="rounded w-3 h-3" />
+                        <span className="text-text-heading text-xs">{kw}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 논문 */}
+              {(homepageData.publications || []).length > 0 && (
+                <div>
+                  <h4 className="text-text-heading text-sm font-medium mb-2">논문 ({homepageData.publications.length})</h4>
+                  <div className="space-y-1.5">
+                    {homepageData.publications.map((p: any, i: number) => (
+                      <label key={i} className="flex items-start gap-2 p-2 rounded-lg hover:bg-bg-hover cursor-pointer">
+                        <input type="checkbox" checked={!!homepageChecked[`pub-${i}`]}
+                          onChange={e => setHomepageChecked(prev => ({ ...prev, [`pub-${i}`]: e.target.checked }))}
+                          className="rounded mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-text-heading text-sm leading-snug">{p.title}</p>
+                          <p className="text-text-muted text-xs truncate">{p.authors} · {p.journal} ({p.year})</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 연구실 소개 */}
+              {homepageData.labDescription && (
+                <div>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={!!homepageChecked['description']}
+                      onChange={e => setHomepageChecked(prev => ({ ...prev, description: e.target.checked }))}
+                      className="rounded mt-1" />
+                    <div>
+                      <h4 className="text-text-heading text-sm font-medium">연구실 소개</h4>
+                      <p className="text-text-muted text-xs mt-1 line-clamp-3">{homepageData.labDescription}</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {/* 전체 선택/해제 + 적용 */}
+              <div className="flex items-center justify-between pt-3 border-t border-border/30">
+                <button onClick={() => {
+                  const allChecked = Object.values(homepageChecked).every(v => v);
+                  const newChecks: Record<string, boolean> = {};
+                  Object.keys(homepageChecked).forEach(k => { newChecks[k] = !allChecked; });
+                  setHomepageChecked(newChecks);
+                }} className="text-text-muted text-xs hover:text-text-heading">
+                  {Object.values(homepageChecked).every(v => v) ? '전체 해제' : '전체 선택'}
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setHomepageData(null)} className="px-4 py-2 text-text-muted text-sm hover:text-text-heading">취소</button>
+                  <button onClick={handleApplyHomepage} disabled={applyingHomepage || !Object.values(homepageChecked).some(v => v)}
+                    className="px-4 py-2 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
+                    {applyingHomepage ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : null}
+                    선택 항목 반영 ({Object.values(homepageChecked).filter(v => v).length}건)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
