@@ -51,6 +51,8 @@ export async function executeToolCall(
       return executeGetDailyBrief(ctx);
     case 'get_weekly_review':
       return executeGetWeeklyReview(ctx);
+    case 'link_paper_grants':
+      return executeLinkPaperGrants(input, ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -78,7 +80,11 @@ async function executeSearchLabData(
       ? prisma.project.findMany({ where: { labId: ctx.labId } })
       : Promise.resolve([]),
     (searchAll || types.includes('publication'))
-      ? prisma.publication.findMany({ where: { labId: ctx.labId }, orderBy: { year: 'desc' } })
+      ? prisma.publication.findMany({
+          where: { labId: ctx.labId },
+          orderBy: { year: 'desc' },
+          include: { grants: { include: { project: { select: { name: true, number: true } } } } },
+        })
       : Promise.resolve([]),
     (searchAll || types.includes('memo'))
       ? prisma.memo.findMany({
@@ -191,21 +197,47 @@ async function executeSearchLabData(
     }
   }
 
-  // 논문 매칭
+  // 논문 매칭 (사사 과제 포함)
   if (publications.length > 0) {
-    const matched = publications.filter(p =>
-      words.some(w =>
-        fuzzy(p.title, w) ||
-        (p.journal && fuzzy(p.journal, w)) ||
-        (p.authors && fuzzy(p.authors, w)) ||
-        (p.nickname && fuzzy(p.nickname, w))
-      )
-    );
+    const isSasaQuery = query.includes('사사') || query.includes('acknowledge') || query.includes('grant');
+
+    // 사사 역검색: "A 과제 사사한 논문" → A 과제에 연결된 논문 찾기
+    let matched: typeof publications;
+    if (isSasaQuery) {
+      matched = publications.filter((p: any) =>
+        p.grants?.length > 0 && (
+          // 키워드가 사사 과제명/약칭에 매칭
+          words.some((w: string) =>
+            p.grants.some((g: any) =>
+              fuzzy(g.project.name, w) || (g.project.number && fuzzy(g.project.number, w))
+            )
+          ) ||
+          // "사사 논문 목록" 같은 전체 조회
+          words.every((w: string) => ['사사', '논문', '목록', '보여', '알려', '뭐야', '어떤'].includes(w))
+        )
+      );
+      // 사사 키워드지만 과제명이 없으면 사사 있는 논문 전체
+      if (matched.length === 0 && isSasaQuery) {
+        matched = publications.filter((p: any) => p.grants?.length > 0);
+      }
+    } else {
+      matched = publications.filter((p: any) =>
+        words.some((w: string) =>
+          fuzzy(p.title, w) ||
+          (p.journal && fuzzy(p.journal, w)) ||
+          (p.authors && fuzzy(p.authors, w)) ||
+          (p.nickname && fuzzy(p.nickname, w)) ||
+          (p.grants?.some((g: any) => fuzzy(g.project.name, w) || (g.project.number && fuzzy(g.project.number, w))))
+        )
+      );
+    }
+
     if (matched.length > 0) {
-      trackAccess('publication', matched.map(p => p.id)).catch(() => {});
-      results.push('[논문]\n' + matched.map(p =>
-        `- **${p.title}**${p.nickname ? ` [${p.nickname}]` : ''}\n  저널: ${p.journal || '미등록'} (${p.year || ''})\n  저자: ${p.authors || '미등록'}\n  DOI: ${p.doi || '미등록'}`
-      ).join('\n'));
+      trackAccess('publication', matched.map((p: any) => p.id)).catch(() => {});
+      results.push('[논문]\n' + matched.map((p: any) => {
+        const grantList = p.grants?.map((g: any) => g.project.number || g.project.name).join(', ');
+        return `- **${p.title}**${p.nickname ? ` [${p.nickname}]` : ''}\n  저널: ${p.journal || '미등록'} (${p.year || ''})\n  저자: ${p.authors || '미등록'}\n  DOI: ${p.doi || '미등록'}${grantList ? `\n  사사 과제: ${grantList}` : ''}`;
+      }).join('\n'));
     } else if (searchAll && publications.length > 0) {
       results.push(`[논문] 총 ${publications.length}편 등록됨`);
     }
@@ -774,4 +806,104 @@ async function executeGetWeeklyReview(
   ctx.sendProgress('한 주의 활동을 정리하고 있습니다...');
   const { weeklyReview } = await import('../services/knowledge-graph.js');
   return await weeklyReview(ctx.userId);
+}
+
+// ── link_paper_grants — 논문↔사사 과제 연결 ────────────────
+
+async function executeLinkPaperGrants(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const { paper_title, grant_names, paper_journal, paper_year, paper_authors, paper_doi } = input;
+  if (!paper_title || !Array.isArray(grant_names) || grant_names.length === 0) {
+    return '논문 제목과 사사 과제명이 필요합니다.';
+  }
+  if (!ctx.labId) return '연구실 설정이 필요합니다.';
+  const labId = ctx.labId;
+
+  // 1. 논문 찾기 또는 생성
+  let pub = await prisma.publication.findFirst({
+    where: {
+      labId,
+      OR: [
+        { title: { contains: paper_title, mode: 'insensitive' } },
+        { nickname: { contains: paper_title, mode: 'insensitive' } },
+      ],
+    },
+  });
+
+  if (!pub) {
+    pub = await prisma.publication.create({
+      data: {
+        labId,
+        title: paper_title,
+        journal: paper_journal || undefined,
+        year: paper_year || undefined,
+        authors: paper_authors || undefined,
+        doi: paper_doi || undefined,
+      },
+    });
+  }
+
+  // 2. 과제 매칭 (이름 또는 약칭)
+  const projects = await prisma.project.findMany({
+    where: { labId },
+    select: { id: true, name: true, number: true },
+  });
+
+  const linked: string[] = [];
+  const notFound: string[] = [];
+
+  for (const grantName of grant_names) {
+    const project = projects.find(p =>
+      (p.number && p.number.toLowerCase() === grantName.toLowerCase()) ||
+      p.name.toLowerCase().includes(grantName.toLowerCase()) ||
+      (p.number && grantName.toLowerCase().includes(p.number.toLowerCase()))
+    );
+
+    if (project) {
+      try {
+        await prisma.publicationGrant.upsert({
+          where: { publicationId_projectId: { publicationId: pub.id, projectId: project.id } },
+          create: { publicationId: pub.id, projectId: project.id },
+          update: {},
+        });
+        linked.push(project.number || project.name);
+      } catch {
+        linked.push(project.number || project.name + ' (이미 연결됨)');
+      }
+    } else {
+      notFound.push(grantName);
+    }
+  }
+
+  // 3. 임베딩 업데이트 (사사 정보 포함)
+  const grants = await prisma.publicationGrant.findMany({
+    where: { publicationId: pub.id },
+    include: { project: { select: { name: true, number: true } } },
+  });
+  const grantText = grants.map(g => g.project.number || g.project.name).join(', ');
+  const embText = [
+    pub.title,
+    pub.journal ? `저널: ${pub.journal}` : '',
+    pub.authors ? `저자: ${pub.authors}` : '',
+    grantText ? `사사 과제: ${grantText}` : '',
+  ].filter(Boolean).join('\n');
+
+  embedAndStore(basePrismaClient, {
+    sourceType: 'publication' as any,
+    sourceId: pub.id,
+    userId: ctx.userId,
+    labId,
+    title: pub.title,
+    content: embText,
+    tags: ['publication', ...grants.map(g => g.project.number || g.project.name)],
+  }).catch((err: any) => console.error('[background] paper grant embedAndStore:', err.message || err));
+
+  // 4. 결과 반환
+  const lines = [`논문: **${pub.title}**`];
+  if (linked.length > 0) lines.push(`사사 연결 완료: ${linked.join(', ')}`);
+  if (notFound.length > 0) lines.push(`과제를 찾을 수 없음: ${notFound.join(', ')} — 정확한 과제명이나 약칭을 확인해주세요.`);
+  lines.push(`\n현재 이 논문의 사사 과제: ${grantText || '없음'}`);
+  return lines.join('\n');
 }

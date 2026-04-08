@@ -16,7 +16,8 @@ export type ToolName =
   | 'create_calendar_event'
   | 'save_capture'
   | 'get_daily_brief'
-  | 'get_weekly_review';
+  | 'get_weekly_review'
+  | 'link_paper_grants';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -168,6 +169,26 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       type: 'object' as const,
       properties: {},
       required: [],
+    },
+  },
+  {
+    name: 'link_paper_grants',
+    description: '논문에 사사(acknowledgment) 과제를 연결합니다. "이 논문은 A, B 과제 사사했어" 같은 요청에 사용합니다. 논문이 DB에 없으면 자동 생성합니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        paper_title: { type: 'string', description: '논문 제목 또는 별칭 (정확하지 않아도 됨)' },
+        grant_names: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '사사 과제명 또는 약칭 목록 (예: ["뇌선도", "BRL"])',
+        },
+        paper_journal: { type: 'string', description: '게재 저널 (선택)' },
+        paper_year: { type: 'number', description: '발표 연도 (선택)' },
+        paper_authors: { type: 'string', description: '저자 (선택)' },
+        paper_doi: { type: 'string', description: 'DOI (선택)' },
+      },
+      required: ['paper_title', 'grant_names'],
     },
   },
 ];

@@ -341,6 +341,7 @@ model Project {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   lab             Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+  grantedPapers   PublicationGrant[]                // 이 과제를 사사한 논문들
 
   @@index([labId])
   @@map("projects")
@@ -356,9 +357,9 @@ model Publication {
   year          Int?
   doi           String?
   abstract      String?
-  projectId     String?   @map("project_id")
-  indexed       Boolean   @default(false)          // 벡터 임베딩 완료 여부
-  nickname      String?                            // 별칭 (예: "핵심 논문 1번", "LM 논문")
+  projectId     String?   @map("project_id")       // 레거시 단일 FK (하위 호환)
+  indexed       Boolean   @default(false)
+  nickname      String?
   confidence    Float     @default(1.0)
   accessCount   Int       @default(0) @map("access_count")
   lastVerified  DateTime? @map("last_verified")
@@ -367,9 +368,25 @@ model Publication {
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   lab           Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+  grants        PublicationGrant[]                  // 다중 사사 관계
 
   @@index([labId, year])
   @@map("publications")
+}
+
+// ── 논문↔과제 사사 관계 (many-to-many) ──────────────────────
+model PublicationGrant {
+  id              String      @id @default(cuid())
+  publicationId   String      @map("publication_id")
+  projectId       String      @map("project_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  publication     Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, projectId])
+  @@index([projectId])
+  @@map("publication_grants")
 }
 
 // ── 도메인 사전 (전문용어) ────────────────────────────────
