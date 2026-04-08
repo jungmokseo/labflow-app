@@ -239,68 +239,11 @@ export async function brainRoutes(app: FastifyInstance) {
       tags: ['file-upload', result.type], source: 'file-upload',
     }).catch((err: any) => console.error('[background] file-upload embedAndStore:', err.message || err));
 
-    // 논문 PDF 자동 감지 → Publication DB에도 등록 (비동기)
-    let paperRegistered = false;
-    if (result.suggestedAction === 'paper_discuss' && lab && data.mimetype === 'application/pdf') {
-      paperRegistered = true;
-      (async () => {
-        try {
-          const { GoogleGenerativeAI } = await import('@google/generative-ai');
-          const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-          const metaResult = await model.generateContent({
-            contents: [{ role: 'user', parts: [
-              { inlineData: { data: buffer.toString('base64'), mimeType: 'application/pdf' } },
-              { text: `이 논문의 메타데이터를 추출하세요. JSON으로만 응답:\n{"title":"논문 제목","authors":"저자 목록","journal":"저널명","year":2024,"doi":"10.xxxx 또는 null","abstract":"초록 전문"}` },
-            ] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
-          });
-          const metaText = metaResult.response.text().trim();
-          const metaMatch = metaText.match(/\{[\s\S]*\}/);
-          const meta = metaMatch ? JSON.parse(metaMatch[0]) : {};
-
-          // 중복 체크
-          const existing = await prisma.publication.findFirst({
-            where: { labId: lab.id, title: { equals: meta.title, mode: 'insensitive' } },
-          });
-          if (existing) { console.log(`[brain-upload] 이미 등록된 논문: ${meta.title}`); return; }
-
-          const pub = await prisma.publication.create({
-            data: { labId: lab.id, title: meta.title || data.filename, authors: meta.authors, journal: meta.journal, year: meta.year, doi: meta.doi, abstract: meta.abstract, indexed: false },
-          });
-
-          // 벡터 임베딩
-          const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
-          const fullResult = await model.generateContent({
-            contents: [{ role: 'user', parts: [
-              { inlineData: { data: buffer.toString('base64'), mimeType: 'application/pdf' } },
-              { text: '이 논문의 전체 텍스트를 추출하세요. 제목부터 References까지 모든 텍스트를 그대로 출력:' },
-            ] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
-          });
-          const fullText = fullResult.response.text().trim();
-          const chunks = chunkText(fullText);
-          for (let i = 0; i < chunks.length; i++) {
-            const { embedding } = await generateEmbedding(`Title: ${meta.title}\nAuthors: ${meta.authors}\nContent: ${chunks[i]}`);
-            await storePaperEmbeddings(prisma, { paperId: pub.id, labId: lab.id, title: meta.title, authors: meta.authors, abstract: meta.abstract, journal: meta.journal, year: meta.year, doi: meta.doi, chunkIndex: i, chunkText: chunks[i] }, embedding);
-          }
-          await prisma.publication.update({ where: { id: pub.id }, data: { indexed: true } });
-
-          // 지식 그래프
-          const { buildGraphFromText } = await import('../services/knowledge-graph.js');
-          await buildGraphFromText(userId, `논문 "${meta.title}" (${meta.journal || ''}, ${meta.year || ''})의 저자: ${meta.authors || ''}. 초록: ${meta.abstract || ''}`, 'paper_alert');
-          console.log(`[brain-upload] 논문 자동 등록 완료: ${meta.title}`);
-        } catch (err) {
-          console.error('[brain-upload] 논문 자동 등록 실패:', err);
-        }
-      })();
-    }
+    // 논문 자동 등록은 하지 않음 — 사용자 의도에 따라 tool-use로 처리
+    const paperRegistered = false;
 
     const actionMessages: Record<string, string> = {
-      paper_discuss: paperRegistered
-        ? `[논문] "${result.filename}" — 연구실 논문 DB에 자동 등록 중입니다.\n\n이 논문에 대해 질문하거나, 핵심 논문과 비교 분석을 요청할 수 있습니다.`
-        : `[논문] 논문이 업로드되었습니다: "${result.filename}"\n\n이 논문에 대해 질문하거나, 핵심 논문과 비교 분석을 요청할 수 있습니다.`,
+      paper_discuss: `[논문] "${result.filename}" 업로드 완료.\n\n이 논문에 대해 질문, 요약, 핵심 논문과 비교 분석 등을 요청할 수 있습니다.\n연구실 논문이라면 "논문 DB에 등록해줘"라고 말씀해주세요.`,
       document_summarize: `[문서] 문서가 업로드되었습니다: "${result.filename}"\n\n요약, 핵심 내용 추출, 또는 특정 부분에 대해 질문해주세요.`,
       import_projects: `[과제] 과제 데이터가 감지되었습니다 (${result.metadata?.rowCount || 0}건)\n\n"과제 정보로 저장해줘"라고 하면 자동으로 분류 저장합니다.`,
       import_members: `[구성원] 구성원 데이터가 감지되었습니다 (${result.metadata?.rowCount || 0}명)\n\n"구성원으로 저장해줘"라고 하면 자동으로 등록합니다.`,

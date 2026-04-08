@@ -18,7 +18,8 @@ export type ToolName =
   | 'get_daily_brief'
   | 'get_weekly_review'
   | 'link_paper_grants'
-  | 'import_structured_data';
+  | 'import_structured_data'
+  | 'register_uploaded_papers';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -211,6 +212,21 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         paper_doi: { type: 'string', description: 'DOI (선택)' },
       },
       required: ['paper_title', 'grant_names'],
+    },
+  },
+  {
+    name: 'register_uploaded_papers',
+    description: '업로드된 논문 PDF를 연구실 논문 DB에 등록합니다. 메타데이터(제목/저자/저널/연도) 자동 추출 + 벡터 임베딩 + 지식 그래프 연결까지 수행합니다. 사용자가 논문을 올리고 "등록해줘", "우리 논문이야", "DB에 넣어줘" 등의 의도를 표현하면 사용합니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        file_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '등록할 파일의 memo ID 목록 (업로드 시 받은 fileId)',
+        },
+      },
+      required: ['file_ids'],
     },
   },
 ];

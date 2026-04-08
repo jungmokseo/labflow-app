@@ -55,6 +55,8 @@ export async function executeToolCall(
       return executeLinkPaperGrants(input, ctx);
     case 'import_structured_data':
       return executeImportStructuredData(input, ctx);
+    case 'register_uploaded_papers':
+      return executeRegisterUploadedPapers(input, ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -1048,4 +1050,77 @@ async function executeLinkPaperGrants(
   if (notFound.length > 0) lines.push(`과제를 찾을 수 없음: ${notFound.join(', ')} — 정확한 과제명이나 약칭을 확인해주세요.`);
   lines.push(`\n현재 이 논문의 사사 과제: ${grantText || '없음'}`);
   return lines.join('\n');
+}
+
+// ── register_uploaded_papers ────────────────────────────
+
+async function executeRegisterUploadedPapers(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+  const fileIds: string[] = input.file_ids || [];
+  if (fileIds.length === 0) return '등록할 파일이 지정되지 않았습니다.';
+
+  ctx.sendProgress('논문 등록 준비 중...');
+
+  const { GoogleGenerativeAI } = await import('@google/generative-ai');
+  const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
+  const { buildGraphFromText } = await import('../services/knowledge-graph.js');
+
+  const results: string[] = [];
+
+  for (let i = 0; i < fileIds.length; i++) {
+    const memo = await prisma.memo.findFirst({
+      where: { id: fileIds[i], userId: ctx.userId, source: 'file-upload' },
+    });
+    if (!memo) { results.push(`파일 ID ${fileIds[i]}: 찾을 수 없음`); continue; }
+
+    ctx.sendProgress(`${i + 1}/${fileIds.length} 논문 메타데이터 추출 중...`);
+
+    try {
+      // 메타데이터 추출 (memo.content에서)
+      const metaResult = await model.generateContent({
+        contents: [{ role: 'user', parts: [
+          { text: `아래 논문 텍스트에서 메타데이터를 추출하세요. JSON으로만 응답:\n{"title":"논문 제목","authors":"저자 목록","journal":"저널명","year":2024,"doi":"10.xxxx 또는 null","abstract":"초록 전문"}\n\n${memo.content.slice(0, 8000)}` },
+        ] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+      });
+      const metaText = metaResult.response.text().trim();
+      const metaMatch = metaText.match(/\{[\s\S]*\}/);
+      const meta = metaMatch ? JSON.parse(metaMatch[0]) : {};
+
+      // 중복 체크
+      const existing = await prisma.publication.findFirst({
+        where: { labId: ctx.labId, title: { equals: meta.title, mode: 'insensitive' } },
+      });
+      if (existing) { results.push(`"${meta.title}" — 이미 등록됨 (스킵)`); continue; }
+
+      // Publication 생성
+      const pub = await prisma.publication.create({
+        data: { labId: ctx.labId, title: meta.title || memo.title, authors: meta.authors, journal: meta.journal, year: meta.year, doi: meta.doi, abstract: meta.abstract, indexed: false },
+      });
+
+      // 벡터 임베딩 (비동기)
+      (async () => {
+        try {
+          const chunks = chunkText(memo.content);
+          for (let ci = 0; ci < chunks.length; ci++) {
+            const { embedding } = await generateEmbedding(`Title: ${meta.title}\nAuthors: ${meta.authors}\nContent: ${chunks[ci]}`);
+            await storePaperEmbeddings(prisma, { paperId: pub.id, labId: ctx.labId!, title: meta.title, authors: meta.authors, abstract: meta.abstract, journal: meta.journal, year: meta.year, doi: meta.doi, chunkIndex: ci, chunkText: chunks[ci] }, embedding);
+          }
+          await prisma.publication.update({ where: { id: pub.id }, data: { indexed: true } });
+          await buildGraphFromText(ctx.userId, `논문 "${meta.title}" (${meta.journal || ''}, ${meta.year || ''})의 저자: ${meta.authors || ''}. 초록: ${meta.abstract || ''}`, 'paper_alert');
+        } catch (err) { console.error('[register-paper] indexing failed:', err); }
+      })();
+
+      results.push(`"${meta.title}" — 등록 완료 (벡터 인덱싱 진행 중)`);
+    } catch (err: any) {
+      results.push(`${memo.title}: 등록 실패 (${err.message})`);
+    }
+  }
+
+  return `논문 DB 등록 결과:\n${results.map(r => `- ${r}`).join('\n')}`;
 }
