@@ -300,7 +300,8 @@ export async function uploadMeetingAudio(
   audio: File,
   opts?: { title?: string; duration?: number }
 ): Promise<{ success: boolean; data: Meeting }> {
-  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
+  // 파일 업로드는 Vercel 프록시 우회 — Railway 직접 전송 (Vercel body size 4.5MB 제한 회피)
+  const DIRECT_API = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
   const formData = new FormData();
   formData.append('audio', audio);
   if (opts?.title) formData.append('title', opts.title);
@@ -311,9 +312,8 @@ export async function uploadMeetingAudio(
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  // Production: Clerk token only (no dev fallback)
 
-  const res = await fetch(`${API_BASE}/api/meetings`, {
+  const res = await fetch(`${DIRECT_API}/api/meetings`, {
     method: 'POST',
     headers,
     body: formData,
@@ -512,7 +512,8 @@ export interface UploadResult {
 }
 
 export async function brainUpload(file: File): Promise<UploadResult> {
-  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
+  // 파일 업로드는 Vercel 프록시 우회 — Railway 직접 전송 (Vercel body size 4.5MB 제한 회피)
+  const DIRECT_API = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
   const formData = new FormData();
   formData.append('file', file);
 
@@ -521,9 +522,8 @@ export async function brainUpload(file: File): Promise<UploadResult> {
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  // Production: Clerk token only (no dev fallback)
 
-  const res = await fetch(`${API_BASE}/api/brain/upload`, {
+  const res = await fetch(`${DIRECT_API}/api/brain/upload`, {
     method: 'POST',
     headers,
     body: formData,
@@ -771,7 +771,8 @@ export async function markPaperRead(resultId: string) {
 }
 
 export async function uploadPaperPdf(file: File): Promise<{ success: boolean; message: string; paperId?: string; title?: string; status?: string }> {
-  const API_BASE = typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
+  // 파일 업로드는 Vercel 프록시 우회 — Railway 직접 전송 (Vercel body size 4.5MB 제한 회피)
+  const DIRECT_API = process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app';
   const formData = new FormData();
   formData.append('file', file);
 
@@ -780,9 +781,8 @@ export async function uploadPaperPdf(file: File): Promise<{ success: boolean; me
     const token = await tokenGetter();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
-  // Production: Clerk token only (no dev fallback)
 
-  const res = await fetch(`${API_BASE}/api/papers/upload`, {
+  const res = await fetch(`${DIRECT_API}/api/papers/upload`, {
     method: 'POST',
     headers,
     body: formData,
