@@ -70,6 +70,7 @@ const onboardingSchema = z.object({
 
 const memberSchema = z.object({
   name: z.string().min(1),
+  nameEn: z.string().optional(),
   email: z.string().email().optional(),
   role: z.string().default('학생'),
   permission: z.enum(['OWNER', 'ADMIN', 'EDITOR', 'VIEWER']).default('VIEWER'),
@@ -505,6 +506,73 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
       permission: request.labPermission || null,
       labId: request.labId || null,
     };
+  });
+
+  // ── POST /api/lab/members/fetch-en-names — 홈페이지에서 영문 이름 자동 추출 ──
+  app.post('/api/lab/members/fetch-en-names', { preHandler: requirePermission('ADMIN') }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const lab = await requireLab(request.userId!, reply);
+    if (!lab) return;
+
+    const labData = await prisma.lab.findUnique({ where: { id: lab.id }, select: { homepageUrl: true } });
+    if (!labData?.homepageUrl) return reply.code(400).send({ error: '연구실 홈페이지 URL이 설정되어 있지 않습니다.' });
+
+    // Fetch homepage content
+    let pageText = '';
+    try {
+      const res = await fetch(labData.homepageUrl, { signal: AbortSignal.timeout(10000) });
+      pageText = await res.text();
+    } catch {
+      return reply.code(502).send({ error: '홈페이지에 접속할 수 없습니다.' });
+    }
+
+    // Get current members
+    const members = await prisma.labMember.findMany({
+      where: { labId: lab.id, active: true },
+      select: { id: true, name: true, nameEn: true },
+    });
+    const membersWithoutEn = members.filter(m => !m.nameEn);
+    if (membersWithoutEn.length === 0) return reply.send({ updated: 0, message: '모든 멤버의 영문 이름이 이미 등록되어 있습니다.' });
+
+    // Use Gemini to match Korean names to English names from the page
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { env } = await import('../config/env.js');
+    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const prompt = `아래 웹페이지 HTML에서 연구실 멤버들의 영문 이름을 찾아주세요.
+
+멤버 목록 (한국어 이름):
+${membersWithoutEn.map(m => `- ${m.name}`).join('\n')}
+
+웹페이지 내용 (HTML):
+${pageText.slice(0, 30000)}
+
+각 한국어 이름에 대응하는 영문 이름을 찾아 JSON 배열로만 응답하세요. 찾을 수 없는 경우 null:
+[{"name": "한국어이름", "nameEn": "English Name" | null}]`;
+
+    try {
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
+      });
+      const text = result.response.text().trim();
+      const match = text.match(/\[[\s\S]*\]/);
+      if (!match) return reply.code(500).send({ error: '영문 이름 추출 실패' });
+
+      const mappings: Array<{ name: string; nameEn: string | null }> = JSON.parse(match[0]);
+      let updated = 0;
+      for (const mapping of mappings) {
+        if (!mapping.nameEn) continue;
+        const member = membersWithoutEn.find(m => m.name === mapping.name);
+        if (member) {
+          await prisma.labMember.update({ where: { id: member.id }, data: { nameEn: mapping.nameEn } });
+          updated++;
+        }
+      }
+      return reply.send({ updated, mappings });
+    } catch (err: any) {
+      return reply.code(500).send({ error: '영문 이름 추출 실패', details: err.message });
+    }
   });
 
   // ── Projects CRUD ─────────────────────────────────

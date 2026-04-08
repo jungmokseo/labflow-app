@@ -64,7 +64,7 @@ export function clearTokenCache() {
   tokenExpiresAt = 0;
 }
 
-async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2): Promise<T> {
+export async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2): Promise<T> {
   const url = `${API_BASE}${path}`;
   const authHeaders = await getAuthHeaders();
 
@@ -649,7 +649,7 @@ export async function getLabMembers() {
   return apiFetch<Array<{ id: string; name: string; role: string; email: string; phone: string }>>('/api/lab/members');
 }
 
-export async function addLabMember(data: { name: string; email?: string; role?: string; phone?: string }) {
+export async function addLabMember(data: { name: string; nameEn?: string; email?: string; role?: string; phone?: string }) {
   return apiFetch<{ id: string }>('/api/lab/members', {
     method: 'POST',
     body: JSON.stringify(data),

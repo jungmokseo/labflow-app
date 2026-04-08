@@ -292,6 +292,7 @@ model LabMember {
   labId         String        @map("lab_id")
   userId        String?       @map("user_id")       // Clerk 계정 연결 (로그인 시)
   name          String
+  nameEn        String?       @map("name_en")        // 영문 이름 (논문 저자 매칭용)
   email         String?
   role          String        @default("학생")
   permission    LabPermission @default(VIEWER)       // 접근 권한

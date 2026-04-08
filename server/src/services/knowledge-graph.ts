@@ -230,10 +230,14 @@ export async function buildGraphFromText(
 
     if (lab) {
       const [members, projects] = await Promise.all([
-        prisma.labMember.findMany({ where: { labId: lab.id, active: true }, select: { id: true, name: true } }),
+        prisma.labMember.findMany({ where: { labId: lab.id, active: true }, select: { id: true, name: true, nameEn: true } }),
         prisma.project.findMany({ where: { labId: lab.id }, select: { id: true, name: true } }),
       ]);
-      memberMap = new Map(members.map(m => [m.name, m.id]));
+      memberMap = new Map<string, string>();
+      for (const m of members) {
+        memberMap.set(m.name, m.id);
+        if (m.nameEn) memberMap.set(m.nameEn, m.id);
+      }
       projectMap = new Map(projects.map(p => [p.name, p.id]));
     }
 

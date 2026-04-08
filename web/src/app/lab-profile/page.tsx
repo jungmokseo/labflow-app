@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   getLabProfile, createLab, updateLab, addLabMember, removeLabMember, addLabProject, addDictEntry,
   analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl, uploadPaperPdf,
-  type Lab,
+  apiFetch, type Lab,
 } from '@/lib/api';
 // Skeleton imports removed — using inline spinner
 import {
@@ -48,6 +48,7 @@ export default function LabProfilePage() {
   const [editPiEmail, setEditPiEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberNameEn, setNewMemberNameEn] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('학생');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
@@ -57,6 +58,8 @@ export default function LabProfilePage() {
   const [pdfUploading, setPdfUploading] = useState(false);
   const [pdfProgress, setPdfProgress] = useState('');
   const [pdfResult, setPdfResult] = useState<string | null>(null);
+  const [fetchingEnNames, setFetchingEnNames] = useState(false);
+  const [enNameResult, setEnNameResult] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadProfile(); }, []);
@@ -175,10 +178,10 @@ export default function LabProfilePage() {
   async function handleAddMember() {
     if (!newMemberName.trim()) return;
     // Optimistic: append immediately
-    const tempMember = { id: `temp-${Date.now()}`, name: newMemberName, role: newMemberRole, email: newMemberEmail || '' };
+    const tempMember = { id: `temp-${Date.now()}`, name: newMemberName, nameEn: newMemberNameEn || '', role: newMemberRole, email: newMemberEmail || '' };
     setLab(prev => prev ? { ...prev, members: [...(prev.members || []), tempMember] } : prev);
-    const saved = { name: newMemberName, role: newMemberRole, email: newMemberEmail || undefined };
-    setNewMemberName(''); setNewMemberEmail('');
+    const saved = { name: newMemberName, nameEn: newMemberNameEn || undefined, role: newMemberRole, email: newMemberEmail || undefined };
+    setNewMemberName(''); setNewMemberNameEn(''); setNewMemberEmail('');
     try {
       await addLabMember(saved);
       loadProfile();
@@ -235,6 +238,20 @@ export default function LabProfilePage() {
     setPdfUploading(false);
     if (pdfInputRef.current) pdfInputRef.current.value = '';
     loadProfile();
+  }
+
+  async function handleFetchEnNames() {
+    setFetchingEnNames(true);
+    setEnNameResult(null);
+    try {
+      const res = await apiFetch<{ updated: number; mappings?: Array<{ name: string; nameEn: string | null }> }>('/api/lab/members/fetch-en-names', { method: 'POST' });
+      setEnNameResult(`${res.updated}명의 영문 이름이 업데이트되었습니다.`);
+      loadProfile();
+    } catch (err: any) {
+      setEnNameResult(`실패: ${err.message}`);
+    } finally {
+      setFetchingEnNames(false);
+    }
   }
 
   if (loading) return (
@@ -522,8 +539,9 @@ export default function LabProfilePage() {
 
         {tab === 'members' && (
           <div className="space-y-4">
-            <div className="flex gap-2">
-              <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="이름" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
+            <div className="flex flex-wrap gap-2">
+              <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="이름 (한국어)" className="w-28 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
+              <input value={newMemberNameEn} onChange={e => setNewMemberNameEn(e.target.value)} placeholder="English Name" className="w-36 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
               <select value={newMemberRole} onChange={e => setNewMemberRole(e.target.value)} className="bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm">
                 {['학부연구생', '석사과정', '박사과정', '포닥', '교수'].map(r => <option key={r}>{r}</option>)}
               </select>
@@ -534,13 +552,23 @@ export default function LabProfilePage() {
               <div key={m.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
                 <User className="w-5 h-5 text-text-muted" />
                 <div className="flex-1">
-                  <p className="text-text-heading text-sm font-medium">{m.name}</p>
+                  <p className="text-text-heading text-sm font-medium">{m.name}{m.nameEn ? ` (${m.nameEn})` : ''}</p>
                   <p className="text-text-muted text-xs">{m.role} · {m.email || '이메일 미등록'}</p>
                 </div>
                 <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10"><X className="w-3.5 h-3.5" /></button>
               </div>
             ))}
             {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. Brain 대화에서도 가능해요: "김태영 박사과정 추가해줘"</p>}
+            {(lab.members || []).some((m: any) => !m.nameEn) && lab.homepageUrl && (
+              <div className="pt-3 border-t border-border/30">
+                <button onClick={handleFetchEnNames} disabled={fetchingEnNames}
+                  className="px-4 py-2 bg-bg-input text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
+                  {fetchingEnNames ? <Loader2 className="w-4 h-4 animate-spin inline mr-1" /> : <Search className="w-4 h-4 inline mr-1" />}
+                  홈페이지에서 영문 이름 가져오기
+                </button>
+                {enNameResult && <p className="text-green-500 text-xs mt-2">{enNameResult}</p>}
+              </div>
+            )}
           </div>
         )}
 

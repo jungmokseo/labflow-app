@@ -19,6 +19,7 @@ import {
 } from '../services/embedding-service.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── 스키마 ───────────────────────────────────────────
 
@@ -317,6 +318,11 @@ export async function paperRoutes(app: FastifyInstance) {
           }
           await prisma.publication.update({ where: { id: paperId }, data: { indexed: true } });
           console.log(`[paper] Paper indexed: ${meta.title} (${textChunks.length} chunks)`);
+
+          // 5. 지식 그래프에 논문 관계 구축
+          const graphText = `논문 "${meta.title}" (${meta.journal || ''}, ${meta.year || ''})의 저자: ${meta.authors || ''}. 초록: ${meta.abstract || ''}`;
+          await buildGraphFromText(userId, graphText, 'paper_alert');
+          console.log(`[paper] Knowledge graph updated: ${meta.title}`);
         } catch (err) {
           console.error('Paper indexing failed:', err);
         }
