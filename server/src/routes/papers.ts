@@ -345,6 +345,59 @@ export async function paperRoutes(app: FastifyInstance) {
   });
 
   /**
+   * POST /api/papers/reindex — indexed=false인 논문들을 재인덱싱
+   */
+  app.post('/api/papers/reindex', async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = req.userId!;
+    const lab = await prisma.lab.findUnique({ where: { ownerId: userId }, select: { id: true } });
+    if (!lab) return reply.code(404).send({ error: '연구실 없음' });
+
+    const unindexed = await prisma.publication.findMany({
+      where: { labId: lab.id, indexed: false },
+      select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true },
+    });
+
+    if (unindexed.length === 0) return reply.send({ success: true, message: '모든 논문이 이미 인덱싱되어 있습니다.', count: 0 });
+
+    // 비동기로 인덱싱 시작
+    const count = unindexed.length;
+    (async () => {
+      for (const pub of unindexed) {
+        try {
+          // Publication의 title+authors+abstract로 텍스트 구성
+          const text = [
+            `Title: ${pub.title}`,
+            pub.authors ? `Authors: ${pub.authors}` : '',
+            pub.journal ? `Journal: ${pub.journal}` : '',
+            pub.year ? `Year: ${pub.year}` : '',
+            pub.abstract ? `Abstract: ${pub.abstract}` : '',
+          ].filter(Boolean).join('\n');
+
+          const chunks = chunkText(text);
+          for (let i = 0; i < chunks.length; i++) {
+            const { embedding } = await generateEmbedding(chunks[i]);
+            await storePaperEmbeddings(prisma, {
+              paperId: pub.id, labId: lab.id, title: pub.title,
+              authors: pub.authors || undefined, abstract: pub.abstract || undefined,
+              journal: pub.journal || undefined, year: pub.year || undefined,
+              doi: pub.doi || undefined, chunkIndex: i, chunkText: chunks[i],
+            }, embedding);
+          }
+          await prisma.publication.update({ where: { id: pub.id }, data: { indexed: true } });
+
+          // 지식 그래프
+          await buildGraphFromText(userId, `논문 "${pub.title}" (${pub.journal || ''}, ${pub.year || ''})의 저자: ${pub.authors || ''}. 초록: ${pub.abstract || ''}`, 'paper_alert');
+          console.log(`[reindex] 인덱싱 완료: ${pub.title}`);
+        } catch (err) {
+          console.error(`[reindex] 인덱싱 실패: ${pub.title}`, err);
+        }
+      }
+    })();
+
+    return reply.send({ success: true, message: `${count}편 논문 인덱싱을 시작했습니다.`, count });
+  });
+
+  /**
    * GET /api/papers/lookup — 자연어로 핵심 논문 조회
    *
    * 쿼리 예시:
