@@ -57,6 +57,8 @@ export async function executeToolCall(
       return executeImportStructuredData(input, ctx);
     case 'register_uploaded_papers':
       return executeRegisterUploadedPapers(input, ctx);
+    case 'reindex_papers':
+      return executeReindexPapers(ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -1123,4 +1125,54 @@ async function executeRegisterUploadedPapers(
   }
 
   return `논문 DB 등록 결과:\n${results.map(r => `- ${r}`).join('\n')}`;
+}
+
+// ── reindex_papers ──────────────────────────────────
+
+async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+  ctx.sendProgress('미인덱싱 논문 확인 중...');
+
+  const unindexed = await prisma.publication.findMany({
+    where: { labId: ctx.labId, indexed: false },
+    select: { id: true, title: true, authors: true, abstract: true, journal: true, year: true, doi: true },
+  });
+
+  if (unindexed.length === 0) return '모든 논문이 이미 인덱싱되어 있습니다. Brain 대화에서 검색 가능합니다.';
+
+  const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
+  const { buildGraphFromText } = await import('../services/knowledge-graph.js');
+
+  const results: string[] = [];
+  for (let i = 0; i < unindexed.length; i++) {
+    const pub = unindexed[i];
+    ctx.sendProgress(`${i + 1}/${unindexed.length} 인덱싱 중: ${pub.title.slice(0, 40)}...`);
+    try {
+      const text = [
+        `Title: ${pub.title}`,
+        pub.authors ? `Authors: ${pub.authors}` : '',
+        pub.journal ? `Journal: ${pub.journal}` : '',
+        pub.year ? `Year: ${pub.year}` : '',
+        pub.abstract ? `Abstract: ${pub.abstract}` : '',
+      ].filter(Boolean).join('\n');
+
+      const chunks = chunkText(text);
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const { embedding } = await generateEmbedding(chunks[ci]);
+        await storePaperEmbeddings(prisma, {
+          paperId: pub.id, labId: ctx.labId!, title: pub.title,
+          authors: pub.authors || undefined, abstract: pub.abstract || undefined,
+          journal: pub.journal || undefined, year: pub.year || undefined,
+          doi: pub.doi || undefined, chunkIndex: ci, chunkText: chunks[ci],
+        }, embedding);
+      }
+      await prisma.publication.update({ where: { id: pub.id }, data: { indexed: true } });
+      await buildGraphFromText(ctx.userId, `논문 "${pub.title}" (${pub.journal || ''}, ${pub.year || ''})의 저자: ${pub.authors || ''}`, 'paper_alert');
+      results.push(`"${pub.title}" — 인덱싱 완료`);
+    } catch (err: any) {
+      results.push(`"${pub.title}" — 실패: ${err.message}`);
+    }
+  }
+
+  return `논문 인덱싱 결과 (${results.length}편):\n${results.map(r => `- ${r}`).join('\n')}`;
 }

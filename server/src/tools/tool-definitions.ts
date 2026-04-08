@@ -19,7 +19,8 @@ export type ToolName =
   | 'get_weekly_review'
   | 'link_paper_grants'
   | 'import_structured_data'
-  | 'register_uploaded_papers';
+  | 'register_uploaded_papers'
+  | 'reindex_papers';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -227,6 +228,15 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ['file_ids'],
+    },
+  },
+  {
+    name: 'reindex_papers',
+    description: '아직 벡터 인덱싱이 안 된 논문들을 인덱싱합니다. "논문 인덱싱해줘", "논문 검색 안 돼", "등록된 논문 인덱싱" 등의 요청에 사용합니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
     },
   },
 ];
