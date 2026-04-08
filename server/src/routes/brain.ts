@@ -634,6 +634,70 @@ export async function brainRoutes(app: FastifyInstance) {
     };
   });
 
+  // ── AI 비용 보정 (Anthropic CSV 실제값 반영) ────────────
+  app.post('/api/brain/cost-correction', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+
+    // Anthropic 콘솔 CSV 실제 비용 (2026-04-01 ~ 04-07)
+    const actualCosts: Array<{ date: string; service: string; cost: number }> = [
+      { date: '2026-04-01', service: 'claude-opus', cost: 0.55 },
+      { date: '2026-04-01', service: 'claude-sonnet', cost: 0.17 },
+      { date: '2026-04-02', service: 'claude-sonnet', cost: 0.07 },
+      { date: '2026-04-03', service: 'claude-opus', cost: 0.24 },
+      { date: '2026-04-04', service: 'claude-opus', cost: 0.02 },
+      { date: '2026-04-05', service: 'claude-opus', cost: 0.02 },
+      { date: '2026-04-05', service: 'claude-sonnet', cost: 0.05 },
+      { date: '2026-04-06', service: 'claude-sonnet', cost: 0.23 },
+      { date: '2026-04-07', service: 'claude-opus', cost: 2.12 },
+      { date: '2026-04-07', service: 'claude-sonnet', cost: 1.71 },
+    ];
+
+    // 날짜별·서비스별 기존 DB 비용 합산
+    const existingLogs = await prisma.aiCostLog.findMany({
+      where: {
+        userId,
+        createdAt: { gte: new Date('2026-04-01T00:00:00Z'), lte: new Date('2026-04-07T23:59:59Z') },
+        service: { in: ['claude-sonnet', 'claude-opus'] },
+      },
+      select: { service: true, cost: true, createdAt: true },
+    });
+
+    const existingByDayService: Record<string, number> = {};
+    for (const log of existingLogs) {
+      const day = log.createdAt.toISOString().split('T')[0];
+      const key = `${day}:${log.service}`;
+      existingByDayService[key] = (existingByDayService[key] || 0) + log.cost;
+    }
+
+    // 차액 보정 레코드 삽입
+    const corrections: Array<{ service: string; cost: number; date: string; diff: number }> = [];
+    for (const actual of actualCosts) {
+      const key = `${actual.date}:${actual.service}`;
+      const existing = existingByDayService[key] || 0;
+      const diff = actual.cost - existing;
+
+      if (diff > 0.001) { // $0.001 이상 차이만 보정
+        await prisma.aiCostLog.create({
+          data: {
+            userId,
+            service: actual.service,
+            cost: diff,
+            intent: 'cost_correction',
+            createdAt: new Date(`${actual.date}T12:00:00Z`),
+          },
+        });
+        corrections.push({ service: actual.service, cost: actual.cost, date: actual.date, diff: +diff.toFixed(4) });
+      }
+    }
+
+    return reply.send({
+      success: true,
+      message: `${corrections.length}건 보정 완료`,
+      corrections,
+      totalCorrected: +corrections.reduce((sum, c) => sum + c.diff, 0).toFixed(4),
+    });
+  });
+
   // ── Channel CRUD ──────────────────────────────────
   app.get('/api/brain/channels', async (request: FastifyRequest) => {
     const channels = await prisma.channel.findMany({
