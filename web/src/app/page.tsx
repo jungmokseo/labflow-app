@@ -142,6 +142,7 @@ export default function DashboardPage() {
                       const label: Record<string, string> = {
                         'gemini-flash': 'Gemini Flash',
                         'claude-sonnet': 'Claude Sonnet',
+                        'claude-opus': 'Claude Opus',
                         'openai-embedding': 'OpenAI Embedding',
                         'openai-realtime': 'OpenAI Realtime',
                         'openai-whisper': 'Whisper STT',
@@ -149,6 +150,7 @@ export default function DashboardPage() {
                       const color: Record<string, string> = {
                         'gemini-flash': 'bg-blue-500',
                         'claude-sonnet': 'bg-orange-500',
+                        'claude-opus': 'bg-gray-600',
                         'openai-embedding': 'bg-green-500',
                         'openai-realtime': 'bg-purple-500',
                         'openai-whisper': 'bg-yellow-500',
