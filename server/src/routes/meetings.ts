@@ -25,7 +25,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
-import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { buildGraphFromText, crossLinkSources } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
 
@@ -47,8 +47,17 @@ function createAnthropicClient(): Anthropic | null {
 // ── Zod 스키마 ──────────────────────────────────────
 const updateMeetingSchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  summary: z.string().optional(),
+  transcription: z.string().optional(),
+  agenda: z.array(z.string()).optional(),
+  discussions: z.string().optional(), // JSON string of Array<{ topic: string; bullets: string[] }>
   actionItems: z.array(z.string()).optional(),
   nextSteps: z.array(z.string()).optional(),
+  // 수정 시 DomainDict 학습 트리거
+  corrections: z.array(z.object({
+    wrong: z.string().min(1),
+    correct: z.string().min(1),
+  })).optional(),
 });
 
 const listQuerySchema = z.object({
@@ -310,7 +319,7 @@ async function transcribeAudio(
     ],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,
     },
   });
 
@@ -357,7 +366,7 @@ async function transcribeViaFileApi(
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 16384, // 긴 회의는 출력 토큰도 늘림
+        maxOutputTokens: 65536, // 긴 회의 (70분+)도 전사 가능하도록 충분한 토큰
       },
     });
 
@@ -444,7 +453,7 @@ ${correctionDict}
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
+      max_tokens: 16384,
       temperature: 0.1,
       system: systemPrompt,
       messages: [
@@ -566,6 +575,13 @@ async function processMeetingAudio(
 
   if (!rawTranscription || rawTranscription.length < 10) {
     throw new Error('음성을 인식할 수 없습니다. 다시 시도해주세요.');
+  }
+
+  // STT 프롬프트가 전사 결과에 혼입된 경우 감지 (Gemini가 오디오 처리 실패 시 프롬프트를 반복하는 패턴)
+  const promptLeakPatterns = ['전사하는 전문 전사자', '필러 단어 제거', '반복 발언 정리', '순수 텍스트만'];
+  const leakCount = promptLeakPatterns.filter(p => rawTranscription.includes(p)).length;
+  if (leakCount >= 2) {
+    throw new Error('오디오 전사에 실패했습니다. 파일이 너무 길거나 형식이 지원되지 않을 수 있습니다. 더 짧은 구간으로 나누어 시도해주세요.');
   }
 
   // Step 1.5: DomainDict 기반 사전 교정 (regex, LLM 토큰 절약)
@@ -722,6 +738,10 @@ export async function meetingRoutes(app: FastifyInstance) {
       buildGraphFromText(userId, graphText, 'meeting')
         .catch((err: any) => console.error('[background] meeting buildGraphFromText:', err.message || err));
 
+      // 교차 연결: 회의에서 언급된 논문/이메일/프로젝트를 기존 지식그래프 노드와 연결
+      crossLinkSources(userId, graphText, 'meeting', result.title)
+        .catch((err: any) => console.warn('[background] meeting crossLink:', err.message || err));
+
       // 일정 감지 → pending events (비동기, 응답 지연 없음)
       const scheduleText = [...result.nextSteps, ...result.actionItems].join('\n');
       if (scheduleText.length > 10) {
@@ -816,6 +836,10 @@ export async function meetingRoutes(app: FastifyInstance) {
 
     const updateData: any = {};
     if (body.title !== undefined) updateData.title = body.title;
+    if (body.summary !== undefined) updateData.summary = body.summary;
+    if (body.transcription !== undefined) updateData.transcription = body.transcription;
+    if (body.agenda !== undefined) updateData.agenda = body.agenda;
+    if (body.discussions !== undefined) updateData.discussions = body.discussions;
     if (body.actionItems !== undefined) updateData.actionItems = body.actionItems;
     if (body.nextSteps !== undefined) updateData.nextSteps = body.nextSteps;
 
@@ -823,6 +847,61 @@ export async function meetingRoutes(app: FastifyInstance) {
       where: { id },
       data: updateData,
     });
+
+    // 수정에서 교정 패턴이 포함된 경우 DomainDict에 학습
+    if (body.corrections && body.corrections.length > 0) {
+      try {
+        const lab = await prisma.lab.findUnique({ where: { ownerId: user.id } });
+        if (lab) {
+          let added = 0;
+          for (const c of body.corrections) {
+            await prisma.domainDict.upsert({
+              where: { labId_wrongForm: { labId: lab.id, wrongForm: c.wrong.toLowerCase() } },
+              create: {
+                labId: lab.id,
+                wrongForm: c.wrong.toLowerCase(),
+                correctForm: c.correct,
+                category: '수동교정',
+                autoAdded: false,
+              },
+              update: { correctForm: c.correct, category: '수동교정', autoAdded: false },
+            }).catch(() => {});
+            added++;
+          }
+          if (added > 0) console.log(`[dict-learn] User manually added ${added} correction patterns from meeting edit`);
+        }
+      } catch { /* non-critical */ }
+    }
+
+    // summary 또는 transcription이 수정된 경우, 원본과 비교하여 자동 패턴 학습 (백그라운드)
+    if (body.transcription && existing.transcription && body.transcription !== existing.transcription) {
+      learnCorrectionPatterns(existing.transcription, body.transcription, user.id).catch(() => {});
+    }
+
+    // 내용이 수정된 경우 RAG 재임베딩 + 지식그래프 업데이트 (백그라운드)
+    const contentChanged = body.summary || body.transcription || body.discussions || body.agenda || body.title;
+    if (contentChanged) {
+      const updatedSummary = meeting.summary || '';
+      const updatedTitle = meeting.title || '';
+      const updatedAgenda = (meeting.agenda as string[]).join(', ');
+      const updatedActions = (meeting.actionItems as string[]).join(', ');
+      const updatedNextSteps = (meeting.nextSteps as string[]).join(', ');
+      const embText = `${updatedTitle}\n${updatedAgenda}\n${updatedSummary}`;
+
+      // RAG 재임베딩 — 기존 임베딩 삭제 후 새로 생성
+      embedAndStore(basePrismaClient, {
+        sourceType: 'meeting',
+        sourceId: meeting.id,
+        title: updatedTitle,
+        content: embText,
+        userId: user.id,
+      }).catch(err => console.warn('[meeting-edit] RAG re-embed failed:', err));
+
+      // 지식그래프 업데이트 + 교차 연결
+      const graphText = `회의: ${updatedTitle}\n안건: ${updatedAgenda}\n${updatedSummary}\n액션: ${updatedActions}\n다음: ${updatedNextSteps}`;
+      buildGraphFromText(user.id, graphText, 'meeting').catch(err => console.warn('[meeting-edit] KG rebuild failed:', err));
+      crossLinkSources(user.id, graphText, 'meeting', updatedTitle).catch(() => {});
+    }
 
     return reply.send({ success: true, data: formatMeeting(meeting) });
   });

@@ -355,10 +355,10 @@ async function executeGetEmailBriefing(
     : null;
 
   try {
-    const maxResults = input.max_results || 50;
+    const maxResults = input.max_results || 150;
     const briefingRes = await ctx.app.inject({
       method: 'GET',
-      url: `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true`,
+      url: `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true&includeSpam=true`,
       headers: {
         authorization: ctx.request.headers.authorization || '',
         'content-type': 'application/json',
@@ -372,9 +372,14 @@ async function executeGetEmailBriefing(
         const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
         const shadowContent = await compressForShadow(briefingData.markdown, 'email');
         saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(() => {});
-        const rangePrefix = briefingData.fetchRangeNotice
-          ? `> ${briefingData.fetchRangeNotice}\n\n`
-          : '';
+        let rangePrefix = '';
+        if (briefingData.lastBriefingAt) {
+          const lastTime = new Date(briefingData.lastBriefingAt);
+          const lastTimeStr = lastTime.toLocaleString('ko-KR', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+          rangePrefix = `> 마지막 브리핑: ${lastTimeStr} | 이후 **${briefingData.emailCount}건** 수신\n\n`;
+        } else if (briefingData.fetchRangeNotice) {
+          rangePrefix = `> ${briefingData.fetchRangeNotice}\n\n`;
+        }
         return `[양식지정] 아래 브리핑을 그대로 전달하세요.\n\n${rangePrefix}${briefingData.markdown}`;
       }
     } else if (briefingRes.statusCode === 401) {

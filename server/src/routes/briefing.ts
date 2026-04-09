@@ -109,7 +109,7 @@ async function getEmailSummary(userId: string): Promise<BriefingItem[]> {
     const listRes = await gmail.users.messages.list({
       userId: 'me',
       maxResults: 20,
-      q: `after:${afterStr} -category:promotions -category:social`,
+      q: `after:${afterStr}`,
     });
 
     const messages = listRes.data.messages || [];

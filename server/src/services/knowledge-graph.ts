@@ -1162,3 +1162,71 @@ export async function seedGraphFromExistingData(userId: string): Promise<{ nodes
 
   return { nodesCreated, edgesCreated };
 }
+
+// ── 교차 연결 파이프라인: 회의/이메일/논문 간 자동 링크 ──────
+/**
+ * 새로 생성된 소스(회의/이메일/논문)의 텍스트를 기존 지식그래프 노드와 비교하여
+ * 관련 노드를 자동으로 연결합니다.
+ *
+ * 동작 방식:
+ * 1. 새 텍스트에서 키워드/엔티티 추출
+ * 2. 기존 지식그래프 노드 중 이름이 매칭되는 것 탐색
+ * 3. 매칭된 노드와 새 소스 간 엣지 생성 (related_to, mentioned_in)
+ */
+export async function crossLinkSources(
+  userId: string,
+  sourceText: string,
+  sourceType: SourceType,
+  sourceTitle: string,
+): Promise<{ linksCreated: number }> {
+  let linksCreated = 0;
+  try {
+    // 기존 지식그래프 노드 조회
+    const existingNodes = await prisma.knowledgeNode.findMany({
+      where: { userId },
+      select: { id: true, name: true, entityType: true },
+      take: 500,
+    });
+    if (existingNodes.length === 0) return { linksCreated: 0 };
+
+    const textLower = sourceText.toLowerCase();
+
+    // 소스 자체를 노드로 등록
+    const sourceEntityType = sourceType === 'meeting' ? 'topic' : sourceType === 'email' ? 'topic' : 'paper';
+    const sourceNode = await upsertNode(userId, sourceEntityType, sourceTitle, {
+      source: sourceType,
+      createdAt: new Date().toISOString(),
+    });
+
+    // 기존 노드 이름이 새 텍스트에 언급되었는지 확인
+    for (const node of existingNodes) {
+      if (node.id === sourceNode.id) continue;
+      const nodeName = node.name.toLowerCase();
+      // 2글자 이상의 노드명만 매칭 (너무 짧으면 오탐)
+      if (nodeName.length < 2) continue;
+
+      if (textLower.includes(nodeName)) {
+        const relation = sourceType === 'meeting' ? 'discussed_in' :
+                         sourceType === 'email' ? 'mentioned_in' : 'related_to';
+        try {
+          await upsertEdge(
+            node.id,
+            sourceNode.id,
+            relation,
+            sourceType,
+            `"${node.name}" mentioned in ${sourceType}: ${sourceTitle}`,
+            userId,
+          );
+          linksCreated++;
+        } catch { /* skip duplicate */ }
+      }
+    }
+
+    if (linksCreated > 0) {
+      console.log(`[cross-link] Created ${linksCreated} cross-links from ${sourceType}: ${sourceTitle}`);
+    }
+  } catch (err) {
+    console.warn('[cross-link] Failed:', err);
+  }
+  return { linksCreated };
+}

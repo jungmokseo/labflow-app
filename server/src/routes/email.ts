@@ -28,7 +28,7 @@ import { prisma, basePrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
-import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { buildGraphFromText, crossLinkSources } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
@@ -59,8 +59,8 @@ function verifyState(state: string): string | null {
 
 // ── Zod 스키마 ──────────────────────────────────────
 const briefingQuerySchema = z.object({
-  maxResults: z.coerce.number().min(1).default(50),
-  includeSpam: z.enum(['true', 'false']).default('false'),
+  maxResults: z.coerce.number().min(1).default(150),
+  includeSpam: z.enum(['true', 'false']).default('true'),
   since: z.string().optional(),           // ISO datetime (T_last override)
   includeBody: z.enum(['true', 'false']).default('true'), // 본문 열람 활성화
 });
@@ -861,7 +861,9 @@ export async function emailRoutes(app: FastifyInstance) {
       const fetchRangeNotice = describeFetchRange(afterDate, isFirstRun);
 
       // Gmail 검색 쿼리 구성
-      const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
+      // Gmail after: 연산자에 epoch seconds 사용 — 날짜만 쓰면 당일 이전 메일도 포함되어 정확도 저하
+      const afterEpoch = Math.floor(afterDate.getTime() / 1000);
+      const afterStr = String(afterEpoch);
       const excludeSpam = query.includeSpam === 'false'
         ? '-category:promotions -category:social'
         : '';
@@ -889,13 +891,13 @@ export async function emailRoutes(app: FastifyInstance) {
       });
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // 페이지네이션 수집 (최대 3페이지)
+      // 페이지네이션 수집 — 모든 이메일을 빠짐없이 가져오기
       let allMessageIds: Array<{ id: string; threadId: string }> = [];
       let pageToken: string | undefined;
-      for (let page = 0; page < 3; page++) {
+      for (let page = 0; page < 10; page++) {
         const listResponse = await gmail.users.messages.list({
           userId: 'me',
-          maxResults: 50,
+          maxResults: 100,
           q: `after:${afterStr} -from:me ${excludeSpam}`,
           pageToken,
         });
@@ -919,12 +921,14 @@ export async function emailRoutes(app: FastifyInstance) {
         });
       }
 
-      // 메시지 상세 조회 (1차: metadata)
-      const batchSize = Math.min(allMessageIds.length, query.maxResults);
-      const detailPromises = allMessageIds.slice(0, batchSize).map(msg =>
+      // 메시지 상세 조회 (1차: metadata) — 수집된 모든 메일
+      const detailPromises = allMessageIds.map(msg =>
         gmail.users.messages.get({ userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['From', 'To', 'Cc', 'Subject', 'Date'] }),
       );
-      const messages = await Promise.all(detailPromises);
+      const settledStructured = await Promise.allSettled(detailPromises);
+      const messages = settledStructured
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map(r => r.value);
 
       // 이메일 데이터 추출 + 필터링
       const rawEmails: Array<{
@@ -937,7 +941,7 @@ export async function emailRoutes(app: FastifyInstance) {
       let idx = 0;
       for (const msg of messages) {
         const headers = msg.data.payload?.headers || [];
-        const getHeader = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+        const getHeader = (name: string) => headers.find((h: any) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
         const internalDate = Number(msg.data.internalDate) || Date.now();
 
         // T_last 이후 메일만 (internalDate 기반 정밀 필터)
@@ -1243,7 +1247,9 @@ export async function emailRoutes(app: FastifyInstance) {
       }
       const fetchRangeNotice = describeFetchRange(afterDate, isFirstRunNarr);
 
-      const afterStr = `${afterDate.getFullYear()}/${String(afterDate.getMonth() + 1).padStart(2, '0')}/${String(afterDate.getDate()).padStart(2, '0')}`;
+      // Gmail after: 연산자에 epoch seconds 사용 — 날짜만 쓰면 시간 정보 손실
+      const afterEpoch = Math.floor(afterDate.getTime() / 1000);
+      const afterStr = String(afterEpoch);
       const excludeSpam = query.includeSpam === 'false' ? '-category:promotions -category:social' : '';
 
       const oauth2Client = createOAuth2Client();
@@ -1266,12 +1272,13 @@ export async function emailRoutes(app: FastifyInstance) {
       });
       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
-      // 페이지네이션 수집 (최대 3페이지)
+      // 페이지네이션 수집 — 모든 이메일을 빠짐없이 가져오기 위해 충분한 페이지 확보
       let allMessageIds: Array<{ id: string; threadId: string }> = [];
       let pageToken: string | undefined;
-      for (let page = 0; page < 3; page++) {
+      const maxPages = 10; // 최대 500건까지 수집 가능
+      for (let page = 0; page < maxPages; page++) {
         const listResponse = await gmail.users.messages.list({
-          userId: 'me', maxResults: 50,
+          userId: 'me', maxResults: 100,
           q: `after:${afterStr} -from:me ${excludeSpam}`,
           pageToken,
         });
@@ -1290,8 +1297,8 @@ export async function emailRoutes(app: FastifyInstance) {
         });
       }
 
-      // 메시지 상세 조회
-      const batchSize = Math.min(allMessageIds.length, query.maxResults);
+      // 메시지 상세 조회 — 수집된 모든 메일의 상세 정보 가져오기
+      const batchSize = allMessageIds.length;
       const detailPromises = allMessageIds.slice(0, batchSize).map(msg =>
         gmail.users.messages.get({
           userId: 'me', id: msg.id,
@@ -1583,7 +1590,8 @@ ${previousBriefing ? `## 이전 브리핑 (연속성 참고용)\n${previousBrief
 
 ## 이메일 브리핑
 
-**${todayStr} ${timeStr} ${tzLabel}** | ${afterTimeStr} 이후 총 **N건** 신규
+**${todayStr} ${timeStr} ${tzLabel}**
+마지막 브리핑: ${afterTimeStr} | 이후 총 **${emailCount}건** 신규
 대응 **M건** · 주요 **M건** · 비주요 **M건** · 광고 **~M건**
 
 ---
@@ -1767,6 +1775,7 @@ ${emailDataForPrompt.join('\n\n')}`,
       }
 
       // 히스토리 저장
+      const briefingMemoId = `briefing-${now.getTime()}`;
       try {
         await prisma.memo.create({
           data: {
@@ -1780,11 +1789,43 @@ ${emailDataForPrompt.join('\n\n')}`,
         });
       } catch {}
 
+      // 지식그래프 빌드 — 핵심인물, 진행 중인 건, 이메일 주제를 노드로 (백그라운드)
+      try {
+        // 대응/긴급 이메일에서 핵심 정보 추출하여 그래프에 반영
+        const urgentEmails = parsedEmails.filter(e => {
+          const cls = classificationMap.get(e.index);
+          return cls?.category === 'urgent' || cls?.category === 'action-needed';
+        });
+        if (urgentEmails.length > 0) {
+          const graphText = urgentEmails.map(e =>
+            `이메일: ${e.subject} | 발신자: ${e.senderName} (${e.groupLabel}) | 날짜: ${e.dateStr} | 요약: ${e.snippet}`
+          ).join('\n');
+          buildGraphFromText(user.id, graphText, 'email').catch(() => {});
+        }
+
+        // 브리핑 전체를 RAG에 임베딩 — Brain 채팅에서 "지난 이메일에서 뭐 있었지?" 검색 가능
+        embedAndStore(basePrismaClient, {
+          sourceType: 'email',
+          sourceId: briefingMemoId,
+          title: `이메일 브리핑 ${now.toISOString().split('T')[0]}`,
+          content: markdown.substring(0, 8000),
+          userId: user.id,
+          tags: ['email-briefing'],
+        }).catch(() => {});
+
+        // 교차 연결: 이메일에서 언급된 논문/프로젝트/인물을 기존 지식그래프 노드와 연결
+        const crossLinkText = urgentEmails.map(e => `${e.subject} ${e.snippet}`).join('\n');
+        if (crossLinkText.length > 20) {
+          crossLinkSources(user.id, crossLinkText, 'email', `이메일 브리핑 ${now.toISOString().split('T')[0]}`).catch(() => {});
+        }
+      } catch {}
+
       return reply.send({
         success: true,
         markdown,
         emailCount,
         generatedAt: now.toISOString(),
+        lastBriefingAt: rawProfile?.lastBriefingAt?.toISOString() || null,
         ...(fetchRangeNotice ? { fetchRangeNotice } : {}),
       });
     } catch (error: any) {

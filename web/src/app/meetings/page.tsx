@@ -8,7 +8,7 @@ import remarkGfm from 'remark-gfm';
 // Skeleton imports removed — using inline spinner
 import {
   Mic, Paperclip, ClipboardList, FileText, CheckCircle, Music,
-  ChevronUp, ChevronDown, Copy, X, Plus, Pencil, Trash2,
+  ChevronUp, ChevronDown, Copy, X, Plus, Pencil, Trash2, Save,
 } from 'lucide-react';
 
 const ACCEPTED_AUDIO_TYPES = ['audio/webm', 'audio/mp3', 'audio/mpeg', 'audio/m4a', 'audio/mp4', 'audio/wav', 'audio/x-m4a'];
@@ -540,71 +540,11 @@ export default function MeetingsPage() {
                   </div>
 
                   {expanded && (
-                    <div className="px-4 pb-4 border-t border-border pt-4">
-                      {/* Notion 스타일 회의록 렌더링 — 액션 아이템은 아래 체크리스트로 표시하므로 요약에서 제거 */}
-                      {m.summary && (
-                        <div className="notion-note">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {m.summary.replace(/##\s*액션\s*아이템[\s\S]*?(?=\n##\s|\n---|\n$|$)/, '').trim()}
-                          </ReactMarkdown>
-                        </div>
-                      )}
-
-                      {/* 액션 아이템 체크리스트 */}
-                      {m.actionItems.length > 0 && (
-                        <ActionItemChecklist
-                          meetingId={m.id}
-                          items={m.actionItems}
-                          onUpdate={(newItems) => {
-                            refreshMeetings();
-                          }}
-                        />
-                      )}
-
-                      {/* 공유/액션 버튼 */}
-                      <div className="pt-4 mt-4 border-t border-border/30 flex items-center gap-3">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (m.summary) {
-                              navigator.clipboard.writeText(m.summary);
-                              alert('마크다운이 클립보드에 복사되었습니다');
-                            }
-                          }}
-                          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
-                        >
-                          <Copy className="w-3 h-3" /> 마크다운 복사
-                        </button>
-                        <button
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            try {
-                              const data = await exportMeetingToGDocs(m.id);
-                              if (data.success && data.docUrl) {
-                                window.open(data.docUrl, '_blank');
-                              } else {
-                                alert(data.error || 'Google Docs 내보내기 실패');
-                              }
-                            } catch (err: any) {
-                              alert(`Google Docs 내보내기 실패: ${err.message || err}`);
-                            }
-                          }}
-                          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
-                        >
-                          <FileText className="w-3 h-3" /> Google Docs 내보내기
-                        </button>
-                        <div className="flex-1" />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(m.id);
-                          }}
-                          className="text-xs text-red-400 hover:text-red-300"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    </div>
+                    <MeetingExpanded
+                      meeting={m}
+                      onDelete={() => handleDelete(m.id)}
+                      onRefresh={() => refreshMeetings()}
+                    />
                   )}
                 </div>
               );
@@ -758,6 +698,146 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
           title="추가"
         >
           <Plus className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── 회의록 확장 뷰 (수정 가능) ──
+function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
+  meeting: Meeting;
+  onDelete: () => void;
+  onRefresh: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editSummary, setEditSummary] = useState(m.summary || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // summary에서 수정된 용어를 원본과 비교하여 corrections 추출
+      const corrections: Array<{ wrong: string; correct: string }> = [];
+      if (m.summary && editSummary !== m.summary) {
+        // 간단한 diff: 원본에서 "안티데라인"이 수정본에서 "안티드라잉"으로 바뀐 경우 등
+        const oldWords = new Set(m.summary.match(/[가-힣A-Za-z]{2,}/g) || []);
+        const newWords = new Set(editSummary.match(/[가-힣A-Za-z]{2,}/g) || []);
+        // 신규 추가된 단어 중 기존에 없던 것은 교정일 가능성
+        // 서버 측 learnCorrectionPatterns가 백그라운드에서 더 정교하게 처리
+      }
+
+      await updateMeeting(m.id, { summary: editSummary, corrections });
+      setEditing(false);
+      onRefresh();
+    } catch (err) {
+      console.error('Failed to save meeting:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="px-4 pb-4 border-t border-border pt-4">
+      {/* 수정 모드 토글 */}
+      <div className="flex items-center gap-2 mb-3">
+        {!editing ? (
+          <button
+            onClick={() => { setEditing(true); setEditSummary(m.summary || ''); }}
+            className="text-xs text-text-muted hover:text-primary flex items-center gap-1 transition-colors"
+          >
+            <Pencil className="w-3 h-3" /> 수정
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 font-semibold"
+            >
+              <Save className="w-3 h-3" /> {saving ? '저장 중...' : '저장'}
+            </button>
+            <button
+              onClick={() => { setEditing(false); setEditSummary(m.summary || ''); }}
+              className="text-xs text-text-muted hover:text-text-heading"
+            >
+              취소
+            </button>
+            <span className="text-xs text-text-muted ml-2">
+              수정하면 오탈자 교정 사전에 자동 학습됩니다
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* 요약 렌더링 또는 편집 */}
+      {editing ? (
+        <textarea
+          value={editSummary}
+          onChange={(e) => setEditSummary(e.target.value)}
+          className="w-full min-h-[400px] bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-sm text-text-heading font-mono leading-relaxed focus:outline-none focus:border-primary resize-y"
+          placeholder="마크다운으로 회의록을 수정하세요..."
+        />
+      ) : (
+        m.summary && (
+          <div className="notion-note">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {m.summary.replace(/##\s*액션\s*아이템[\s\S]*?(?=\n##\s|\n---|\n$|$)/, '').trim()}
+            </ReactMarkdown>
+          </div>
+        )
+      )}
+
+      {/* 액션 아이템 체크리스트 */}
+      {m.actionItems.length > 0 && (
+        <ActionItemChecklist
+          meetingId={m.id}
+          items={m.actionItems}
+          onUpdate={() => onRefresh()}
+        />
+      )}
+
+      {/* 공유/액션 버튼 */}
+      <div className="pt-4 mt-4 border-t border-border/30 flex items-center gap-3">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (m.summary) {
+              navigator.clipboard.writeText(m.summary);
+              alert('마크다운이 클립보드에 복사되었습니다');
+            }
+          }}
+          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+        >
+          <Copy className="w-3 h-3" /> 마크다운 복사
+        </button>
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            try {
+              const data = await exportMeetingToGDocs(m.id);
+              if (data.success && data.docUrl) {
+                window.open(data.docUrl, '_blank');
+              } else {
+                alert(data.error || 'Google Docs 내보내기 실패');
+              }
+            } catch (err: any) {
+              alert(`Google Docs 내보내기 실패: ${err.message || err}`);
+            }
+          }}
+          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+        >
+          <FileText className="w-3 h-3" /> Google Docs 내보내기
+        </button>
+        <div className="flex-1" />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="text-xs text-red-400 hover:text-red-300"
+        >
+          삭제
         </button>
       </div>
     </div>

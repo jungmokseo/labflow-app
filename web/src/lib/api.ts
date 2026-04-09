@@ -260,6 +260,8 @@ export interface Meeting {
   id: string;
   title: string;
   summary: string | null;
+  transcription: string | null;
+  discussions: string | null;
   agenda: string[];
   actionItems: string[];
   nextSteps: string[];
@@ -277,7 +279,7 @@ export async function createMeeting(data: { title: string; agenda?: string[] }) 
   });
 }
 
-export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary'>> & { actionItems?: string[] }) {
+export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary' | 'transcription'>> & { agenda?: string[]; discussions?: string; actionItems?: string[]; nextSteps?: string[]; corrections?: Array<{ wrong: string; correct: string }> }) {
   return apiFetch<{ success: boolean; data: Meeting }>(`/api/meetings/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
