@@ -727,7 +727,14 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
         // 서버 측 learnCorrectionPatterns가 백그라운드에서 더 정교하게 처리
       }
 
-      await updateMeeting(m.id, { summary: editSummary, corrections });
+      // summary 첫 줄의 # 제목에서 title 자동 동기화
+      const titleMatch = editSummary.match(/^#\s+(.+)/m);
+      const newTitle = titleMatch ? titleMatch[1].trim() : undefined;
+      await updateMeeting(m.id, {
+        summary: editSummary,
+        corrections,
+        ...(newTitle && newTitle !== m.title ? { title: newTitle } : {}),
+      });
       setEditing(false);
       onRefresh();
     } catch (err) {
