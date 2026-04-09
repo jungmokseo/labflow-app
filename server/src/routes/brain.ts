@@ -20,7 +20,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { aiRateLimiter, trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
 import { env } from '../config/env.js';
 import { hybridSearch, rerank, validateResponse, isRagReady, embedAndStore } from '../services/rag-engine.js';
-import { generateEmbedding, searchPapers } from '../services/embedding-service.js';
+import { generateEmbedding, searchPapers, setEmbeddingUserId } from '../services/embedding-service.js';
 import { getGraphContextForQuery, buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── Modularized imports ──────────────────────────────
@@ -861,6 +861,7 @@ export async function brainRoutes(app: FastifyInstance) {
 
     if (env.OPENAI_API_KEY) {
       try {
+        setEmbeddingUserId(request.userId!);
         const { embedding } = await generateEmbedding(query);
         results.paperChunks = await searchPapers(prisma, embedding, 5, 0.3, lab?.id);
       } catch {}

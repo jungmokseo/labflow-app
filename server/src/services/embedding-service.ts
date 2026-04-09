@@ -7,6 +7,13 @@
  */
 
 import { env } from '../config/env.js';
+import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
+
+// 마지막 userId를 추적하여 임베딩 비용 귀속 (호출부에서 설정)
+let _currentUserId: string | null = null;
+export function setEmbeddingUserId(userId: string | null): void {
+  _currentUserId = userId;
+}
 
 // ── 타입 정의 ─────────────────────────────────────────
 
@@ -73,6 +80,11 @@ export async function generateEmbedding(text: string): Promise<EmbeddingResult> 
     usage: { total_tokens: number };
   };
 
+  // OpenAI 임베딩 비용 추적
+  if (_currentUserId) {
+    trackAICost(_currentUserId, 'openai-embedding', COST_PER_CALL['openai-embedding'], 'embedding');
+  }
+
   return {
     embedding: data.data[0].embedding,
     tokensUsed: data.usage.total_tokens,
@@ -109,6 +121,11 @@ export async function generateEmbeddings(texts: string[]): Promise<EmbeddingResu
     data: Array<{ embedding: number[]; index: number }>;
     usage: { total_tokens: number };
   };
+
+  // OpenAI 임베딩 비용 추적 (배치: 텍스트 수만큼)
+  if (_currentUserId) {
+    trackAICost(_currentUserId, 'openai-embedding', COST_PER_CALL['openai-embedding'] * texts.length, 'embedding');
+  }
 
   return data.data
     .sort((a, b) => a.index - b.index)

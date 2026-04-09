@@ -9,7 +9,7 @@
  */
 
 import { createHash } from 'crypto';
-import { generateEmbedding, generateEmbeddings } from './embedding-service.js';
+import { generateEmbedding, generateEmbeddings, setEmbeddingUserId } from './embedding-service.js';
 import { env } from '../config/env.js';
 
 // ── Types ──────────────────────────────────────────
@@ -160,6 +160,9 @@ export async function embedAndStore(
   prisma: any,
   record: EmbeddableRecord,
 ): Promise<{ stored: boolean; skipped: boolean }> {
+  // OpenAI 임베딩 비용을 userId에 귀속
+  if (record.userId) setEmbeddingUserId(record.userId);
+
   const fullText = buildEmbeddableText(record);
   const hash = computeContentHash(fullText);
 
