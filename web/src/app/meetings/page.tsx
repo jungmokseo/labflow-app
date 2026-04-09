@@ -643,7 +643,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
                   ref={editInputRef}
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingIndex(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveEdit(); if (e.key === 'Escape') setEditingIndex(null); }}
                   className="flex-1 text-sm bg-surface-card border border-primary rounded px-2 py-1 text-text-body outline-none"
                 />
                 <button onClick={saveEdit} className="text-xs text-green-400 hover:text-green-300 px-1">저장</button>
@@ -687,7 +687,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
           ref={newInputRef}
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem(); }}
           placeholder="새 액션 아이템 추가..."
           className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary px-1 py-1 text-text-body placeholder:text-text-muted/50 outline-none transition-colors"
         />

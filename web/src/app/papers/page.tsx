@@ -402,7 +402,7 @@ export default function PapersPage() {
           {/* Add journal */}
           <div className="flex gap-2">
             <input value={addInput} onChange={e => setAddInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAddJournal()}
+              onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && handleAddJournal()}
               placeholder="저널명 또는 RSS URL..."
               className="flex-1 bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
             <button onClick={handleAddJournal} disabled={addLoading}

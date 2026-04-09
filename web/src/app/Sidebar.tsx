@@ -195,7 +195,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
                 <input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && handleSearch()}
                   placeholder="과제, 논문, 메모..."
                   className="flex-1 bg-bg-input text-text-heading px-3 py-1.5 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                   autoFocus

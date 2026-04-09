@@ -66,7 +66,7 @@ export function KeyboardShortcuts() {
               placeholder="이동할 페이지를 검색하세요..."
               className="flex-1 bg-transparent text-text-heading text-sm focus:outline-none placeholder:text-text-muted"
               onKeyDown={e => {
-                if (e.key === 'Enter' && filtered.length > 0) navigate(filtered[0].path);
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing && filtered.length > 0) navigate(filtered[0].path);
               }}
             />
             <kbd className="text-xs text-text-muted bg-bg-input px-1.5 py-0.5 rounded">ESC</kbd>
