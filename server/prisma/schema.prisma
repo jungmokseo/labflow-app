@@ -555,3 +555,22 @@ model ChannelSummary {
   @@index([channelId, createdAt(sort: Desc)])
   @@map("channel_summaries")
 }
+
+// ── 에러 로그 (운영 모니터링) ────────────────────────────
+model ErrorLog {
+  id          String    @id @default(cuid())
+  userId      String?   @map("user_id")
+  category    String                        // email, meeting, paper, brain, knowledge, calendar, embedding, etc.
+  severity    String    @default("error")    // error, warn
+  message     String
+  context     Json?     @default("{}")       // 추가 디버깅 정보 (tool name, input 등)
+  stack       String?                        // error stack trace
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([resolved, createdAt(sort: Desc)])
+  @@index([category, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("error_logs")
+}

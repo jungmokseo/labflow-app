@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { logError } from '../services/error-logger.js';
 
 const MAX_JOURNALS = 15;
 
@@ -195,9 +196,9 @@ export function startPaperAlertCron() {
     }
   }, 24 * 60 * 60 * 1000); // 24시간
   // 기존 daily → weekly 마이그레이션
-  prisma.paperAlert.updateMany({ where: { schedule: 'daily' }, data: { schedule: 'weekly' } }).catch(() => {});
+  prisma.paperAlert.updateMany({ where: { schedule: 'daily' }, data: { schedule: 'weekly' } }).catch(logError('paper', 'daily→weekly 마이그레이션 실패', {}, 'warn'));
   // 서버 시작 시 즉시 1회 체크 (밀린 스케줄 처리)
-  checkAndRunScheduledAlerts().catch(() => {});
+  checkAndRunScheduledAlerts().catch(logError('paper', '시작 시 알림 체크 실패'));
   console.log('[paper-alert] Paper alert cron started (daily check)');
 }
 

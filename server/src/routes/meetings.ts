@@ -28,6 +28,7 @@ import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middlewar
 import { buildGraphFromText, crossLinkSources } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
+import { logError } from '../services/error-logger.js';
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -251,7 +252,7 @@ JSON: [{"wrong": "...", "correct": "..."}]`;
         where: { labId_wrongForm: { labId: lab.id, wrongForm: p.wrong.toLowerCase() } },
         create: { labId: lab.id, wrongForm: p.wrong.toLowerCase(), correctForm: p.correct, category: 'TTS오인식', autoAdded: true },
         update: {},
-      }).catch(() => {});
+      }).catch(logError('meeting', 'DomainDict upsert 실패', { userId }, 'warn'));
       added++;
     }
     if (added > 0) console.log(`[tts-learn] Learned ${added} new TTS correction patterns from meeting`);
@@ -371,7 +372,7 @@ async function transcribeViaFileApi(
     });
 
     // 업로드된 파일 정리
-    fileManager.deleteFile(file.name).catch(() => {});
+    fileManager.deleteFile(file.name).catch(logError('meeting', 'Gemini 파일 삭제 실패', {}, 'warn'));
 
     return result.response.text().trim();
   } finally {
@@ -592,7 +593,7 @@ async function processMeetingAudio(
 
   // Step 2.5: 교정 패턴 학습 (fire-and-forget — raw vs Sonnet 비교)
   if (userId) {
-    learnCorrectionPatterns(rawTranscription, summary.correctedTranscription, userId).catch(() => {});
+    learnCorrectionPatterns(rawTranscription, summary.correctedTranscription, userId).catch(logError('meeting', '교정 패턴 학습 실패', { userId }));
   }
 
   // Step 3: 이름 제거 없음 — 교수님 양식에서는 참석자 이름을 유지
@@ -753,7 +754,7 @@ export async function meetingRoutes(app: FastifyInstance) {
                 await savePendingEvent(user.id, request.labId, evt);
               }
             })
-        ).catch(() => {});
+        ).catch(logError('calendar', '미팅 일정 감지 실패', { userId: user.id }));
       }
 
       return reply.code(201).send({
@@ -865,7 +866,7 @@ export async function meetingRoutes(app: FastifyInstance) {
                 autoAdded: false,
               },
               update: { correctForm: c.correct, category: '수동교정', autoAdded: false },
-            }).catch(() => {});
+            }).catch(logError('meeting', 'DomainDict upsert 실패 (수동교정)', { userId: user.id }, 'warn'));
             added++;
           }
           if (added > 0) console.log(`[dict-learn] User manually added ${added} correction patterns from meeting edit`);
@@ -875,7 +876,7 @@ export async function meetingRoutes(app: FastifyInstance) {
 
     // summary 또는 transcription이 수정된 경우, 원본과 비교하여 자동 패턴 학습 (백그라운드)
     if (body.transcription && existing.transcription && body.transcription !== existing.transcription) {
-      learnCorrectionPatterns(existing.transcription, body.transcription, user.id).catch(() => {});
+      learnCorrectionPatterns(existing.transcription, body.transcription, user.id).catch(logError('meeting', '수정 시 교정 패턴 학습 실패', { userId: user.id }));
     }
 
     // 내용이 수정된 경우 RAG 재임베딩 + 지식그래프 업데이트 (백그라운드)
@@ -900,7 +901,7 @@ export async function meetingRoutes(app: FastifyInstance) {
       // 지식그래프 업데이트 + 교차 연결
       const graphText = `회의: ${updatedTitle}\n안건: ${updatedAgenda}\n${updatedSummary}\n액션: ${updatedActions}\n다음: ${updatedNextSteps}`;
       buildGraphFromText(user.id, graphText, 'meeting').catch(err => console.warn('[meeting-edit] KG rebuild failed:', err));
-      crossLinkSources(user.id, graphText, 'meeting', updatedTitle).catch(() => {});
+      crossLinkSources(user.id, graphText, 'meeting', updatedTitle).catch(logError('knowledge', '미팅 교차연결 실패', { userId: user.id }));
     }
 
     return reply.send({ success: true, data: formatMeeting(meeting) });

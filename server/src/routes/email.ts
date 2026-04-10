@@ -32,6 +32,7 @@ import { buildGraphFromText, crossLinkSources } from '../services/knowledge-grap
 import { embedAndStore } from '../services/rag-engine.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+import { logError } from '../services/error-logger.js';
 
 // Safely decrypt a token — handles both encrypted and legacy plaintext values
 function safeDecrypt(value: string | null | undefined): string | undefined {
@@ -649,7 +650,7 @@ export async function emailRoutes(app: FastifyInstance) {
         if (existingToken?.accessToken) {
           const revokeClient = createOAuth2Client();
           revokeClient.setCredentials({ access_token: safeDecrypt(existingToken.accessToken) });
-          await revokeClient.revokeCredentials().catch(() => {});
+          await revokeClient.revokeCredentials().catch(logError('auth', 'Gmail 토큰 revoke 실패', { userId }, 'warn'));
         }
         await prisma.gmailToken.deleteMany({ where: { userId } });
       } catch { /* revoke 실패해도 재인증 진행 */ }
@@ -1160,7 +1161,7 @@ export async function emailRoutes(app: FastifyInstance) {
                 await savePendingEvent(user!.id, request.labId, evt);
               }
             });
-        }).catch(() => {});
+        }).catch(logError('calendar', '이메일 일정 감지 실패', { userId: user!.id }));
       }
 
       // 브리핑 히스토리 저장 (Memo에 JSON 형태로)
@@ -1800,7 +1801,7 @@ ${emailDataForPrompt.join('\n\n')}`,
           const graphText = urgentEmails.map(e =>
             `이메일: ${e.subject} | 발신자: ${e.senderName} (${e.groupLabel}) | 날짜: ${e.dateStr} | 요약: ${e.snippet}`
           ).join('\n');
-          buildGraphFromText(user.id, graphText, 'email').catch(() => {});
+          buildGraphFromText(user.id, graphText, 'email').catch(logError('knowledge', '이메일 지식그래프 구축 실패', { userId: user.id }));
         }
 
         // 브리핑 전체를 RAG에 임베딩 — Brain 채팅에서 "지난 이메일에서 뭐 있었지?" 검색 가능
@@ -1811,12 +1812,12 @@ ${emailDataForPrompt.join('\n\n')}`,
           content: markdown.substring(0, 8000),
           userId: user.id,
           tags: ['email-briefing'],
-        }).catch(() => {});
+        }).catch(logError('embedding', '이메일 브리핑 임베딩 실패', { userId: user.id }));
 
         // 교차 연결: 이메일에서 언급된 논문/프로젝트/인물을 기존 지식그래프 노드와 연결
         const crossLinkText = urgentEmails.map(e => `${e.subject} ${e.snippet}`).join('\n');
         if (crossLinkText.length > 20) {
-          crossLinkSources(user.id, crossLinkText, 'email', `이메일 브리핑 ${now.toISOString().split('T')[0]}`).catch(() => {});
+          crossLinkSources(user.id, crossLinkText, 'email', `이메일 브리핑 ${now.toISOString().split('T')[0]}`).catch(logError('knowledge', '이메일 교차연결 실패', { userId: user.id }));
         }
       } catch {}
 

@@ -6,11 +6,13 @@ import {
   getLabProfile, updateLab, getLabMembers, addLabMember, removeLabMember,
   getLabDictionary, addDictEntry, getLabCompleteness,
   updateEmailProfile, LabProfile,
+  getErrorLogs, getErrorSummary, resolveError, resolveAllErrors, cleanupOldErrors,
+  type ErrorLogEntry, type ErrorSummary,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
-import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon } from 'lucide-react';
+import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
 
-type Tab = 'status' | 'lab' | 'email' | 'dictionary';
+type Tab = 'status' | 'lab' | 'email' | 'dictionary' | 'errors';
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('status');
@@ -20,14 +22,16 @@ export default function SettingsPage() {
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [lab, setLab] = useState<LabProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorCount, setErrorCount] = useState(0);
 
   useEffect(() => {
     async function load() {
       try {
-        const [h, emailRes, labRes] = await Promise.allSettled([
+        const [h, emailRes, labRes, errRes] = await Promise.allSettled([
           checkHealth(),
           getEmailStatus(),
           getLabProfile(),
+          getErrorSummary(),
         ]);
         if (h.status === 'fulfilled') setHealth(h.value);
         if (emailRes.status === 'fulfilled') {
@@ -36,6 +40,7 @@ export default function SettingsPage() {
           setCalendarMessage(emailRes.value.calendarMessage ?? null);
         }
         if (labRes.status === 'fulfilled') setLab(labRes.value as any);
+        if (errRes.status === 'fulfilled') setErrorCount(errRes.value.totalUnresolved);
       } finally {
         setLoading(false);
       }
@@ -50,13 +55,15 @@ export default function SettingsPage() {
     lab: <FlaskConical className="w-4 h-4 inline mr-1" />,
     email: <Mail className="w-4 h-4 inline mr-1" />,
     dictionary: <BookOpen className="w-4 h-4 inline mr-1" />,
+    errors: <AlertTriangle className="w-4 h-4 inline mr-1" />,
   };
 
-  const TABS: { key: Tab; label: string }[] = [
+  const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: 'status', label: '시스템 상태' },
     { key: 'lab', label: '연구실 프로필' },
     { key: 'email', label: '이메일 분류' },
     { key: 'dictionary', label: '용어 사전' },
+    { key: 'errors', label: '에러 로그', badge: errorCount || undefined },
   ];
 
   return (
@@ -72,10 +79,11 @@ export default function SettingsPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors
+            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors relative
               ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
           >
             {TAB_ICONS[t.key]} {t.label}
+            {t.badge ? <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">{t.badge}</span> : null}
           </button>
         ))}
       </div>
@@ -84,6 +92,7 @@ export default function SettingsPage() {
       {tab === 'lab' && <LabTab lab={lab} onUpdate={setLab} />}
       {tab === 'email' && <EmailTab connected={emailConnected} />}
       {tab === 'dictionary' && <DictionaryTab />}
+      {tab === 'errors' && <ErrorLogTab onCountChange={setErrorCount} />}
     </div>
   );
 }
@@ -575,6 +584,181 @@ function SInput({ label, value, onChange, placeholder }: { label: string; value:
       <label className="block text-xs text-text-muted mb-1">{label}</label>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         className="w-full px-3 py-1.5 bg-bg-input rounded-lg text-text-heading text-sm border border-border focus:border-primary outline-none placeholder:text-text-muted" />
+    </div>
+  );
+}
+
+// ── Error Log Tab ───────────────────────────────
+const CATEGORY_LABELS: Record<string, string> = {
+  email: '이메일', meeting: '회의', paper: '논문', brain: 'Brain',
+  knowledge: '지식그래프', calendar: '캘린더', embedding: '임베딩',
+  session: '세션', background: '백그라운드', auth: '인증',
+};
+const SEVERITY_COLORS: Record<string, string> = {
+  error: 'bg-red-500/20 text-red-400 border-red-500/30',
+  warn: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+};
+
+function ErrorLogTab({ onCountChange }: { onCountChange: (n: number) => void }) {
+  const [errors, setErrors] = useState<ErrorLogEntry[]>([]);
+  const [summary, setSummary] = useState<ErrorSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('all');
+  const [showResolved, setShowResolved] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [errRes, sumRes] = await Promise.all([
+        getErrorLogs({
+          category: filter === 'all' ? undefined : filter,
+          resolved: showResolved ? undefined : false,
+          limit: 100,
+        }),
+        getErrorSummary(),
+      ]);
+      setErrors(errRes.errors);
+      setTotal(errRes.total);
+      setSummary(sumRes.summary);
+      onCountChange(sumRes.totalUnresolved);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [filter, showResolved, onCountChange]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleResolve = async (id: string) => {
+    setErrors(prev => prev.filter(e => e.id !== id));
+    try {
+      await resolveError(id);
+      load();
+    } catch { /* rollback on next load */ }
+  };
+
+  const handleResolveAll = async (category?: string) => {
+    try {
+      await resolveAllErrors(category);
+      load();
+    } catch { /* ignore */ }
+  };
+
+  const handleCleanup = async () => {
+    try {
+      const res = await cleanupOldErrors();
+      if (res.deletedCount > 0) load();
+    } catch { /* ignore */ }
+  };
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60000) return '방금';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}시간 전`;
+    return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-12">
+      <div className="w-8 h-8 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+    </div>
+  );
+
+  const categories = Array.from(new Set(summary.map(s => s.category)));
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Cards */}
+      {summary.length > 0 && (
+        <section className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+          <h3 className="font-semibold text-text-heading text-base">미해결 에러 요약</h3>
+          <div className="flex flex-wrap gap-2">
+            {summary.map(s => (
+              <div key={`${s.category}-${s.severity}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${SEVERITY_COLORS[s.severity] || 'bg-gray-500/20 text-gray-400'}`}>
+                {CATEGORY_LABELS[s.category] || s.category} ({s.severity}): {s.count}건
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Filters + Actions */}
+      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <select value={filter} onChange={e => setFilter(e.target.value)}
+              className="px-3 py-1.5 bg-bg-input rounded-lg text-text-heading text-sm border border-border">
+              <option value="all">전체 카테고리</option>
+              {categories.map(c => (
+                <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-text-muted cursor-pointer">
+              <input type="checkbox" checked={showResolved} onChange={e => setShowResolved(e.target.checked)}
+                className="rounded border-border" />
+              해결된 것도 표시
+            </label>
+          </div>
+          <div className="flex gap-2">
+            {filter !== 'all' && (
+              <button onClick={() => handleResolveAll(filter)}
+                className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium">
+                {CATEGORY_LABELS[filter] || filter} 전체 해결
+              </button>
+            )}
+            <button onClick={() => handleResolveAll()}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium">
+              전체 해결
+            </button>
+            <button onClick={handleCleanup}
+              className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-xs font-medium">
+              30일+ 정리
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-text-muted">총 {total}건{!showResolved ? ' (미해결)' : ''}</p>
+      </section>
+
+      {/* Error List */}
+      {errors.length === 0 ? (
+        <section className="bg-bg-card rounded-xl border border-border p-12 text-center">
+          <AlertTriangle className="w-10 h-10 text-text-muted/30 mx-auto mb-3" />
+          <p className="text-text-muted text-sm">에러가 없습니다</p>
+        </section>
+      ) : (
+        <section className="space-y-2">
+          {errors.map(err => (
+            <div key={err.id} className={`bg-bg-card rounded-xl border p-4 space-y-2 ${err.resolved ? 'border-border opacity-60' : 'border-border'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${SEVERITY_COLORS[err.severity] || ''}`}>
+                    {err.severity.toUpperCase()}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-bg-input text-text-muted text-[10px] font-medium">
+                    {CATEGORY_LABELS[err.category] || err.category}
+                  </span>
+                  <span className="text-[10px] text-text-muted">{formatTime(err.createdAt)}</span>
+                </div>
+                {!err.resolved && (
+                  <button onClick={() => handleResolve(err.id)}
+                    className="text-[10px] px-2 py-0.5 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30 shrink-0">
+                    해결
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-text-heading break-all">{err.message}</p>
+              {err.context && Object.keys(err.context).length > 0 && (
+                <pre className="text-[10px] text-text-muted bg-bg-input rounded p-2 overflow-x-auto">
+                  {JSON.stringify(err.context, null, 2)}
+                </pre>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

@@ -32,6 +32,7 @@ import { requirePermission } from '../middleware/permissions.js';
 import { env } from '../config/env.js';
 import { analyzeSeedPaper, analyzeSeedPapers, type SeedPaperResult } from '../services/seed-paper.js';
 import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
+import { logError } from '../services/error-logger.js';
 
 // ── Zod Schemas ─────────────────────────────────────
 const createLabSchema = z.object({
@@ -322,7 +323,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
             category: t.category,
           },
           update: {},
-        }).catch(() => {});
+        }).catch(logError('brain', '전문용어 upsert 실패', {}, 'warn'));
         added++;
       }
       results.push(`전문용어 ${added}개 추가`);
@@ -340,7 +341,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
             year: p.year,
             doi: p.doi,
           },
-        }).catch(() => {});
+        }).catch(logError('paper', '온보딩 논문 등록 실패', {}, 'warn'));
       }
       results.push(`논문 ${body.papers.length}편 등록`);
     }

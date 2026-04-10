@@ -7,6 +7,7 @@
  */
 
 import { basePrismaClient } from '../config/prisma.js';
+import { logError } from './error-logger.js';
 
 interface ResearchTheme {
   name: string;
@@ -267,7 +268,7 @@ JSON 배열로만 응답:
             where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
             create: { labId, wrongForm: t.wrong.toLowerCase(), correctForm: t.correct, category: t.category || '자동생성' },
             update: {},
-          }).catch(() => {});
+          }).catch(logError('brain', 'DomainDict abbreviation upsert 실패', { labId }, 'warn'));
           existingTerms.add(t.wrong.toLowerCase());
           added++;
         }
@@ -305,7 +306,7 @@ JSON 배열로만 응답:
             where: { labId_wrongForm: { labId, wrongForm: t.wrong.toLowerCase() } },
             create: { labId, wrongForm: t.wrong.toLowerCase(), correctForm: t.correct, category: 'TTS오인식', autoAdded: true },
             update: {},
-          }).catch(() => {});
+          }).catch(logError('brain', 'DomainDict TTS upsert 실패', { labId }, 'warn'));
           existingTerms.add(t.wrong.toLowerCase());
           added++;
         }

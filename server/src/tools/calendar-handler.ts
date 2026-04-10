@@ -6,6 +6,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { getOrCreateShadow, saveShadowMessage } from './shadow-session.js';
+import { logError } from '../services/error-logger.js';
 
 /**
  * 캘린더 조회 — 오늘/이번주 일정
@@ -155,7 +156,7 @@ ${eventData.location ? `- **장소:** ${eventData.location}` : ''}
 ${calData.htmlLink ? `[Google Calendar에서 보기](${calData.htmlLink})` : ''}`
         : `일정 등록 실패: ${calData.error || '알 수 없는 오류'}`;
 
-      saveShadowMessage(shadowChannelId, message, resultMsg).catch(() => {});
+      saveShadowMessage(shadowChannelId, message, resultMsg).catch(logError('brain', 'shadow 저장 실패 (calendar)', { userId }, 'warn'));
       return resultMsg;
     } else {
       return '일정 정보를 추출할 수 없습니다. 제목, 날짜, 시간을 포함해서 다시 말씀해주세요.';

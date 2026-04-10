@@ -554,6 +554,48 @@ export async function getBrainMessages(channelId: string) {
   return apiFetch<{ data: BrainMessage[] }>(`/api/brain/channels/${channelId}`);
 }
 
+/**
+ * Polling 복구 — 모바일 화면 sleep 등으로 SSE 끊김 시 사용.
+ * 마지막 user 메시지 이후의 새 assistant 메시지가 나타날 때까지 polling.
+ *
+ * @param channelId 대상 채널
+ * @param afterIso  이 시각보다 이후에 생성된 assistant 메시지를 찾음
+ * @param onAttempt 폴링 시도마다 호출 (UI 표시용)
+ * @param maxMs     최대 대기 시간 (기본 5분)
+ */
+export async function pollForAssistantMessage(
+  channelId: string,
+  afterIso: string,
+  onAttempt?: (attempt: number) => void,
+  maxMs = 5 * 60 * 1000,
+): Promise<BrainMessage | null> {
+  const startedAt = Date.now();
+  const afterTime = new Date(afterIso).getTime();
+  let attempt = 0;
+
+  while (Date.now() - startedAt < maxMs) {
+    attempt++;
+    onAttempt?.(attempt);
+    try {
+      const res = await getBrainMessages(channelId);
+      const messages = (res as any).data || res || [];
+      if (Array.isArray(messages)) {
+        // 가장 최신의 assistant 메시지 찾기 (afterTime 이후)
+        const found = messages
+          .filter((m: BrainMessage) => m.role === 'assistant' && new Date(m.createdAt).getTime() > afterTime)
+          .sort((a: BrainMessage, b: BrainMessage) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        if (found) return found;
+      }
+    } catch {
+      /* ignore — retry */
+    }
+    // Progressive backoff: 2s, 3s, 4s, 5s, 5s, 5s...
+    const delay = Math.min(2000 + attempt * 1000, 5000);
+    await new Promise(r => setTimeout(r, delay));
+  }
+  return null;
+}
+
 // Alias for backward compat
 export const getChannelMessages = getBrainMessages;
 
@@ -901,4 +943,50 @@ export async function checkHealth() {
   } catch {
     return false;
   }
+}
+
+// ── 에러 로그 ──────────────────────────────────────
+export interface ErrorLogEntry {
+  id: string;
+  category: string;
+  severity: string;
+  message: string;
+  context: Record<string, unknown> | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface ErrorSummary {
+  category: string;
+  severity: string;
+  count: number;
+}
+
+export async function getErrorLogs(params?: { category?: string; resolved?: boolean; limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.category) q.set('category', params.category);
+  if (params?.resolved !== undefined) q.set('resolved', String(params.resolved));
+  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.offset) q.set('offset', String(params.offset));
+  return apiFetch<{ errors: ErrorLogEntry[]; total: number }>(`/api/errors?${q}`);
+}
+
+export async function getErrorSummary() {
+  return apiFetch<{ summary: ErrorSummary[]; totalUnresolved: number }>('/api/errors/summary');
+}
+
+export async function resolveError(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/errors/${id}/resolve`, { method: 'PATCH' });
+}
+
+export async function resolveAllErrors(category?: string) {
+  return apiFetch<{ success: boolean; resolvedCount: number }>('/api/errors/resolve-all', {
+    method: 'PATCH',
+    body: JSON.stringify(category ? { category } : {}),
+  });
+}
+
+export async function cleanupOldErrors() {
+  return apiFetch<{ success: boolean; deletedCount: number }>('/api/errors/cleanup', { method: 'DELETE' });
 }

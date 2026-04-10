@@ -9,6 +9,7 @@
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { logError } from '../services/error-logger.js';
 
 // --- Types ---
 
@@ -182,7 +183,7 @@ export function trackAICost(userId: string, service: string, estimatedCost: numb
   entry.costBreakdown[service] = (entry.costBreakdown[service] ?? 0) + estimatedCost;
 
   // DB에 영구 저장 (비동기, 실패해도 무시)
-  persistCostLog(userId, service, estimatedCost, intent).catch(() => {});
+  persistCostLog(userId, service, estimatedCost, intent).catch(logError('background', 'AI 비용 로그 저장 실패', { userId, service }, 'warn'));
 
   // Check alert thresholds
   let userAlerts = alertedThresholds.get(userId);

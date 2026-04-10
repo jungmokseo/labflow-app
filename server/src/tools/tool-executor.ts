@@ -14,6 +14,7 @@ import { getGraphContextForQuery } from '../services/knowledge-graph.js';
 import { calculateConfidence, getStaleWarning, trackAccess } from '../services/metamemory.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
 import type { ToolName } from './tool-definitions.js';
+import { logError } from '../services/error-logger.js';
 
 interface ExecutorContext {
   app: FastifyInstance;
@@ -124,7 +125,7 @@ async function executeSearchLabData(
       words.some(w => fuzzy(m.name, w) || (m.email && fuzzy(m.email, w)))
     );
     if (matched.length > 0) {
-      trackAccess('labMember', matched.map(m => m.id)).catch(() => {});
+      trackAccess('labMember', matched.map(m => m.id)).catch(logError('brain', 'trackAccess(labMember) 실패', { userId: ctx.userId }, 'warn'));
       results.push('[구성원]\n' + matched.map(m => {
         const conf = calculateConfidence(m);
         const warning = getStaleWarning(conf, m.createdAt, m.lastVerified);
@@ -146,7 +147,7 @@ async function executeSearchLabData(
       )
     );
     if (matched.length > 0) {
-      trackAccess('project', matched.map(p => p.id)).catch(() => {});
+      trackAccess('project', matched.map(p => p.id)).catch(logError('brain', 'trackAccess(project) 실패', { userId: ctx.userId }, 'warn'));
       results.push('[과제]\n' + matched.map(p => {
         const conf = calculateConfidence(p);
         const warning = getStaleWarning(conf, p.createdAt, p.lastVerified);
@@ -239,7 +240,7 @@ async function executeSearchLabData(
     }
 
     if (matched.length > 0) {
-      trackAccess('publication', matched.map((p: any) => p.id)).catch(() => {});
+      trackAccess('publication', matched.map((p: any) => p.id)).catch(logError('brain', 'trackAccess(publication) 실패', { userId: ctx.userId }, 'warn'));
       results.push('[논문]\n' + matched.map((p: any) => {
         const grantList = p.grants?.map((g: any) => g.project.number || g.project.name).join(', ');
         return `- **${p.title}**${p.nickname ? ` [${p.nickname}]` : ''}\n  저널: ${p.journal || '미등록'} (${p.year || ''})\n  저자: ${p.authors || '미등록'}\n  DOI: ${p.doi || '미등록'}${grantList ? `\n  사사 과제: ${grantList}` : ''}`;
@@ -319,7 +320,7 @@ async function executeSearchKnowledge(
         }
       }
     } catch (err) {
-      console.warn('[tool] RAG search failed:', err);
+      logError('embedding', 'RAG 검색 실패', { userId: ctx.userId }, 'warn')(err);
     }
   }
 
@@ -331,7 +332,7 @@ async function executeSearchKnowledge(
         results.push('[지식그래프 맥락]\n' + graphContext.contextText);
       }
     } catch (err) {
-      console.warn('[tool] Graph context failed:', err);
+      logError('knowledge', '지식그래프 컨텍스트 조회 실패', { userId: ctx.userId }, 'warn')(err);
     }
   }
 
@@ -371,7 +372,7 @@ async function executeGetEmailBriefing(
       if (briefingData.success && briefingData.markdown) {
         const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
         const shadowContent = await compressForShadow(briefingData.markdown, 'email');
-        saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(() => {});
+        saveShadowMessage(shadowChannelId, 'email briefing', shadowContent).catch(logError('brain', 'shadow 저장 실패 (email briefing)', { userId: ctx.userId }, 'warn'));
         let rangePrefix = '';
         if (briefingData.lastBriefingAt) {
           const lastTime = new Date(briefingData.lastBriefingAt);
@@ -433,7 +434,7 @@ async function executeReadEmail(
       const e = emails[0];
       const result = formatEmailFull(e);
       const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
-      saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(() => {});
+      saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(logError('brain', 'shadow 저장 실패 (read email)', { userId: ctx.userId }, 'warn'));
       return `[양식지정] 아래 이메일 내용을 양식 그대로 전달하세요.\n\n${result}`;
     }
 
@@ -447,7 +448,7 @@ async function executeReadEmail(
     const result = `"${searchTerms || '최근'}" 관련 이메일 **${emails.length}건** 발견:\n\n${listSection}\n\n---\n\n**가장 최신 이메일 전문:**\n\n${fullSection}\n\n---\n다른 이메일을 보려면 번호나 제목을 알려주세요.`;
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
-    saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(() => {});
+    saveShadowMessage(shadowChannelId, `read: ${searchTerms}`, result.slice(0, 2000)).catch(logError('brain', 'shadow 저장 실패 (read email)', { userId: ctx.userId }, 'warn'));
     return `[양식지정] 아래 이메일 목록+전문을 양식 그대로 전달하세요.\n\n${result}`;
   } catch (err: any) {
     return `이메일 조회 실패: ${err.message}`;
@@ -549,7 +550,7 @@ async function executeDraftEmailReply(
     const draftData = JSON.parse(draftRes.body);
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'email');
-    saveShadowMessage(shadowChannelId, `reply draft: ${email.subject}`, `답장 초안 작성: ${email.subject}`).catch(() => {});
+    saveShadowMessage(shadowChannelId, `reply draft: ${email.subject}`, `답장 초안 작성: ${email.subject}`).catch(logError('brain', 'shadow 저장 실패 (reply draft)', { userId: ctx.userId }, 'warn'));
 
     if (draftData.success) {
       return `**답장 초안이 Gmail 임시보관함에 저장되었습니다.**
@@ -657,7 +658,7 @@ async function executeGetCalendar(
 
     const shadowChannelId = await getOrCreateShadow(ctx.userId, 'calendar');
     const rawResult = sections.join('\n');
-    saveShadowMessage(shadowChannelId, 'calendar query', rawResult.slice(0, 1000)).catch(() => {});
+    saveShadowMessage(shadowChannelId, 'calendar query', rawResult.slice(0, 1000)).catch(logError('brain', 'shadow 저장 실패 (calendar)', { userId: ctx.userId }, 'warn'));
 
     // 캘린더 일정을 RAG 벡터 인덱스에 저장 (일 단위 캐시, cross-domain 검색 지원)
     if (allEvents.length > 0) {
@@ -731,7 +732,7 @@ async function executeCreateCalendarEvent(
       ? `**일정이 Google Calendar에 등록되었습니다.**\n\n- **제목:** ${eventData.title}\n- **날짜:** ${eventData.date}${eventData.time ? ` ${eventData.time}` : ' (종일)'}\n- **시간:** ${eventData.duration}분${eventData.location ? `\n- **장소:** ${eventData.location}` : ''}\n\n${calData.htmlLink ? `[Google Calendar에서 보기](${calData.htmlLink})` : ''}`
       : `일정 등록 실패: ${calData.error || '알 수 없는 오류'}`;
 
-    saveShadowMessage(shadowChannelId, `create: ${eventData.title}`, resultMsg).catch(() => {});
+    saveShadowMessage(shadowChannelId, `create: ${eventData.title}`, resultMsg).catch(logError('brain', 'shadow 저장 실패 (create event)', { userId: ctx.userId }, 'warn'));
     return resultMsg;
   } catch (err: any) {
     return `일정 등록 실패: ${err.message}`;
@@ -938,7 +939,7 @@ async function executeImportStructuredData(
           title,
           content,
           tags: [data_type],
-        }).catch(() => {});
+        }).catch(logError('embedding', '데이터 임포트 임베딩 실패', { userId: ctx.userId }));
 
         created++;
       }
@@ -1173,7 +1174,7 @@ async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
         if (memo?.content && memo.content.length > (fullText?.length || 0)) {
           fullText = memo.content;
           // Publication에도 전문 저장 (다음 인덱싱 시 Memo 검색 불필요)
-          await prisma.publication.update({ where: { id: pub.id }, data: { fullText } }).catch(() => {});
+          await prisma.publication.update({ where: { id: pub.id }, data: { fullText } }).catch(logError('paper', '논문 전문 저장 실패', { userId: ctx.userId, pubId: pub.id }, 'warn'));
         }
       }
 

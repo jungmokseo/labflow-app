@@ -7,6 +7,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
+import { logError } from '../services/error-logger.js';
 
 /**
  * 이메일 후속 질문 — 기존 메모 데이터 기반
@@ -138,7 +139,7 @@ export async function handleEmailRead(
       const e = emails[0];
       const result = formatEmailFull(e);
       const shadowChannelId = await getOrCreateShadow(userId, 'email');
-      saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(() => {});
+      saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(logError('brain', 'shadow 저장 실패 (email read)', { userId }, 'warn'));
       return result;
     }
 
@@ -154,7 +155,7 @@ export async function handleEmailRead(
     const result = `"${searchTerms || '최근'}" 관련 이메일 **${emails.length}건** 발견:\n\n${listSection}\n\n---\n\n**가장 최신 이메일 전문:**\n\n${fullSection}\n\n---\n다른 이메일을 보려면 번호나 제목을 알려주세요.`;
 
     const shadowChannelId = await getOrCreateShadow(userId, 'email');
-    saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(() => {});
+    saveShadowMessage(shadowChannelId, message, result.slice(0, 2000)).catch(logError('brain', 'shadow 저장 실패 (email read)', { userId }, 'warn'));
     return result;
   } catch (err: any) {
     console.error('[brain] email_read error:', err.message);
@@ -258,7 +259,7 @@ export async function handleEmailReplyDraft(
       const draftData = JSON.parse(draftRes.body);
 
       const shadowChannelId = await getOrCreateShadow(userId, 'email');
-      saveShadowMessage(shadowChannelId, message, `답장 초안 작성: ${email.subject}`).catch(() => {});
+      saveShadowMessage(shadowChannelId, message, `답장 초안 작성: ${email.subject}`).catch(logError('brain', 'shadow 저장 실패 (draft reply)', { userId }, 'warn'));
 
       if (draftData.success) {
         return `**답장 초안이 Gmail 임시보관함에 저장되었습니다.**

@@ -3,9 +3,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel,
+  pollForAssistantMessage,
   type BrainMessage, type UploadResult,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
+import { useWakeLock } from '@/lib/use-wake-lock';
+import { savePendingBrainJob, getPendingBrainJob, clearPendingBrainJob, isPendingJobStale } from '@/lib/pending-brain-job';
 import { useConversationsStore } from '@/store/conversations';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
 import ReactMarkdown from 'react-markdown';
@@ -209,11 +212,72 @@ export default function BrainPage() {
   const dragCounter = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
 
+  // Wake Lock — 작업 중 모바일 화면 꺼짐 방지
+  const wakeLock = useWakeLock();
+  // Recovery polling 표시
+  const [recovering, setRecovering] = useState(false);
+
   // Auto-save input to localStorage
   useEffect(() => {
     const saved = localStorage.getItem('brain-draft');
     if (saved) setInput(saved);
   }, []);
+
+  // Pending job 복구 — 페이지 진입 시 (새로고침/재방문 후) 끊긴 작업이 있으면 polling으로 결과 가져오기
+  useEffect(() => {
+    const pending = getPendingBrainJob();
+    if (!pending) return;
+    if (isPendingJobStale(pending)) {
+      clearPendingBrainJob();
+      return;
+    }
+
+    // 채널 ID가 없으면 (새 세션이었던 경우) 가장 최근 채널 사용
+    let cancelled = false;
+    (async () => {
+      let pollChannelId = pending.channelId;
+      if (!pollChannelId) {
+        try {
+          const res = await getBrainChannels();
+          const list = (res as any).data || [];
+          if (Array.isArray(list) && list.length > 0) pollChannelId = list[0].id;
+        } catch { /* ignore */ }
+      }
+      if (!pollChannelId || cancelled) return;
+
+      setRecovering(true);
+      setThinkingSteps(['이전 작업의 결과를 확인하고 있습니다...']);
+
+      const recovered = await pollForAssistantMessage(
+        pollChannelId,
+        pending.sentAt,
+        (n) => !cancelled && setThinkingSteps([`백그라운드 결과를 가져오고 있습니다... (${n}회 시도)`]),
+        2 * 60 * 1000, // 복구 시 2분만 시도
+      );
+
+      if (cancelled) return;
+
+      setRecovering(false);
+      setThinkingSteps([]);
+      clearPendingBrainJob();
+
+      if (recovered) {
+        // 활성 채널을 복구된 채널로 설정 → 메시지가 자동으로 표시됨
+        setActiveChannelId(pollChannelId);
+        try {
+          const messagesRes = await getChannelMessages(pollChannelId);
+          const messages = (messagesRes as any).data || [];
+          if (Array.isArray(messages)) {
+            storeMessages(pollChannelId, messages);
+          }
+        } catch { /* ignore */ }
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (input) localStorage.setItem('brain-draft', input);
     else localStorage.removeItem('brain-draft');
@@ -363,7 +427,8 @@ export default function BrainPage() {
     }
 
     const attachmentNote = fileNames.length > 0 ? `\n\n📎 ${fileNames.join(', ')}` : '';
-    const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg + attachmentNote, createdAt: new Date().toISOString() };
+    const sentAtIso = new Date().toISOString();
+    const userMsg: BrainMessage = { id: `temp-${Date.now()}`, role: 'user', content: msg + attachmentNote, createdAt: sentAtIso };
 
     if (channelIdAtSend) {
       storeAddMessage(channelIdAtSend, userMsg);
@@ -373,25 +438,87 @@ export default function BrainPage() {
       setLocalLoading(true);
     }
 
+    // Wake Lock 활성화 — 모바일 화면 꺼짐 방지
+    wakeLock.acquire().catch(() => {});
+
+    // Pending job 추적 — SSE 끊김 시 복구용
+    savePendingBrainJob({
+      channelId: channelIdAtSend,
+      userMessage: msg,
+      sentAt: sentAtIso,
+      fileIds: currentFileIds.length > 0 ? currentFileIds : undefined,
+    });
+
     try {
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
-      const result = await brainChatStream(
-        msg,
-        (step) => setThinkingSteps(prev => {
-          if (prev.length > 0 && prev[prev.length - 1] === step) return prev;
-          return [...prev, step];
-        }),
-        (token) => {
-          setIsTokenStreaming(true);
-          setStreamingContent(prev => prev + token);
-        },
-        channelIdAtSend || undefined,
-        currentFileIds[0],
-        isNewSession ? true : undefined,
-        currentFileIds.length > 1 ? currentFileIds : undefined,
-      );
+      let result;
+      try {
+        result = await brainChatStream(
+          msg,
+          (step) => setThinkingSteps(prev => {
+            if (prev.length > 0 && prev[prev.length - 1] === step) return prev;
+            return [...prev, step];
+          }),
+          (token) => {
+            setIsTokenStreaming(true);
+            setStreamingContent(prev => prev + token);
+          },
+          channelIdAtSend || undefined,
+          currentFileIds[0],
+          isNewSession ? true : undefined,
+          currentFileIds.length > 1 ? currentFileIds : undefined,
+        );
+      } catch (streamErr: any) {
+        // SSE 끊김 (모바일 화면 sleep 등) → polling으로 복구 시도
+        // 서버는 try/catch 안에서 끝까지 처리하고 메시지를 DB에 저장하므로,
+        // 채널 메시지를 polling하면 결과를 가져올 수 있다.
+        const isNetworkErr = /Load failed|Failed to fetch|NetworkError|aborted|시간이 초과|서버 연결/i.test(streamErr.message || '');
+        if (!isNetworkErr) throw streamErr;
+
+        setRecovering(true);
+        setThinkingSteps(['연결이 끊겼습니다. 백그라운드 결과를 확인하고 있습니다...']);
+
+        // 새 세션이면 채널 ID를 모름 → 가장 최근 채널 찾기
+        let pollChannelId = channelIdAtSend;
+        if (!pollChannelId) {
+          try {
+            const channels = await getBrainChannels();
+            const list = (channels as any).data || [];
+            if (Array.isArray(list) && list.length > 0) {
+              // 가장 최근 채널 — 방금 만든 것일 가능성 높음
+              pollChannelId = list[0].id;
+            }
+          } catch { /* ignore */ }
+        }
+
+        if (!pollChannelId) {
+          throw new Error('연결이 끊겼고 채널을 찾을 수 없습니다. 잠시 후 새로고침해주세요.');
+        }
+
+        const recovered = await pollForAssistantMessage(
+          pollChannelId,
+          sentAtIso,
+          (n) => setThinkingSteps([`백그라운드에서 결과를 가져오고 있습니다... (${n}회 시도)`]),
+        );
+
+        setRecovering(false);
+
+        if (!recovered) {
+          throw new Error('백그라운드 작업 결과를 가져오지 못했습니다. 잠시 후 새로고침해주세요.');
+        }
+
+        result = {
+          response: recovered.content,
+          channelId: pollChannelId,
+          intent: 'recovered',
+          isNewSession,
+          multiHop: false,
+          dbResult: false,
+          autoCaptured: null,
+        };
+      }
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
@@ -426,6 +553,7 @@ export default function BrainPage() {
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
+      setRecovering(false);
       const rawMsg = err.message || 'Unknown error';
       console.error('[Brain] Chat error:', rawMsg, err);
       const errorDetail = rawMsg.includes('401') || rawMsg.includes('403')
@@ -447,6 +575,10 @@ export default function BrainPage() {
         setLocalNewMessages(prev => [...prev, errMsg]);
       }
     } finally {
+      // Wake Lock 해제
+      wakeLock.release().catch(() => {});
+      // Pending job 클리어 (성공/실패 모두)
+      clearPendingBrainJob();
       if (channelIdAtSend) {
         setStreaming(channelIdAtSend, false);
       } else {
@@ -742,8 +874,8 @@ export default function BrainPage() {
                     )}
                   </div>
                 ))}
-                {/* Thinking steps — always visible while loading (even during streaming) */}
-                {loading && thinkingSteps.length > 0 && (
+                {/* Thinking steps — always visible while loading or recovering */}
+                {(loading || recovering) && thinkingSteps.length > 0 && (
                   <div className="flex justify-start animate-msg-in">
                     <div className="text-sm text-text-muted space-y-1">
                       {thinkingSteps.map((step, i) => (
