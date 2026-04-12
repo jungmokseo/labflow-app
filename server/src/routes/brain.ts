@@ -372,15 +372,19 @@ export async function brainRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    // 에러/실패 메시지를 컨텍스트에서 필터링 (과거 에러로 인한 도구 호출 포기 방지)
-    const ERROR_PATTERNS = [
-      '토큰이 만료', 'invalid_grant', 'invalid authentication', '인증이 필요',
-      '연동이 필요', '접근 장애', '기술적인 문제', '조회 실패', '실패했습니다',
-      'Token has been expired', 'ECONNREFUSED', 'ETIMEDOUT',
+    // 에러 전용 메시지를 컨텍스트에서 필터링 (과거 에러로 인한 도구 호출 포기 방지)
+    // 기준: 짧고(300자 미만) + 기술 에러 식별자 포함인 경우에만 제외 (유효한 응답의 오필터 방지)
+    const TECH_ERROR_TOKENS = [
+      'invalid_grant', 'invalid authentication', 'Token has been expired',
+      'ECONNREFUSED', 'ETIMEDOUT', '토큰이 만료되었습니다', 'Gmail 토큰이 만료',
+      '서버에 연결할 수 없습니다', 'Load failed',
     ];
     const contextMessages = recentCtx.reverse().filter(m => {
       if (m.role !== 'assistant') return true;
-      return !ERROR_PATTERNS.some(p => m.content.includes(p));
+      // 짧은 메시지(300자 미만)이면서 기술 에러 토큰을 포함할 때만 제외
+      const isShort = m.content.length < 300;
+      const hasTechError = TECH_ERROR_TOKENS.some(t => m.content.includes(t));
+      return !(isShort && hasTechError);
     });
 
     // ── 5층 컨텍스트 빌드 ──

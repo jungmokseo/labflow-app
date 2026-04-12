@@ -9,15 +9,19 @@ import { maybeGenerateSummary } from '../services/session-manager.js';
 export type ShadowType = 'email' | 'calendar' | 'knowledge';
 
 /**
- * Intent → Shadow Type 매핑
+ * 도구명 → Shadow Type 매핑
+ * tool-use 아키텍처에서 도구명이 곧 intent이므로 직접 매핑
  */
-export function determineShadowType(intent: string, message: string): ShadowType | null {
-  if (['email_briefing', 'email_query', 'email_preference', 'email_read', 'email_reply_draft'].includes(intent)) return 'email';
-  if (intent === 'calendar_query' || intent === 'calendar_create') return 'calendar';
-  const lower = message.toLowerCase();
-  if (/이메일|메일|email|브리핑|briefing|gmail/.test(lower)) return 'email';
-  if (/일정|캘린더|스케줄|calendar|미팅 잡|회의 잡/.test(lower)) return 'calendar';
+export function shadowTypeFromTool(toolName: string): ShadowType | null {
+  if (['get_email_briefing', 'read_email', 'draft_email_reply'].includes(toolName)) return 'email';
+  if (['get_calendar', 'create_calendar_event'].includes(toolName)) return 'calendar';
+  if (['search_lab_data', 'search_knowledge'].includes(toolName)) return 'knowledge';
   return null;
+}
+
+/** @deprecated tool-use 아키텍처로 전환 후 사용하지 않음. shadowTypeFromTool 사용 권장. */
+export function determineShadowType(toolName: string, _message?: string): ShadowType | null {
+  return shadowTypeFromTool(toolName);
 }
 
 /**

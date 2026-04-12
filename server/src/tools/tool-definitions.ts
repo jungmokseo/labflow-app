@@ -58,13 +58,17 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'get_email_briefing',
-    description: 'Gmail에서 최근 이메일을 가져와 중요도별 브리핑을 생성합니다. 결과는 완성된 양식이므로 그대로 전달하세요.',
+    description: 'Gmail에서 최근 이메일을 가져와 중요도별 브리핑을 생성합니다. 결과는 완성된 양식이므로 그대로 전달하세요. 사용자가 "12시간", "6시간" 등 특정 시간 범위를 지정하면 hours_ago를 설정하세요.',
     input_schema: {
       type: 'object' as const,
       properties: {
         max_results: {
           type: 'number',
-          description: '가져올 이메일 수 (기본 30)',
+          description: '가져올 이메일 수 (기본 150)',
+        },
+        hours_ago: {
+          type: 'number',
+          description: '몇 시간 전부터의 이메일을 가져올지. 예: "12시간" → 12, "6시간" → 6. 지정하지 않으면 마지막 브리핑 이후 모든 이메일.',
         },
       },
       required: [],

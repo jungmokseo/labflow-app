@@ -86,21 +86,31 @@ function processInlineContent(child: any): any {
   return parts.length > 1 ? parts : text;
 }
 
+// React 노드에서 재귀적으로 텍스트 추출 (React element → string 변환 시 [object Object] 방지)
+function extractText(node: any): string {
+  if (node === null || node === undefined) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number' || typeof node === 'boolean') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (node?.props?.children !== undefined) return extractText(node.props.children);
+  return '';
+}
+
 // Custom markdown components — 모든 요소에 Lucide 아이콘 + 가독성 스타일링
 const markdownComponents = {
   // ── Headings: Lucide 아이콘 자동 삽입 ──
   h1: ({ children, ...props }: any) => {
-    const text = cleanEmoji(String(children));
+    const text = cleanEmoji(extractText(children));
     const icon = getHeadingIcon(text);
     return <h1 {...props} className="flex items-center gap-2">{icon} {text}</h1>;
   },
   h2: ({ children, ...props }: any) => {
-    const text = cleanEmoji(String(children));
+    const text = cleanEmoji(extractText(children));
     const icon = getHeadingIcon(text);
     return <h2 {...props} className="flex items-center gap-2">{icon} {text}</h2>;
   },
   h3: ({ children, ...props }: any) => {
-    const text = cleanEmoji(String(children));
+    const text = cleanEmoji(extractText(children));
     const icon = getHeadingIcon(text);
     return <h3 {...props} className="flex items-center gap-1.5">{icon} {text}</h3>;
   },
@@ -457,10 +467,7 @@ export default function BrainPage() {
       try {
         result = await brainChatStream(
           msg,
-          (step) => setThinkingSteps(prev => {
-            if (prev.length > 0 && prev[prev.length - 1] === step) return prev;
-            return [...prev, step];
-          }),
+          (step) => setThinkingSteps([step]),
           (token) => {
             setIsTokenStreaming(true);
             setStreamingContent(prev => prev + token);
@@ -587,10 +594,28 @@ export default function BrainPage() {
     }
   }
 
+  // 내장 마이크 우선 선택 헬퍼 (iPhone Continuity Microphone 자동 연결 방지)
+  async function getLocalAudioStream(): Promise<MediaStream> {
+    const permStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default');
+      const builtIn = audioInputs.find(d =>
+        /built.?in|internal|MacBook|laptop|내장|기본/i.test(d.label) &&
+        !/iPhone|iPad|AirPod|Bluetooth|bluetooth/i.test(d.label)
+      );
+      if (builtIn) {
+        permStream.getTracks().forEach(t => t.stop());
+        return navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: builtIn.deviceId } } });
+      }
+    } catch { /* 장치 열거 실패 시 기본 스트림 사용 */ }
+    return permStream;
+  }
+
   // Voice recording
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await getLocalAudioStream();
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'
@@ -874,26 +899,16 @@ export default function BrainPage() {
                     )}
                   </div>
                 ))}
-                {/* Thinking steps — always visible while loading or recovering */}
+                {/* Thinking steps — 현재 단계만 한 줄로 표시 (Gemini 스타일) */}
                 {(loading || recovering) && thinkingSteps.length > 0 && (
                   <div className="flex justify-start animate-msg-in">
-                    <div className="text-sm text-text-muted space-y-1">
-                      {thinkingSteps.map((step, i) => (
-                        <div key={i} className={`flex items-center gap-1.5 transition-all duration-300 ${i < thinkingSteps.length - 1 ? 'opacity-40' : 'opacity-100'}`}>
-                          {i < thinkingSteps.length - 1 ? (
-                            <span className="w-3.5 h-3.5 flex items-center justify-center text-green-400">
-                              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
-                            </span>
-                          ) : (
-                            <span className="flex gap-0.5 w-3.5 justify-center">
-                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-1 h-1 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </span>
-                          )}
-                          <span>{step}</span>
-                        </div>
-                      ))}
+                    <div className="flex items-center gap-1.5 text-sm text-text-muted transition-all duration-300">
+                      <span className="flex gap-0.5 w-3.5 justify-center">
+                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </span>
+                      <span key={thinkingSteps[thinkingSteps.length - 1]}>{thinkingSteps[thinkingSteps.length - 1]}</span>
                     </div>
                   </div>
                 )}

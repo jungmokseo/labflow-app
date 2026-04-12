@@ -357,9 +357,15 @@ async function executeGetEmailBriefing(
 
   try {
     const maxResults = input.max_results || 150;
+    // hours_ago가 지정된 경우 since 파라미터 계산
+    let sinceParam = '';
+    if (input.hours_ago && typeof input.hours_ago === 'number' && input.hours_ago > 0) {
+      const sinceDate = new Date(Date.now() - input.hours_ago * 60 * 60 * 1000);
+      sinceParam = `&since=${encodeURIComponent(sinceDate.toISOString())}`;
+    }
     const briefingRes = await ctx.app.inject({
       method: 'GET',
-      url: `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true&includeSpam=true`,
+      url: `/api/email/narrative-briefing?maxResults=${maxResults}&includeBody=true&includeSpam=true${sinceParam}`,
       headers: {
         authorization: ctx.request.headers.authorization || '',
         'content-type': 'application/json',
@@ -456,6 +462,11 @@ async function executeReadEmail(
 }
 
 function formatEmailFull(e: any): string {
+  const bodyText = (e.body && e.body.trim().length > 0)
+    ? e.body.trim()
+    : (e.snippet && e.snippet.trim().length > 0)
+      ? `[미리보기] ${e.snippet.trim()}`
+      : '(본문을 가져올 수 없습니다. Gmail에서 직접 확인해주세요.)';
   return `**발신자:** ${e.from}
 **수신자:** ${e.to}
 **날짜:** ${e.date}
@@ -465,7 +476,7 @@ ${e.cc ? `**참조:** ${e.cc}` : ''}
 **Thread-ID:** ${e.threadId}
 
 **본문:**
-${e.body || '(본문 없음)'}`;
+${bodyText}`;
 }
 
 // ── draft_email_reply ────────────────────────────────

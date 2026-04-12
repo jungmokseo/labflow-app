@@ -83,12 +83,42 @@ export default function MeetingsPage() {
     };
   }, [audioUrl]);
 
+  // ── 내장 마이크 우선 선택 헬퍼 ──
+  async function getLocalAudioStream(): Promise<MediaStream> {
+    // 1단계: 권한 취득 (기본 장치로)
+    const permStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    // 2단계: 장치 목록 조회 후 내장/로컬 마이크 탐색
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter(d => d.kind === 'audioinput' && d.deviceId !== 'default');
+
+      // iPhone/iPad/외부 장치 제외하고 내장 마이크 우선
+      const builtIn = audioInputs.find(d =>
+        /built.?in|internal|MacBook|laptop|내장|기본/i.test(d.label) &&
+        !/iPhone|iPad|AirPod|Bluetooth|bluetooth/i.test(d.label)
+      );
+
+      if (builtIn) {
+        // 기존 권한 스트림 해제 후 내장 마이크로 재요청
+        permStream.getTracks().forEach(t => t.stop());
+        return navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: builtIn.deviceId } },
+        });
+      }
+    } catch {
+      // 장치 열거 실패 시 기존 스트림 사용
+    }
+
+    return permStream;
+  }
+
   // ── Recording ──
   const startRecording = async () => {
     setError(null);
     setAttachedFile(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await getLocalAudioStream();
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
           ? 'audio/webm;codecs=opus'

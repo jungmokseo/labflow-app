@@ -331,17 +331,55 @@ function describeFetchRange(afterDate: Date, isFirstRun: boolean): string | null
 }
 
 /**
- * Sonnet 없을 때 서사형 브리핑 fallback (텍스트 기반 정리)
+ * Sonnet 실패 시 서사형 브리핑 fallback — Gemini로 대체 생성
+ * 텍스트 덤프가 아니라 실제 AI 분류/요약 유지
  */
-function generateFallbackNarrative(emailData: string[], timezone: string): string {
+async function generateFallbackNarrative(emailData: string[], timezone: string): Promise<string> {
   const today = new Date().toLocaleDateString('ko-KR', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
-  let md = `# 이메일 브리핑\n\n> ${today} 기준 · 총 ${emailData.length}건\n\n`;
-  md += `## 수신 이메일 목록\n\n`;
-  for (const email of emailData) {
-    md += email + '\n\n';
+  const tzLabel = timezone.includes('New_York') ? 'EDT' : timezone.includes('Seoul') ? 'KST' : timezone;
+
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { env: envConfig } = await import('../config/env.js');
+    const genAI = new GoogleGenerativeAI(envConfig.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: `다음 이메일 ${emailData.length}건을 중요도 순으로 브리핑하라.
+
+이메일 데이터:
+${emailData.slice(0, 30).join('\n\n')}
+
+출력 형식:
+## 이메일 브리핑
+**${today}**
+
+### [대응/긴급]
+- [대응] **제목** — 발신자: 핵심 요청 + 필요 액션
+
+### [주요]
+- **제목** — 발신자: 핵심 1줄
+
+### [비주요]
+제목 — 발신자 (한 줄)
+
+### [광고]
+발신자 · 발신자 · ...
+
+이모지 사용 금지. 없는 섹션은 생략.` }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+    });
+
+    return result.response.text().trim();
+  } catch {
+    // Gemini도 실패한 경우에만 텍스트 목록으로 최후 fallback
+    const today2 = new Date().toLocaleDateString('ko-KR', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+    let md = `## 이메일 브리핑\n\n> ${today2} ${tzLabel} · 총 ${emailData.length}건\n\n`;
+    for (const email of emailData.slice(0, 20)) {
+      md += email + '\n\n';
+    }
+    return md;
   }
-  md += `\n---\n*AI 분석 비활성화 상태 — Anthropic API 키를 설정하면 서사형 분석이 제공됩니다.*\n`;
-  return md;
 }
 
 /**
@@ -415,12 +453,36 @@ async function classifyEmailsWithSonnet(
   const anthropic = createAnthropicClient();
 
   if (!anthropic) {
-    // fallback — Sonnet 미설정 시 규칙 기반 분류
-    emails.forEach((e) => {
-      const cls = classifyByRules(e.subject, e.sender, e.snippet, profile);
-      results.set(String(e.index), cls);
-    });
-    return results;
+    // Anthropic 미설정 시 Gemini로 동일 분류 수행
+    try {
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const { env: envCfg } = await import('../config/env.js');
+      const genAI = new GoogleGenerativeAI(envCfg.GEMINI_API_KEY);
+      const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const emailTexts = emails.map(e => `[${e.index}] From: "${e.sender}"\n제목: "${e.subject}"\n미리보기: "${e.snippet}"`).join('\n\n');
+      const geminiResp = await geminiModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: `다음 이메일들을 분류하세요. JSON 배열만 응답:\n${emailTexts}\n\n형식: [{"index":0,"category":"urgent"|"action-needed"|"schedule"|"info"|"ads","confidence":0.0~1.0,"summary":"요약","needsBody":true/false}]` }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048, responseMimeType: 'application/json' },
+      });
+      const parsed: Array<any> = JSON.parse(geminiResp.response.text().trim());
+      for (const item of parsed) {
+        results.set(String(item.index), {
+          category: validateCategory(item.category),
+          confidence: Number(item.confidence) || 0.6,
+          summary: String(item.summary || '').substring(0, 80),
+          needsBody: Boolean(item.needsBody),
+          group: undefined, groupEmoji: undefined,
+        });
+      }
+      return results;
+    } catch {
+      // Gemini도 실패한 경우에만 규칙 기반으로 최후 fallback
+      emails.forEach((e) => {
+        const cls = classifyByRules(e.subject, e.sender, e.snippet, profile);
+        results.set(String(e.index), cls);
+      });
+      return results;
+    }
   }
 
   try {
@@ -507,28 +569,47 @@ function isExcluded(
   return false;
 }
 
-// ── Gmail 메시지 본문 추출 ──────────────────────────
-function extractBody(payload: any): string {
-  if (!payload) return '';
+// ── Gmail 메시지 본문 추출 (재귀적 MIME 파싱) ──────────────────────────
+function extractBody(payload: any, depth = 0): string {
+  if (!payload || depth > 5) return '';
 
-  // 단순 텍스트
+  // text/plain 우선
   if (payload.mimeType === 'text/plain' && payload.body?.data) {
     return Buffer.from(payload.body.data, 'base64').toString('utf-8').substring(0, 2000);
   }
 
-  // multipart
-  if (payload.parts) {
+  // text/html (fallback)
+  if (payload.mimeType === 'text/html' && payload.body?.data) {
+    const html = Buffer.from(payload.body.data, 'base64').toString('utf-8');
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 2000);
+  }
+
+  // multipart: 재귀 탐색 (중첩 MIME 구조 지원)
+  if (payload.parts && Array.isArray(payload.parts)) {
+    // 1차: 직접 text/plain 탐색
     for (const part of payload.parts) {
       if (part.mimeType === 'text/plain' && part.body?.data) {
         return Buffer.from(part.body.data, 'base64').toString('utf-8').substring(0, 2000);
       }
     }
-    // fallback: HTML에서 텍스트 추출
+    // 2차: 중첩 multipart 재귀 탐색 (multipart/alternative, multipart/mixed, multipart/related 등)
+    for (const part of payload.parts) {
+      if (part.mimeType?.startsWith('multipart/')) {
+        const nested = extractBody(part, depth + 1);
+        if (nested) return nested;
+      }
+    }
+    // 3차: text/html fallback
     for (const part of payload.parts) {
       if (part.mimeType === 'text/html' && part.body?.data) {
         const html = Buffer.from(part.body.data, 'base64').toString('utf-8');
         return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 2000);
       }
+    }
+    // 4차: 모든 파트 재귀 탐색
+    for (const part of payload.parts) {
+      const nested = extractBody(part, depth + 1);
+      if (nested) return nested;
     }
   }
 
@@ -1681,11 +1762,11 @@ ${emailDataForPrompt.join('\n\n')}`,
           const textBlock = response.content.find(b => b.type === 'text');
           markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
         } catch (err: any) {
-          console.error('서사형 브리핑 Sonnet 호출 실패:', err);
-          markdown = generateFallbackNarrative(emailDataForPrompt, timezone);
+          console.error('서사형 브리핑 Sonnet 호출 실패, Gemini로 fallback:', err);
+          markdown = await generateFallbackNarrative(emailDataForPrompt, timezone);
         }
       } else {
-        markdown = generateFallbackNarrative(emailDataForPrompt, timezone);
+        markdown = await generateFallbackNarrative(emailDataForPrompt, timezone);
       }
 
       // T_last 업데이트
