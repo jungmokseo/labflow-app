@@ -1599,8 +1599,12 @@ export async function emailRoutes(app: FastifyInstance) {
           ? profile.groups.map(g => `- ${g.emoji} ${g.name}: ${g.domains.join(', ')}`).join('\n')
           : '- 기관별 분류는 To/Cc 주소의 도메인으로 판별합니다.';
 
-        const customInstructions = briefingStyle.customInstructions || '';
+        // briefingStyle.instructions 배열 지원 (신규) + customInstructions 문자열 하위호환
+        const briefingInstructions: string[] = Array.isArray(briefingStyle.instructions)
+          ? briefingStyle.instructions
+          : (briefingStyle.customInstructions ? [briefingStyle.customInstructions] : []);
         const excludeWeeklyReport = briefingStyle.excludeWeeklyReport !== false;
+        const customInstructions = briefingInstructions.join('\n');
 
         const narrativePrompt = `당신은 ${userName}${userRole ? `(${userRole})` : ''}의 이메일 브리핑 비서입니다.
 ${userOrg ? `소속: ${userOrg}. ` : ''}${userLocation ? `현재 위치: ${userLocation}. ` : ''}기준 시간대: ${tzLabel}.

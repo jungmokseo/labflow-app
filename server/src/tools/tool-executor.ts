@@ -13,6 +13,7 @@ import { hybridSearch, rerank, isRagReady, embedAndStore } from '../services/rag
 import { getGraphContextForQuery } from '../services/knowledge-graph.js';
 import { calculateConfidence, getStaleWarning, trackAccess } from '../services/metamemory.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
+import { consolidateInstructions } from '../lib/consolidate.js';
 import type { ToolName } from './tool-definitions.js';
 import { logError } from '../services/error-logger.js';
 
@@ -1241,37 +1242,38 @@ async function executeSaveBriefingPreference(
 ): Promise<string> {
   ctx.sendProgress('브리핑 설정을 저장하고 있습니다...');
 
-  const instructions = (input.instructions as string | undefined) || '';
+  const newInstruction = (input.instructions as string | undefined) || '';
   const reset = input.reset === true;
 
   try {
     const existing = await prisma.emailProfile.findFirst({ where: { userId: ctx.userId } });
     const currentStyle = (existing as any)?.briefingStyle || {};
+    const currentArr: string[] = Array.isArray(currentStyle.instructions) ? currentStyle.instructions : [];
 
-    const newStyle = reset
-      ? { ...currentStyle, customInstructions: '' }
-      : { ...currentStyle, customInstructions: instructions };
+    let newArr: string[];
+    if (reset) {
+      newArr = [];
+    } else if (newInstruction) {
+      ctx.sendProgress('기존 브리핑 설정과 통합하고 있습니다...');
+      newArr = await consolidateInstructions(currentArr, newInstruction);
+    } else {
+      newArr = currentArr;
+    }
+
+    const newStyle = { ...currentStyle, instructions: newArr };
 
     if (existing) {
-      await prisma.emailProfile.update({
-        where: { id: existing.id },
-        data: { briefingStyle: newStyle },
-      });
+      await prisma.emailProfile.update({ where: { id: existing.id }, data: { briefingStyle: newStyle } });
     } else {
       await prisma.emailProfile.create({
-        data: {
-          userId: ctx.userId,
-          classifyByGroup: false,
-          groups: [],
-          briefingStyle: newStyle,
-        },
+        data: { userId: ctx.userId, classifyByGroup: false, groups: [], briefingStyle: newStyle },
       });
     }
 
     if (reset) {
       return '브리핑 형식 설정이 기본값으로 초기화되었습니다. 다음 이메일 브리핑부터 기본 형식이 적용됩니다.';
     }
-    return `브리핑 형식 설정이 저장되었습니다. 다음 이메일 브리핑부터 적용됩니다.\n\n**저장된 설정:** ${instructions}`;
+    return `브리핑 형식 설정이 저장되었습니다. 다음 이메일 브리핑부터 적용됩니다.\n\n**현재 적용 지침 ${newArr.length}개:** ${newArr.map(i => `\n- ${i}`).join('')}`;
   } catch (err: any) {
     logError('brain', 'save_briefing_preference 실패', { userId: ctx.userId, err: err.message }, 'error');
     return `브리핑 설정 저장에 실패했습니다: ${err.message}`;
@@ -1299,13 +1301,14 @@ async function executeUpdateBrainSettings(
     }
 
     if (instruction) {
+      const existing = await prisma.lab.findUnique({ where: { id: ctx.labId }, select: { instructions: true } });
+      const currentArr: string[] = Array.isArray(existing?.instructions) ? (existing!.instructions as string[]) : [];
+
       if (instructionReplace) {
-        updateData.instructions = instruction;
+        updateData.instructions = [instruction];
       } else {
-        // 기존 지침에 새 지침 추가
-        const existing = await prisma.lab.findUnique({ where: { id: ctx.labId }, select: { instructions: true } });
-        const current = existing?.instructions || '';
-        updateData.instructions = current ? `${current}\n- ${instruction}` : `- ${instruction}`;
+        ctx.sendProgress('기존 지침과 통합하고 있습니다...');
+        updateData.instructions = await consolidateInstructions(currentArr, instruction);
       }
     }
 
@@ -1321,8 +1324,8 @@ async function executeUpdateBrainSettings(
       changes.push(`응답 스타일: **${label}**`);
     }
     if (instruction) {
-      const mode = instructionReplace ? '전체 교체' : '추가';
-      changes.push(`Brain 지침 ${mode}: "${instruction}"`);
+      const saved = (updateData.instructions as string[]).join(', ');
+      changes.push(`Brain 지침 저장됨. 현재 적용 지침 ${(updateData.instructions as string[]).length}개`);
     }
 
     return `Brain 설정이 저장되었습니다. 다음 대화부터 적용됩니다.\n\n${changes.map(c => `- ${c}`).join('\n')}`;

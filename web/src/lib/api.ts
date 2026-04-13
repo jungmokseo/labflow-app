@@ -673,6 +673,40 @@ export async function updateLab(data: Partial<LabProfile & {
   });
 }
 
+// ── AI 지침 설정 관리 ──────────────────────────────────────────────────
+
+export interface SettingsSummary {
+  brain: {
+    responseStyle: string;
+    instructions: string[];
+  };
+  email: {
+    briefingInstructions: string[];
+    importanceRules: Array<{ condition: string; action: string; description?: string }>;
+    keywords: string[];
+  };
+}
+
+export async function getSettingsSummary() {
+  return apiFetch<SettingsSummary>('/api/brain/settings-summary');
+}
+
+export async function deleteBrainInstruction(index: number) {
+  return apiFetch<{ instructions: string[] }>(`/api/brain/settings/brain-instruction/${index}`, { method: 'DELETE' });
+}
+
+export async function deleteBriefingInstruction(index: number) {
+  return apiFetch<{ instructions: string[] }>(`/api/brain/settings/briefing-instruction/${index}`, { method: 'DELETE' });
+}
+
+export async function deleteImportanceRule(index: number) {
+  return apiFetch<{ importanceRules: any[] }>(`/api/brain/settings/importance-rule/${index}`, { method: 'DELETE' });
+}
+
+export async function deleteKeyword(keyword: string) {
+  return apiFetch<{ keywords: string[] }>(`/api/brain/settings/keyword/${encodeURIComponent(keyword)}`, { method: 'DELETE' });
+}
+
 export async function completeOnboarding(data: {
   homepageUrl?: string;
   keywords?: string[];

@@ -397,7 +397,8 @@ export async function brainRoutes(app: FastifyInstance) {
     });
 
     // ── Claude Tool-Use 기반 응답 생성 ──
-    const userInstructions = lab?.instructions ? lab.instructions : null;
+    const instructionsArr: string[] = Array.isArray(lab?.instructions) ? (lab!.instructions as unknown as string[]) : [];
+    const userInstructions = instructionsArr.length > 0 ? instructionsArr.map(i => `- ${i}`).join('\n') : null;
     const systemPrompt = buildCoreSystemPrompt({
       responseStyle: lab?.responseStyle,
       userInstructions,
@@ -1056,5 +1057,105 @@ export async function brainRoutes(app: FastifyInstance) {
     } catch (err: any) {
       return reply.code(500).send({ error: `STT failed: ${err.message}` });
     }
+  });
+
+  // ── AI 지침 설정 관리 ──────────────────────────────────────────────────
+
+  /** GET /api/brain/settings-summary — 모든 저장된 지침/설정 반환 */
+  app.get('/api/brain/settings-summary', async (request: FastifyRequest) => {
+    const userId = request.userId!;
+    const [lab, emailProfile] = await Promise.all([
+      prisma.lab.findUnique({ where: { ownerId: userId }, select: { responseStyle: true, instructions: true } }),
+      prisma.emailProfile.findFirst({ where: { userId }, select: { briefingStyle: true, importanceRules: true, keywords: true } }),
+    ]);
+
+    const brainInstructions: string[] = Array.isArray(lab?.instructions) ? (lab!.instructions as unknown as string[]) : [];
+    const briefingStyle = (emailProfile as any)?.briefingStyle || {};
+    const briefingInstructions: string[] = Array.isArray(briefingStyle.instructions) ? briefingStyle.instructions : [];
+    const importanceRules: any[] = Array.isArray(emailProfile?.importanceRules) ? (emailProfile!.importanceRules as any[]) : [];
+    const keywords: string[] = Array.isArray((emailProfile as any)?.keywords) ? ((emailProfile as any).keywords as string[]) : [];
+
+    return {
+      brain: {
+        responseStyle: lab?.responseStyle || 'formal',
+        instructions: brainInstructions,
+      },
+      email: {
+        briefingInstructions,
+        importanceRules,
+        keywords,
+      },
+    };
+  });
+
+  /** DELETE /api/brain/settings/brain-instruction/:index — Brain 지침 개별 삭제 */
+  app.delete('/api/brain/settings/brain-instruction/:index', async (
+    request: FastifyRequest<{ Params: { index: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const userId = request.userId!;
+    const idx = parseInt(request.params.index, 10);
+    const lab = await prisma.lab.findUnique({ where: { ownerId: userId }, select: { id: true, instructions: true } });
+    if (!lab) return reply.code(404).send({ error: 'Lab not found' });
+
+    const arr: string[] = Array.isArray(lab.instructions) ? (lab.instructions as unknown as string[]) : [];
+    if (idx < 0 || idx >= arr.length) return reply.code(400).send({ error: 'Invalid index' });
+
+    const updated = arr.filter((_, i) => i !== idx);
+    await prisma.lab.update({ where: { id: lab.id }, data: { instructions: updated } });
+    return { instructions: updated };
+  });
+
+  /** DELETE /api/brain/settings/briefing-instruction/:index — 브리핑 지침 개별 삭제 */
+  app.delete('/api/brain/settings/briefing-instruction/:index', async (
+    request: FastifyRequest<{ Params: { index: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const userId = request.userId!;
+    const idx = parseInt(request.params.index, 10);
+    const profile = await prisma.emailProfile.findFirst({ where: { userId } });
+    if (!profile) return reply.code(404).send({ error: 'Email profile not found' });
+
+    const style = (profile as any).briefingStyle || {};
+    const arr: string[] = Array.isArray(style.instructions) ? style.instructions : [];
+    if (idx < 0 || idx >= arr.length) return reply.code(400).send({ error: 'Invalid index' });
+
+    const updated = arr.filter((_, i) => i !== idx);
+    await prisma.emailProfile.update({ where: { id: profile.id }, data: { briefingStyle: { ...style, instructions: updated } } });
+    return { instructions: updated };
+  });
+
+  /** DELETE /api/brain/settings/importance-rule/:index — 중요도 규칙 개별 삭제 */
+  app.delete('/api/brain/settings/importance-rule/:index', async (
+    request: FastifyRequest<{ Params: { index: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const userId = request.userId!;
+    const idx = parseInt(request.params.index, 10);
+    const profile = await prisma.emailProfile.findFirst({ where: { userId } });
+    if (!profile) return reply.code(404).send({ error: 'Email profile not found' });
+
+    const rules: any[] = Array.isArray(profile.importanceRules) ? (profile.importanceRules as any[]) : [];
+    if (idx < 0 || idx >= rules.length) return reply.code(400).send({ error: 'Invalid index' });
+
+    const updated = rules.filter((_, i) => i !== idx);
+    await prisma.emailProfile.update({ where: { id: profile.id }, data: { importanceRules: updated } });
+    return { importanceRules: updated };
+  });
+
+  /** DELETE /api/brain/settings/keyword/:keyword — 중요도 키워드 삭제 */
+  app.delete('/api/brain/settings/keyword/:keyword', async (
+    request: FastifyRequest<{ Params: { keyword: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const userId = request.userId!;
+    const kw = decodeURIComponent(request.params.keyword);
+    const profile = await prisma.emailProfile.findFirst({ where: { userId } });
+    if (!profile) return reply.code(404).send({ error: 'Email profile not found' });
+
+    const keywords: string[] = Array.isArray((profile as any).keywords) ? ((profile as any).keywords as string[]) : [];
+    const updated = keywords.filter(k => k !== kw);
+    await prisma.emailProfile.update({ where: { id: profile.id }, data: { keywords: updated } as any });
+    return { keywords: updated };
   });
 }

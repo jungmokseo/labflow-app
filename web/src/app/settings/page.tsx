@@ -8,11 +8,13 @@ import {
   updateEmailProfile, LabProfile,
   getErrorLogs, getErrorSummary, resolveError, resolveAllErrors, cleanupOldErrors,
   type ErrorLogEntry, type ErrorSummary,
+  getSettingsSummary, deleteBrainInstruction, deleteBriefingInstruction,
+  deleteImportanceRule, deleteKeyword, type SettingsSummary,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
-import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
+import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon, AlertTriangle, Brain, Trash2 } from 'lucide-react';
 
-type Tab = 'status' | 'lab' | 'email' | 'dictionary' | 'errors';
+type Tab = 'status' | 'lab' | 'email' | 'dictionary' | 'errors' | 'ai-instructions';
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('status');
@@ -56,10 +58,12 @@ export default function SettingsPage() {
     email: <Mail className="w-4 h-4 inline mr-1" />,
     dictionary: <BookOpen className="w-4 h-4 inline mr-1" />,
     errors: <AlertTriangle className="w-4 h-4 inline mr-1" />,
+    'ai-instructions': <Brain className="w-4 h-4 inline mr-1" />,
   };
 
   const TABS: { key: Tab; label: string; badge?: number }[] = [
     { key: 'status', label: '시스템 상태' },
+    { key: 'ai-instructions', label: 'AI 지침' },
     { key: 'lab', label: '연구실 프로필' },
     { key: 'email', label: '이메일 분류' },
     { key: 'dictionary', label: '용어 사전' },
@@ -89,11 +93,187 @@ export default function SettingsPage() {
       </div>
 
       {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} calendarConnected={calendarConnected} calendarMessage={calendarMessage} lab={lab} />}
+      {tab === 'ai-instructions' && <AIInstructionsTab />}
       {tab === 'lab' && <LabTab lab={lab} onUpdate={setLab} />}
       {tab === 'email' && <EmailTab connected={emailConnected} />}
       {tab === 'dictionary' && <DictionaryTab />}
       {tab === 'errors' && <ErrorLogTab onCountChange={setErrorCount} />}
     </div>
+  );
+}
+
+// ── AI Instructions Tab ──────────────────────────
+function AIInstructionsTab() {
+  const [data, setData] = useState<SettingsSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSettingsSummary().then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  async function handleDelete(type: string, indexOrValue: number | string) {
+    const key = `${type}-${indexOrValue}`;
+    setDeleting(key);
+    try {
+      if (type === 'brain' && typeof indexOrValue === 'number') {
+        const res = await deleteBrainInstruction(indexOrValue);
+        setData(prev => prev ? { ...prev, brain: { ...prev.brain, instructions: res.instructions } } : prev);
+      } else if (type === 'briefing' && typeof indexOrValue === 'number') {
+        const res = await deleteBriefingInstruction(indexOrValue);
+        setData(prev => prev ? { ...prev, email: { ...prev.email, briefingInstructions: res.instructions } } : prev);
+      } else if (type === 'rule' && typeof indexOrValue === 'number') {
+        const res = await deleteImportanceRule(indexOrValue);
+        setData(prev => prev ? { ...prev, email: { ...prev.email, importanceRules: res.importanceRules } } : prev);
+      } else if (type === 'keyword' && typeof indexOrValue === 'string') {
+        const res = await deleteKeyword(indexOrValue);
+        setData(prev => prev ? { ...prev, email: { ...prev.email, keywords: res.keywords } } : prev);
+      }
+    } catch { /* ignore */ } finally {
+      setDeleting(null);
+    }
+  }
+
+  if (loading) return <div className="py-8 text-center text-text-muted text-sm">불러오는 중...</div>;
+  if (!data) return <div className="py-8 text-center text-text-muted text-sm">설정을 불러오지 못했습니다.</div>;
+
+  const isEmpty = data.brain.instructions.length === 0 && data.email.briefingInstructions.length === 0 && data.email.importanceRules.length === 0 && data.email.keywords.length === 0;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-text-heading mb-1">AI 지침 관리</h3>
+        <p className="text-sm text-text-muted">Brain과의 대화에서 "기억해줘"로 저장된 모든 설정을 확인하고 삭제할 수 있습니다.</p>
+      </div>
+
+      {isEmpty && (
+        <div className="text-center py-10 text-text-muted text-sm border border-dashed border-border rounded-xl">
+          저장된 지침이 없습니다.<br />Brain에서 "다음부터 ~해줘. 기억해줘" 라고 말하면 여기에 나타납니다.
+        </div>
+      )}
+
+      {/* Brain 응답 지침 */}
+      <InstructionSection
+        title="Brain 응답 지침"
+        description="Brain이 답변할 때 항상 따르는 규칙입니다."
+        items={data.brain.instructions.map((inst, i) => ({
+          label: inst,
+          onDelete: () => handleDelete('brain', i),
+          deleteKey: `brain-${i}`,
+        }))}
+        deleting={deleting}
+        badge={data.brain.responseStyle !== 'formal' ? `스타일: ${data.brain.responseStyle === 'casual' ? '캐주얼' : data.brain.responseStyle}` : undefined}
+        emptyText="저장된 Brain 지침 없음"
+      />
+
+      {/* 이메일 브리핑 지침 */}
+      <InstructionSection
+        title="이메일 브리핑 형식"
+        description="이메일 브리핑 출력 형식에 관한 설정입니다."
+        items={data.email.briefingInstructions.map((inst, i) => ({
+          label: inst,
+          onDelete: () => handleDelete('briefing', i),
+          deleteKey: `briefing-${i}`,
+        }))}
+        deleting={deleting}
+        emptyText="저장된 브리핑 지침 없음"
+      />
+
+      {/* 이메일 중요도 규칙 */}
+      {(data.email.importanceRules.length > 0) && (
+        <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+          <div>
+            <p className="font-medium text-text-heading text-sm">이메일 중요도 규칙</p>
+            <p className="text-xs text-text-muted mt-0.5">이메일 분류 시 자동으로 적용되는 규칙입니다.</p>
+          </div>
+          <div className="space-y-2">
+            {data.email.importanceRules.map((rule, i) => (
+              <div key={i} className="flex items-start gap-2 bg-bg-input rounded-lg px-3 py-2.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-text-heading">{rule.condition}</p>
+                  <p className="text-xs text-primary mt-0.5">→ {rule.action}</p>
+                  {rule.description && <p className="text-xs text-text-muted mt-0.5">{rule.description}</p>}
+                </div>
+                <DeleteButton onClick={() => handleDelete('rule', i)} loading={deleting === `rule-${i}`} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 이메일 중요도 키워드 */}
+      {(data.email.keywords.length > 0) && (
+        <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+          <div>
+            <p className="font-medium text-text-heading text-sm">이메일 중요도 키워드</p>
+            <p className="text-xs text-text-muted mt-0.5">이 키워드가 이메일 제목/본문에 포함되면 중요도 1단계 상향됩니다.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {data.email.keywords.map((kw) => (
+              <span key={kw} className="flex items-center gap-1.5 bg-primary/10 text-primary text-xs px-3 py-1.5 rounded-full">
+                {kw}
+                <button
+                  onClick={() => handleDelete('keyword', kw)}
+                  disabled={deleting === `keyword-${kw}`}
+                  className="hover:text-red-400 transition-colors disabled:opacity-40"
+                >
+                  {deleting === `keyword-${kw}` ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" /> : <Trash2 className="w-3 h-3" />}
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InstructionSection({ title, description, items, deleting, badge, emptyText }: {
+  title: string;
+  description: string;
+  items: Array<{ label: string; onDelete: () => void; deleteKey: string }>;
+  deleting: string | null;
+  badge?: string;
+  emptyText: string;
+}) {
+  if (items.length === 0 && !badge) return null;
+  return (
+    <div className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-medium text-text-heading text-sm">{title}</p>
+          <p className="text-xs text-text-muted mt-0.5">{description}</p>
+        </div>
+        {badge && <span className="text-xs bg-bg-input text-text-muted px-2 py-1 rounded-full flex-shrink-0">{badge}</span>}
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-text-muted italic">{emptyText}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <div key={item.deleteKey} className="flex items-center gap-2 bg-bg-input rounded-lg px-3 py-2.5">
+              <p className="flex-1 text-sm text-text-heading">{item.label}</p>
+              <DeleteButton onClick={item.onDelete} loading={deleting === item.deleteKey} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeleteButton({ onClick, loading }: { onClick: () => void; loading: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex-shrink-0 p-1.5 text-text-muted hover:text-red-400 hover:bg-bg-hover rounded-lg transition-colors disabled:opacity-40"
+      title="삭제"
+    >
+      {loading
+        ? <span className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+        : <Trash2 className="w-3.5 h-3.5" />}
+    </button>
   );
 }
 

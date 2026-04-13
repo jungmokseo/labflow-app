@@ -54,7 +54,7 @@ const researchThemeSchema = z.object({
 const updateLabSchema = createLabSchema.partial().extend({
   acknowledgment: z.string().optional(),
   responseStyle: z.string().optional(),
-  instructions: z.string().nullable().optional(),
+  instructions: z.union([z.string(), z.array(z.string())]).nullable().optional(),
   researchThemes: z.array(researchThemeSchema).optional(),
 });
 
@@ -168,9 +168,16 @@ export async function labProfileRoutes(app: FastifyInstance) {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
     const body = updateLabSchema.parse(request.body);
+    // instructions는 Json 타입: string이 들어오면 배열로 변환, null이면 빈 배열
+    const { instructions: rawInstructions, ...restBody } = body;
+    const instructionsData = rawInstructions == null
+      ? []
+      : Array.isArray(rawInstructions)
+        ? rawInstructions
+        : [rawInstructions];
     const updated = await prisma.lab.update({
       where: { id: lab.id },
-      data: body,
+      data: { ...restBody, ...(rawInstructions !== undefined ? { instructions: instructionsData } : {}) },
     });
 
     // Lab 프로필 변경 시 자동 동기화
@@ -682,11 +689,13 @@ ${combinedText.slice(0, 50000)}
       }
     }
 
-    // 4. Description → instructions 필드에 저장
+    // 4. Description → instructions 배열에 추가
     if (body.labDescription) {
       const existing = await prisma.lab.findUnique({ where: { id: lab.id }, select: { instructions: true } });
-      const prefix = existing?.instructions ? `${existing.instructions}\n\n` : '';
-      await prisma.lab.update({ where: { id: lab.id }, data: { instructions: `${prefix}[연구실 소개]\n${body.labDescription}` } });
+      const currentArr: string[] = Array.isArray(existing?.instructions) ? (existing!.instructions as unknown as string[]) : [];
+      const descEntry = `[연구실 소개] ${body.labDescription}`;
+      const updated = currentArr.filter(i => !i.startsWith('[연구실 소개]')).concat(descEntry);
+      await prisma.lab.update({ where: { id: lab.id }, data: { instructions: updated } });
       results.description = true;
     }
 

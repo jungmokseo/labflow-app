@@ -5,6 +5,7 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
@@ -269,7 +270,7 @@ model Lab {
   homepageUrl     String?   @map("homepage_url")
   acknowledgment  String?
   responseStyle   String?   @map("response_style")
-  instructions    String?   // 사용자 지침 (claude.md 스타일, Brain 응답 시 항상 참조)
+  instructions    Json      @default("[]") @map("instructions") // 사용자 지침 배열 (semantic consolidation으로 관리)
   onboardingDone  Boolean   @default(false) @map("onboarding_done")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
