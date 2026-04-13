@@ -104,11 +104,11 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
   const [searchResults, setSearchResults] = useState<any>(null);
   const [searching, setSearching] = useState(false);
 
-  // ⌘K / Ctrl+K — Brain 검색 토글
+  // ⌘/ — Brain 검색 토글 (⌘K는 전역 커맨드 팔레트가 사용)
   useEffect(() => {
     if (!isBrainPage) return;
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault();
         setSearchOpen(prev => !prev);
       }
@@ -200,7 +200,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
             >
               <Search className="w-3.5 h-3.5" />
               <span>검색</span>
-              <kbd className="ml-auto text-xs opacity-60">⌘K</kbd>
+              <kbd className="ml-auto text-xs opacity-60">⌘/</kbd>
             </button>
           </div>
 
