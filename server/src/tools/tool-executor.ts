@@ -13,7 +13,7 @@ import { hybridSearch, rerank, isRagReady, embedAndStore } from '../services/rag
 import { getGraphContextForQuery } from '../services/knowledge-graph.js';
 import { calculateConfidence, getStaleWarning, trackAccess } from '../services/metamemory.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
-import { consolidateInstructions } from '../lib/consolidate.js';
+import { consolidateInstructions, consolidateImportanceRules, deduplicateKeywords } from '../lib/consolidate.js';
 import type { ToolName } from './tool-definitions.js';
 import { logError } from '../services/error-logger.js';
 
@@ -1372,13 +1372,16 @@ async function executeUpdateEmailProfile(
     if (keywordsAdd.length > 0 || keywordsRemove.length > 0) {
       let updated = [...currentKeywords];
       if (keywordsAdd.length > 0) {
-        const toAdd = keywordsAdd.filter(k => !updated.includes(k));
-        updated = [...updated, ...toAdd];
-        if (toAdd.length > 0) changes.push(`키워드 추가: ${toAdd.map(k => `**${k}**`).join(', ')}`);
+        const before = updated.length;
+        updated = deduplicateKeywords(updated, keywordsAdd);
+        const added = updated.slice(before);
+        if (added.length > 0) changes.push(`키워드 추가: ${added.map(k => `**${k}**`).join(', ')}`);
       }
       if (keywordsRemove.length > 0) {
+        const normalize = (s: string) => s.trim().toLowerCase();
+        const removeSet = new Set(keywordsRemove.map(normalize));
         const before = updated.length;
-        updated = updated.filter(k => !keywordsRemove.includes(k));
+        updated = updated.filter(k => !removeSet.has(normalize(k)));
         if (updated.length < before) changes.push(`키워드 제거: ${keywordsRemove.join(', ')}`);
       }
       updateData.keywords = updated;
@@ -1420,9 +1423,10 @@ async function executeUpdateEmailProfile(
         action: importanceRuleAdd.action,
         ...(importanceRuleAdd.description ? { description: importanceRuleAdd.description } : {}),
       };
-      const updatedRules = [...currentImportanceRules, newRule];
-      updateData.importanceRules = updatedRules;
-      changes.push(`중요도 규칙 추가: "${importanceRuleAdd.condition} → ${importanceRuleAdd.action}"`);
+      ctx.sendProgress('기존 중요도 규칙과 통합하고 있습니다...');
+      const consolidated = await consolidateImportanceRules(currentImportanceRules, newRule);
+      updateData.importanceRules = consolidated;
+      changes.push(`중요도 규칙 저장됨. 현재 ${consolidated.length}개 규칙 적용 중`);
     }
 
     if (importanceRuleRemoveIndex !== undefined) {

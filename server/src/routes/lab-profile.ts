@@ -33,6 +33,7 @@ import { env } from '../config/env.js';
 import { analyzeSeedPaper, analyzeSeedPapers, type SeedPaperResult } from '../services/seed-paper.js';
 import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
 import { logError } from '../services/error-logger.js';
+import { deduplicateKeywords } from '../lib/consolidate.js';
 
 // ── Zod Schemas ─────────────────────────────────────
 const createLabSchema = z.object({
@@ -307,9 +308,9 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
 
     const results: string[] = [];
 
-    // 1. 키워드 → Lab researchFields에 추가 (중복 제거)
+    // 1. 키워드 → Lab researchFields에 추가 (대소문자/공백 정규화 후 중복 제거)
     if (body.keywords && body.keywords.length > 0) {
-      const merged = [...new Set([...lab.researchFields, ...body.keywords])];
+      const merged = deduplicateKeywords(lab.researchFields, body.keywords);
       await prisma.lab.update({
         where: { id: lab.id },
         data: { researchFields: merged },
@@ -357,7 +358,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     if (body.setupPaperAlert && body.rssKeywords && body.rssKeywords.length > 0) {
       const existing = await prisma.paperAlert.findFirst({ where: { labId: lab.id } });
       if (existing) {
-        const mergedKw = [...new Set([...existing.keywords, ...body.rssKeywords])];
+        const mergedKw = deduplicateKeywords(existing.keywords, body.rssKeywords);
         await prisma.paperAlert.update({
           where: { id: existing.id },
           data: { keywords: mergedKw },
@@ -659,17 +660,18 @@ ${combinedText.slice(0, 50000)}
       }
     }
 
-    // 2. Research keywords
+    // 2. Research keywords (대소문자/공백 정규화 후 중복 제거)
     if (body.researchKeywords?.length) {
       const labData = await prisma.lab.findUnique({ where: { id: lab.id }, select: { researchFields: true } });
-      const existing = new Set(labData?.researchFields || []);
-      const newKeywords = body.researchKeywords.filter(k => !existing.has(k));
-      if (newKeywords.length > 0) {
+      const existingFields = labData?.researchFields || [];
+      const merged = deduplicateKeywords(existingFields, body.researchKeywords);
+      const addedCount = merged.length - existingFields.length;
+      if (addedCount > 0) {
         await prisma.lab.update({
           where: { id: lab.id },
-          data: { researchFields: [...Array.from(existing), ...newKeywords] },
+          data: { researchFields: merged },
         });
-        results.keywords = newKeywords.length;
+        results.keywords = addedCount;
       }
     }
 
