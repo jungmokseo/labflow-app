@@ -221,6 +221,10 @@ export default function BrainPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const dragCounter = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  // 사용자가 명시적으로 "새 대화"를 선택했을 때 sessions SWR 재검증으로 인한 자동 로드 방지
+  const userChoseNewSessionRef = useRef(false);
+  // 세션 전환 시 맨 아래로 즉시 스크롤 요청 플래그
+  const shouldScrollToBottomRef = useRef(false);
 
   // Wake Lock — 작업 중 모바일 화면 꺼짐 방지
   const wakeLock = useWakeLock();
@@ -310,9 +314,10 @@ export default function BrainPage() {
   const isChannelStreaming = activeChannelId ? (conversations[activeChannelId]?.isStreaming || false) : false;
   const loading = localLoading || isChannelStreaming;
 
-  // Auto-load first channel messages
+  // Auto-load first channel messages — 최초 진입 시 가장 최근 세션 자동 로드
+  // userChoseNewSessionRef가 true이면 (사용자가 "새 대화" 클릭) SWR 재검증으로 인한 재로드 방지
   useEffect(() => {
-    if (sessions.length > 0 && !activeChannelId) {
+    if (sessions.length > 0 && !activeChannelId && !userChoseNewSessionRef.current) {
       loadMessages(sessions[0].id);
     }
   }, [sessions]);
@@ -327,9 +332,23 @@ export default function BrainPage() {
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    // Only auto-scroll if user is near the bottom
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
-    if (isNearBottom) {
+
+    // 세션 전환 직후: 맨 아래로 즉시 스크롤
+    if (shouldScrollToBottomRef.current && activeMessages.length > 0) {
+      shouldScrollToBottomRef.current = false;
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+        setShowScrollDown(false);
+      }, 0);
+      return;
+    }
+
+    // 스크롤 다운 버튼 표시 여부 업데이트
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    setShowScrollDown(distanceFromBottom > 300);
+
+    // 사용자가 하단 근처에 있을 때만 자동 스크롤 (스트리밍 중)
+    if (distanceFromBottom < 150) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [activeMessages, streamingContent]);
@@ -354,9 +373,12 @@ export default function BrainPage() {
   }, [isRecording, recordingTime]);
 
   async function loadMessages(channelId: string) {
+    // 세션 명시적 선택 시 "새 대화 선택" 플래그 해제
+    userChoseNewSessionRef.current = false;
     // Check store first
     if (conversations[channelId]?.messages?.length) {
       setActiveChannelId(channelId);
+      shouldScrollToBottomRef.current = true;
       return;
     }
     try {
@@ -364,12 +386,14 @@ export default function BrainPage() {
       const msgs = res.data || res || [];
       storeMessages(channelId, msgs);
       setActiveChannelId(channelId);
+      shouldScrollToBottomRef.current = true;
     } catch (err) {
       console.error('Failed to load messages', err);
     }
   }
 
   function handleNewSession() {
+    userChoseNewSessionRef.current = true;
     setActiveChannelId(null);
     setLocalNewMessages([]);
   }

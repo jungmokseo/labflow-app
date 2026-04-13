@@ -417,9 +417,15 @@ main > * {
   content: counter(ordered-counter) ".";
   position: absolute;
   left: -1.5rem;
+  top: 0;
   color: var(--color-primary);
   font-weight: 600;
   font-size: 0.875rem;
+  /* ul li::before 원형 도트 속성 명시적 초기화 — ol이 ul 안에 중첩될 때 캐스케이드 충돌 방지 */
+  background: transparent;
+  width: auto;
+  height: auto;
+  border-radius: 0;
 }
 
 /* 리스트 내 단락 (- **제목**\n  설명) — 들여쓰기 유지 */
@@ -516,6 +522,7 @@ main > * {
 }
 [data-theme="dark"] .brain-prose ol li::before {
   color: #60A5FA;
+  background: transparent;
 }
 [data-theme="dark"] .brain-prose code {
   background: rgba(255, 255, 255, 0.08);

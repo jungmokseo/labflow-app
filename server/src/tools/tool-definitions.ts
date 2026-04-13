@@ -20,7 +20,10 @@ export type ToolName =
   | 'link_paper_grants'
   | 'import_structured_data'
   | 'register_uploaded_papers'
-  | 'reindex_papers';
+  | 'reindex_papers'
+  | 'save_briefing_preference'
+  | 'update_brain_settings'
+  | 'update_email_profile';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -146,7 +149,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'save_capture',
-    description: '할일(task), 아이디어(idea), 메모(memo)를 빠르게 저장합니다.',
+    description: '할일(task), 아이디어(idea), 메모(memo)를 빠르게 저장합니다. ⚠️ 이 도구는 사실·정보·할일·아이디어를 기록하는 용도입니다. "앞으로 항상 ~해줘", "다음부터 ~방식으로 해줘", "이메일 브리핑 형식을 ~로 해줘", "응답을 ~하게 해줘" 같이 시스템 동작/출력 형식을 바꾸는 요청에는 절대 사용하지 마세요 — 그런 경우에는 반드시 update_brain_settings, update_email_profile, save_briefing_preference 도구를 사용하세요.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -240,6 +243,95 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     input_schema: {
       type: 'object' as const,
       properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'update_brain_settings',
+    description: 'Brain AI 응답 방식과 지침을 영구 저장합니다. 사용자가 "더 캐주얼하게 해줘", "앞으로 요약 먼저 보여줘", "영어로 답해줘", "다음부터 ~방식으로 답해줘", "이거 기억해줘 — 응답을 ~로", "이렇게 기억해" 등 Brain 응답 스타일/규칙/지침을 바꾸거나 저장하길 원할 때 사용하세요. 저장된 설정은 모든 세션에서 유지됩니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        response_style: {
+          type: 'string',
+          enum: ['casual', 'formal'],
+          description: '응답 어조. casual=친근하고 캐주얼, formal=정중하고 전문적(기본)',
+        },
+        instruction: {
+          type: 'string',
+          description: '추가할 Brain 지침. 예: "답변 시 핵심 요약을 첫 줄에 써줘", "번호 목록 대신 불릿(-)을 써줘"',
+        },
+        instruction_replace: {
+          type: 'boolean',
+          description: 'true이면 기존 지침 전체를 교체. false(기본)이면 기존 지침에 새 지침을 추가.',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'update_email_profile',
+    description: '이메일 관련 설정을 영구 저장합니다. 시간대 변경, 기관별 분류 규칙 추가/제거, 중요도 키워드 추가/제거, 이메일 브리핑 컨텍스트(역할/소속/위치/연구분야) 업데이트 시 사용하세요. "이메일 기억해줘 — 시간대", "이 키워드 기억해줘", "기관 분류 저장해줘", "다음 이메일 브리핑부터 ~" 같은 요청도 해당됩니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        timezone: {
+          type: 'string',
+          description: 'IANA 시간대. 예: "Asia/Seoul" (서울), "America/New_York" (동부), "America/Los_Angeles" (서부)',
+        },
+        keywords_add: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '중요도 상향 키워드 추가. 이 키워드가 포함된 이메일은 중요도 1단계 상향. 예: ["뇌공학", "BCI", "링크솔루텍"]',
+        },
+        keywords_remove: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '중요도 키워드 제거',
+        },
+        group_add: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: '기관명. 예: 연세대' },
+            emoji: { type: 'string', description: '아이콘. 예: 🎓' },
+            domains: { type: 'array', items: { type: 'string' }, description: '이메일 도메인 목록. 예: ["yonsei.ac.kr"]' },
+          },
+          required: ['name', 'domains'],
+          description: '기관별 분류 규칙 추가. 이 도메인의 이메일이 해당 기관 섹션으로 분류됨.',
+        },
+        group_remove: {
+          type: 'string',
+          description: '제거할 기관 분류 이름',
+        },
+        project_context: {
+          type: 'object',
+          properties: {
+            role: { type: 'string', description: '사용자 역할. 예: 교수, 연구원, 대표이사' },
+            organization: { type: 'string', description: '소속 기관. 예: 연세대학교, 링크솔루텍' },
+            location: { type: 'string', description: '현재 위치. 예: 서울, 보스턴' },
+            research_areas: { type: 'array', items: { type: 'string' }, description: '연구/사업 분야. 예: ["바이오센서", "유연전자소자"]' },
+          },
+          description: '이메일 브리핑에 반영될 사용자 컨텍스트 업데이트',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'save_briefing_preference',
+    description: '이메일 브리핑 형식/스타일 설정을 영구 저장합니다. 사용자가 "이메일 브리핑 형식을 ~로 해줘", "다음부터 ~방식으로 보여줘", "브리핑 설정 저장", "이메일 브리핑에서 ~섹션 없애줘/추가해줘", "이거 기억해줘 — 이메일 브리핑", "이렇게 기억해" 등 이메일 브리핑의 출력 형식이나 구성을 바꾸길 원할 때 사용하세요. 저장된 설정은 모든 세션에서 유지됩니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        instructions: {
+          type: 'string',
+          description: '저장할 브리핑 형식 지침. 예: "광고 섹션 생략해줘", "영어 이메일도 한국어로 요약해줘", "일정 섹션은 항상 첫 번째로 보여줘"',
+        },
+        reset: {
+          type: 'boolean',
+          description: '기존 설정을 초기화하고 기본 형식으로 되돌릴 때 true. 기본값: false.',
+        },
+      },
       required: [],
     },
   },

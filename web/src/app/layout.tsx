@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
@@ -7,6 +8,7 @@ import { DataPrefetch } from '@/components/DataPrefetch';
 import { ToastProvider } from '@/components/Toast';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { TokenHealthCheck } from '@/components/TokenHealthCheck';
+import { QuickCapture } from '@/components/QuickCapture';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const viewport: Viewport = {
@@ -70,6 +72,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   {children}
                 </div>
               </main>
+              {/* 빠른 캡처 FAB — 모든 페이지에서 접근 가능 */}
+              <Suspense fallback={null}>
+                <QuickCapture />
+              </Suspense>
             </div>
           ) : (
             children

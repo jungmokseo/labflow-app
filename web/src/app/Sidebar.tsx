@@ -22,7 +22,10 @@ import { useConversationsStore } from '@/store/conversations';
 
 // Prefetch data on hover — warms SWR cache before navigation
 const PREFETCH_MAP: Record<string, () => void> = {
-  '/tasks': () => mutate('captures-all-active-newest', () => getCaptures({ sort: 'newest' }), { revalidate: false }),
+  '/tasks': () => {
+    mutate('captures-all-active', () => getCaptures({ completed: 'false', sort: 'newest', limit: 100 }), { revalidate: false });
+    mutate('captures-all-completed', () => getCaptures({ completed: 'true', sort: 'newest', limit: 20 }), { revalidate: false });
+  },
   '/brain': () => mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : []), { revalidate: false }),
   '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),

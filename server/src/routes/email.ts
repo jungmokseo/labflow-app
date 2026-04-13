@@ -1605,6 +1605,7 @@ export async function emailRoutes(app: FastifyInstance) {
         const narrativePrompt = `당신은 ${userName}${userRole ? `(${userRole})` : ''}의 이메일 브리핑 비서입니다.
 ${userOrg ? `소속: ${userOrg}. ` : ''}${userLocation ? `현재 위치: ${userLocation}. ` : ''}기준 시간대: ${tzLabel}.
 ${researchAreas ? `연구/사업 분야: ${researchAreas}` : ''}
+${customInstructions ? `\n## 사용자 브리핑 설정 (기본 포맷보다 우선 적용)\n${customInstructions}\n` : ''}
 
 ${peopleSection}
 

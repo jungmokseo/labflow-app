@@ -26,5 +26,33 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "빠른 캡처",
+      "short_name": "캡처",
+      "description": "할일·아이디어·메모 빠르게 저장",
+      "url": "/?capture=1",
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Brain",
+      "short_name": "Brain",
+      "description": "AI 비서에게 묻기",
+      "url": "/brain",
+      "icons": [
+        {
+          "src": "/icons/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
   ]
 }

@@ -60,6 +60,12 @@ export async function executeToolCall(
       return executeRegisterUploadedPapers(input, ctx);
     case 'reindex_papers':
       return executeReindexPapers(ctx);
+    case 'save_briefing_preference':
+      return executeSaveBriefingPreference(input, ctx);
+    case 'update_brain_settings':
+      return executeUpdateBrainSettings(input, ctx);
+    case 'update_email_profile':
+      return executeUpdateEmailProfile(input, ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -1225,4 +1231,222 @@ async function executeReindexPapers(ctx: ExecutorContext): Promise<string> {
   }
 
   return `논문 인덱싱 결과 (${results.length}편):\n${results.map(r => `- ${r}`).join('\n')}`;
+}
+
+// ── save_briefing_preference ─────────────────────────
+
+async function executeSaveBriefingPreference(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  ctx.sendProgress('브리핑 설정을 저장하고 있습니다...');
+
+  const instructions = (input.instructions as string | undefined) || '';
+  const reset = input.reset === true;
+
+  try {
+    const existing = await prisma.emailProfile.findFirst({ where: { userId: ctx.userId } });
+    const currentStyle = (existing as any)?.briefingStyle || {};
+
+    const newStyle = reset
+      ? { ...currentStyle, customInstructions: '' }
+      : { ...currentStyle, customInstructions: instructions };
+
+    if (existing) {
+      await prisma.emailProfile.update({
+        where: { id: existing.id },
+        data: { briefingStyle: newStyle },
+      });
+    } else {
+      await prisma.emailProfile.create({
+        data: {
+          userId: ctx.userId,
+          classifyByGroup: false,
+          groups: [],
+          briefingStyle: newStyle,
+        },
+      });
+    }
+
+    if (reset) {
+      return '브리핑 형식 설정이 기본값으로 초기화되었습니다. 다음 이메일 브리핑부터 기본 형식이 적용됩니다.';
+    }
+    return `브리핑 형식 설정이 저장되었습니다. 다음 이메일 브리핑부터 적용됩니다.\n\n**저장된 설정:** ${instructions}`;
+  } catch (err: any) {
+    logError('brain', 'save_briefing_preference 실패', { userId: ctx.userId, err: err.message }, 'error');
+    return `브리핑 설정 저장에 실패했습니다: ${err.message}`;
+  }
+}
+
+// ── update_brain_settings ────────────────────────────
+
+async function executeUpdateBrainSettings(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+  ctx.sendProgress('Brain 설정을 저장하고 있습니다...');
+
+  const responseStyle = input.response_style as string | undefined;
+  const instruction = (input.instruction as string | undefined) || '';
+  const instructionReplace = input.instruction_replace === true;
+
+  try {
+    const updateData: Record<string, any> = {};
+
+    if (responseStyle) {
+      updateData.responseStyle = responseStyle;
+    }
+
+    if (instruction) {
+      if (instructionReplace) {
+        updateData.instructions = instruction;
+      } else {
+        // 기존 지침에 새 지침 추가
+        const existing = await prisma.lab.findUnique({ where: { id: ctx.labId }, select: { instructions: true } });
+        const current = existing?.instructions || '';
+        updateData.instructions = current ? `${current}\n- ${instruction}` : `- ${instruction}`;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return '변경할 설정이 없습니다. response_style 또는 instruction을 지정해주세요.';
+    }
+
+    await prisma.lab.update({ where: { id: ctx.labId }, data: updateData });
+
+    const changes: string[] = [];
+    if (responseStyle) {
+      const label = responseStyle === 'casual' ? '캐주얼(친근함)' : '포멀(전문적)';
+      changes.push(`응답 스타일: **${label}**`);
+    }
+    if (instruction) {
+      const mode = instructionReplace ? '전체 교체' : '추가';
+      changes.push(`Brain 지침 ${mode}: "${instruction}"`);
+    }
+
+    return `Brain 설정이 저장되었습니다. 다음 대화부터 적용됩니다.\n\n${changes.map(c => `- ${c}`).join('\n')}`;
+  } catch (err: any) {
+    logError('brain', 'update_brain_settings 실패', { userId: ctx.userId, err: err.message }, 'error');
+    return `Brain 설정 저장에 실패했습니다: ${err.message}`;
+  }
+}
+
+// ── update_email_profile ─────────────────────────────
+
+async function executeUpdateEmailProfile(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  ctx.sendProgress('이메일 설정을 저장하고 있습니다...');
+
+  const timezone = input.timezone as string | undefined;
+  const keywordsAdd = (input.keywords_add as string[] | undefined) || [];
+  const keywordsRemove = (input.keywords_remove as string[] | undefined) || [];
+  const groupAdd = input.group_add as { name: string; emoji?: string; domains: string[] } | undefined;
+  const groupRemove = input.group_remove as string | undefined;
+  const projectContext = input.project_context as {
+    role?: string; organization?: string; location?: string; research_areas?: string[];
+  } | undefined;
+
+  try {
+    const existing = await prisma.emailProfile.findFirst({ where: { userId: ctx.userId } });
+    const currentKeywords: string[] = ((existing as any)?.keywords as string[] | null) || [];
+    const currentGroups: any[] = ((existing as any)?.groups as any[] | null) || [];
+    const currentProjectCtx: any = (existing as any)?.projectContext || {};
+
+    const updateData: Record<string, any> = {};
+    const changes: string[] = [];
+
+    if (timezone) {
+      updateData.timezone = timezone;
+      changes.push(`시간대: **${timezone}**`);
+    }
+
+    if (keywordsAdd.length > 0 || keywordsRemove.length > 0) {
+      let updated = [...currentKeywords];
+      if (keywordsAdd.length > 0) {
+        const toAdd = keywordsAdd.filter(k => !updated.includes(k));
+        updated = [...updated, ...toAdd];
+        if (toAdd.length > 0) changes.push(`키워드 추가: ${toAdd.map(k => `**${k}**`).join(', ')}`);
+      }
+      if (keywordsRemove.length > 0) {
+        const before = updated.length;
+        updated = updated.filter(k => !keywordsRemove.includes(k));
+        if (updated.length < before) changes.push(`키워드 제거: ${keywordsRemove.join(', ')}`);
+      }
+      updateData.keywords = updated;
+    }
+
+    if (groupAdd) {
+      const exists = currentGroups.find((g: any) => g.name === groupAdd.name);
+      let updatedGroups: any[];
+      if (exists) {
+        // 기존 그룹 도메인 병합
+        updatedGroups = currentGroups.map((g: any) =>
+          g.name === groupAdd.name
+            ? { ...g, domains: [...new Set([...g.domains, ...groupAdd.domains])], ...(groupAdd.emoji ? { emoji: groupAdd.emoji } : {}) }
+            : g
+        );
+        changes.push(`기관 업데이트: **${groupAdd.name}** (도메인: ${groupAdd.domains.join(', ')})`);
+      } else {
+        updatedGroups = [...currentGroups, { name: groupAdd.name, emoji: groupAdd.emoji || '🏢', domains: groupAdd.domains }];
+        changes.push(`기관 분류 추가: **${groupAdd.emoji || '🏢'} ${groupAdd.name}** (${groupAdd.domains.join(', ')})`);
+      }
+      updateData.groups = updatedGroups;
+      // 그룹이 1개 이상이면 classifyByGroup 자동 활성화
+      updateData.classifyByGroup = true;
+    }
+
+    if (groupRemove) {
+      const before = currentGroups.length;
+      const updatedGroups = currentGroups.filter((g: any) => g.name !== groupRemove);
+      if (updatedGroups.length < before) {
+        updateData.groups = updatedGroups;
+        if (updatedGroups.length === 0) updateData.classifyByGroup = false;
+        changes.push(`기관 분류 제거: **${groupRemove}**`);
+      }
+    }
+
+    if (projectContext) {
+      const merged = {
+        ...currentProjectCtx,
+        ...(projectContext.role !== undefined ? { role: projectContext.role } : {}),
+        ...(projectContext.organization !== undefined ? { organization: projectContext.organization } : {}),
+        ...(projectContext.location !== undefined ? { location: projectContext.location } : {}),
+        ...(projectContext.research_areas !== undefined ? { researchAreas: projectContext.research_areas } : {}),
+      };
+      updateData.projectContext = merged;
+      const ctxChanges: string[] = [];
+      if (projectContext.role) ctxChanges.push(`역할: ${projectContext.role}`);
+      if (projectContext.organization) ctxChanges.push(`소속: ${projectContext.organization}`);
+      if (projectContext.location) ctxChanges.push(`위치: ${projectContext.location}`);
+      if (projectContext.research_areas) ctxChanges.push(`연구분야: ${projectContext.research_areas.join(', ')}`);
+      if (ctxChanges.length > 0) changes.push(`이메일 컨텍스트 — ${ctxChanges.join(' | ')}`);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return '변경할 설정이 없습니다.';
+    }
+
+    if (existing) {
+      await prisma.emailProfile.update({ where: { id: existing.id }, data: updateData });
+    } else {
+      await prisma.emailProfile.create({
+        data: {
+          userId: ctx.userId,
+          classifyByGroup: updateData.classifyByGroup ?? false,
+          groups: updateData.groups ?? [],
+          keywords: updateData.keywords ?? [],
+          ...(updateData.timezone ? { timezone: updateData.timezone } : {}),
+          ...(updateData.projectContext ? { projectContext: updateData.projectContext } : {}),
+        },
+      });
+    }
+
+    return `이메일 설정이 저장되었습니다. 다음 이메일 브리핑부터 적용됩니다.\n\n${changes.map(c => `- ${c}`).join('\n')}`;
+  } catch (err: any) {
+    logError('brain', 'update_email_profile 실패', { userId: ctx.userId, err: err.message }, 'error');
+    return `이메일 설정 저장에 실패했습니다: ${err.message}`;
+  }
 }

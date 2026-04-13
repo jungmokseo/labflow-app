@@ -15,7 +15,9 @@ export function DataPrefetch() {
     const timer = setTimeout(() => {
       // Prefetch in parallel — errors are silent
       Promise.allSettled([
-        mutate('captures-all-active-newest', () => getCaptures({ sort: 'newest' }).then(r => r)),
+        // Keys must match tasks/page.tsx SWR keys: captures-${tab}-active / captures-${tab}-completed
+        mutate('captures-all-active', () => getCaptures({ completed: 'false', sort: 'newest', limit: 100 })),
+        mutate('captures-all-completed', () => getCaptures({ completed: 'true', sort: 'newest', limit: 20 })),
         mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : [])),
         mutate('meetings', () => getMeetings()),
         mutate('paper-results', () => getPaperAlertResults().then(r => r.results || r.data || []).catch(() => null)),
