@@ -279,6 +279,8 @@ export default function BrainPage() {
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [lastUserInput, setLastUserInput] = useState<string>('');
   const [copiedConversation, setCopiedConversation] = useState(false);
+  // 메시지 큐 — 생성 중에 전송한 메시지를 대기시켜 완료 후 자동 전송
+  const [queuedInput, setQueuedInput] = useState<string>('');
   // 사용자가 명시적으로 "새 대화"를 선택했을 때 sessions SWR 재검증으로 인한 자동 로드 방지
   const userChoseNewSessionRef = useRef(false);
   // 세션 전환 시 맨 아래로 즉시 스크롤 요청 플래그
@@ -514,7 +516,15 @@ export default function BrainPage() {
 
   async function handleSend(overrideMsg?: string) {
     const msgText = (overrideMsg ?? input).trim();
-    if (!msgText || loading) return;
+    if (!msgText) return;
+
+    // 생성 중이면 큐에 저장 → 완료 후 자동 전송
+    if (loading) {
+      setQueuedInput(msgText);
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      return;
+    }
     const msg = msgText;
     const readyFiles = attachedFiles.filter(f => f.status === 'ready' && f.result);
     const currentFileIds = readyFiles.map(f => f.result!.fileId);
@@ -686,8 +696,15 @@ export default function BrainPage() {
       } else {
         setLocalLoading(false);
       }
-      // 응답 완료 후 입력창으로 포커스 복귀
-      setTimeout(() => textareaRef.current?.focus(), 50);
+      // 큐된 메시지가 있으면 자동 전송
+      if (queuedInput) {
+        const pending = queuedInput;
+        setQueuedInput('');
+        setTimeout(() => handleSend(pending), 100);
+      } else {
+        // 응답 완료 후 입력창으로 포커스 복귀
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      }
     }
   }
 
@@ -1178,6 +1195,18 @@ export default function BrainPage() {
               <div className="px-4 pb-4 pt-3 max-w-4xl mx-auto w-full">
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple
                   accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg,.txt,.csv,.md" />
+                {/* 큐 대기 중 배너 */}
+                {queuedInput && (
+                  <div className="px-4 pt-2 max-w-4xl mx-auto w-full">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/8 border border-primary/20 rounded-lg text-xs text-primary">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" />
+                      <span className="truncate flex-1">대기 중: {queuedInput}</span>
+                      <button onClick={() => setQueuedInput('')} className="text-primary/50 hover:text-primary flex-shrink-0">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {/* 텍스트 입력 영역 (Claude 스타일) */}
                 <div className="bg-bg-input rounded-2xl border border-border/30 focus-within:ring-2 focus-within:ring-primary/50 transition-all">
                   <textarea
@@ -1185,7 +1214,7 @@ export default function BrainPage() {
                     value={input}
                     onChange={handleTextareaChange}
                     onKeyDown={handleTextareaKeyDown}
-                    placeholder="메시지를 입력하세요..."
+                    placeholder={loading && !queuedInput ? "다음 질문을 입력하면 완료 후 자동으로 전송됩니다..." : "메시지를 입력하세요..."}
                     rows={2}
                     className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[72px] max-h-[200px]"
                   />
@@ -1228,8 +1257,9 @@ export default function BrainPage() {
                       <span className="text-xs text-text-muted/50 hidden sm:inline">Shift+Enter 줄바꿈</span>
                       <button
                         onClick={() => handleSend()}
-                        disabled={loading || !input.trim() || attachedFiles.some(f => f.status === 'uploading')}
+                        disabled={!input.trim() || !!queuedInput || attachedFiles.some(f => f.status === 'uploading')}
                         className="p-2 bg-primary text-white rounded-lg disabled:opacity-30 hover:bg-primary/90 transition-colors"
+                        title={loading ? "완료 후 자동 전송" : "전송"}
                       >
                         <Send className="w-4 h-4" />
                       </button>
