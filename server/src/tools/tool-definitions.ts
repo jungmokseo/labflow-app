@@ -303,6 +303,20 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
           type: 'string',
           description: '제거할 기관 분류 이름',
         },
+        importance_rule_add: {
+          type: 'object',
+          properties: {
+            condition: { type: 'string', description: '규칙이 적용될 조건. 예: "발신자 이름에 서정목이 포함된 경우", "제목에 긴급이 포함된 경우", "from 주소가 @yonsei.ac.kr인 경우"' },
+            action: { type: 'string', description: '적용할 중요도 변경. 예: "urgent로 상향", "action-needed로 상향", "ads로 강등"' },
+            description: { type: 'string', description: '규칙 설명 (선택). 예: "교수 본인 이름 언급 이메일"' },
+          },
+          required: ['condition', 'action'],
+          description: '중요도 커스텀 규칙 추가. "내 이름으로 오는 이메일 중요도 높여줘", "~기관 이메일은 항상 대응으로" 같은 요청에 사용.',
+        },
+        importance_rule_remove_index: {
+          type: 'number',
+          description: '제거할 규칙의 인덱스 (0부터 시작). 기존 규칙 목록에서 특정 규칙을 삭제할 때 사용.',
+        },
         project_context: {
           type: 'object',
           properties: {

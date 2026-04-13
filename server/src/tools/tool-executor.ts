@@ -1345,6 +1345,8 @@ async function executeUpdateEmailProfile(
   const keywordsRemove = (input.keywords_remove as string[] | undefined) || [];
   const groupAdd = input.group_add as { name: string; emoji?: string; domains: string[] } | undefined;
   const groupRemove = input.group_remove as string | undefined;
+  const importanceRuleAdd = input.importance_rule_add as { condition: string; action: string; description?: string } | undefined;
+  const importanceRuleRemoveIndex = input.importance_rule_remove_index as number | undefined;
   const projectContext = input.project_context as {
     role?: string; organization?: string; location?: string; research_areas?: string[];
   } | undefined;
@@ -1353,6 +1355,7 @@ async function executeUpdateEmailProfile(
     const existing = await prisma.emailProfile.findFirst({ where: { userId: ctx.userId } });
     const currentKeywords: string[] = ((existing as any)?.keywords as string[] | null) || [];
     const currentGroups: any[] = ((existing as any)?.groups as any[] | null) || [];
+    const currentImportanceRules: any[] = ((existing as any)?.importanceRules as any[] | null) || [];
     const currentProjectCtx: any = (existing as any)?.projectContext || {};
 
     const updateData: Record<string, any> = {};
@@ -1405,6 +1408,26 @@ async function executeUpdateEmailProfile(
         updateData.groups = updatedGroups;
         if (updatedGroups.length === 0) updateData.classifyByGroup = false;
         changes.push(`기관 분류 제거: **${groupRemove}**`);
+      }
+    }
+
+    if (importanceRuleAdd) {
+      const newRule = {
+        condition: importanceRuleAdd.condition,
+        action: importanceRuleAdd.action,
+        ...(importanceRuleAdd.description ? { description: importanceRuleAdd.description } : {}),
+      };
+      const updatedRules = [...currentImportanceRules, newRule];
+      updateData.importanceRules = updatedRules;
+      changes.push(`중요도 규칙 추가: "${importanceRuleAdd.condition} → ${importanceRuleAdd.action}"`);
+    }
+
+    if (importanceRuleRemoveIndex !== undefined) {
+      if (importanceRuleRemoveIndex >= 0 && importanceRuleRemoveIndex < currentImportanceRules.length) {
+        const removed = currentImportanceRules[importanceRuleRemoveIndex];
+        const updatedRules = currentImportanceRules.filter((_, i) => i !== importanceRuleRemoveIndex);
+        updateData.importanceRules = updatedRules;
+        changes.push(`중요도 규칙 제거: "${removed.condition}"`);
       }
     }
 
