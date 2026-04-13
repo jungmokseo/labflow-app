@@ -557,9 +557,35 @@ main > * {
 }
 
 /* ── 코드 블록 — brain-prose 내 pre 스타일 오버라이드 ── */
+.brain-prose .code-block-wrapper {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+}
 .brain-prose .code-block-wrapper pre {
   margin: 0 !important;
-  border-radius: 0 !important;
+  border-radius: 0 0 8px 8px !important;
   border: none !important;
-  background: var(--color-bg-input) !important;
+  background: #1a1b26 !important;
+  color: #c0caf5 !important;
+}
+.brain-prose .code-block-wrapper pre code {
+  background: none !important;
+  color: inherit !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.7 !important;
+}
+/* 코드 블록 헤더도 같은 다크 테마로 */
+.brain-prose .code-block-wrapper > div:first-child {
+  background: #24283b !important;
+  border-color: #414868 !important;
+}
+.brain-prose .code-block-wrapper > div:first-child span {
+  color: #7aa2f7 !important;
+}
+
+/* 다크 모드에서는 더 밝게 */
+[data-theme="dark"] .brain-prose .code-block-wrapper pre {
+  background: #0d0e17 !important;
+}
+[data-theme="dark"] .brain-prose .code-block-wrapper > div:first-child {
+  background: #16172a !important;
 }

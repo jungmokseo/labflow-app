@@ -196,12 +196,12 @@ const markdownComponents = {
     const language = className.replace(/language-/, '') || '';
     const code = String(codeEl?.props?.children || '').replace(/\n$/, '');
     return (
-      <div className="code-block-wrapper my-3 rounded-lg overflow-hidden border border-border">
-        <div className="flex items-center justify-between bg-bg-input px-3 py-1.5 border-b border-border">
-          <span className="text-xs font-mono text-text-muted">{language || 'code'}</span>
+      <div className="code-block-wrapper my-3 rounded-lg overflow-hidden border border-[#414868]">
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#414868]">
+          <span className="text-xs font-mono text-[#7aa2f7]">{language || 'code'}</span>
           <CodeCopyButton content={code} />
         </div>
-        <pre {...props} className="!m-0 !rounded-none !border-0 p-4 overflow-x-auto">
+        <pre {...props} className="!m-0 !rounded-none !border-0 p-4 overflow-x-auto text-[#c0caf5]">
           {children}
         </pre>
       </div>
