@@ -14,6 +14,8 @@ import { useBrainSessionsStore } from '@/store/brain-sessions';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import SyntaxHighlighter from 'react-syntax-highlighter';
+import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import {
   Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
   MessageSquare, BarChart3, AlertTriangle, Calendar, CheckSquare,
@@ -189,21 +191,33 @@ const markdownComponents = {
   // ── HR: 명확한 섹션 구분 ──
   hr: () => <hr className="border-t border-border my-5" />,
 
-  // ── Code block: 언어 라벨 + 복사 버튼 (Claude/Gemini 표준) ──
-  pre: ({ children, ...props }: any) => {
+  // ── Code block: 언어 라벨 + 복사 버튼 + 신택스 하이라이팅 ──
+  pre: ({ children }: any) => {
     const codeEl = children as any;
     const className = codeEl?.props?.className || '';
     const language = className.replace(/language-/, '') || '';
     const code = String(codeEl?.props?.children || '').replace(/\n$/, '');
     return (
       <div className="code-block-wrapper my-3 rounded-lg overflow-hidden border border-[#414868]">
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#414868]">
+        <div className="flex items-center justify-between bg-[#24283b] px-3 py-1.5 border-b border-[#414868]">
           <span className="text-xs font-mono text-[#7aa2f7]">{language || 'code'}</span>
           <CodeCopyButton content={code} />
         </div>
-        <pre {...props} className="!m-0 !rounded-none !border-0 p-4 overflow-x-auto text-[#c0caf5]">
-          {children}
-        </pre>
+        <SyntaxHighlighter
+          language={language || 'text'}
+          style={atomOneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: '0.8125rem',
+            lineHeight: '1.7',
+            padding: '1rem',
+            background: '#1a1b26',
+          }}
+          wrapLongLines={false}
+        >
+          {code}
+        </SyntaxHighlighter>
       </div>
     );
   },
