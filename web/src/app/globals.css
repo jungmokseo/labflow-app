@@ -543,3 +543,23 @@ main > * {
   .notion-note h3 { font-size: 0.875rem; }
   .notion-note ul li { font-size: 0.8rem; }
 }
+
+/* ── Brain 생각 중 점점점 애니메이션 ── */
+.thinking-dots::after {
+  content: '';
+  animation: thinking-anim 1.5s steps(3, end) infinite;
+}
+@keyframes thinking-anim {
+  0%   { content: ''; }
+  33%  { content: '.'; }
+  66%  { content: '..'; }
+  100% { content: '...'; }
+}
+
+/* ── 코드 블록 — brain-prose 내 pre 스타일 오버라이드 ── */
+.brain-prose .code-block-wrapper pre {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: var(--color-bg-input) !important;
+}

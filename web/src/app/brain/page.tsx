@@ -20,7 +20,30 @@ import {
   Mail, BookOpen, Users, FileText, Clock, Zap, Info,
   ArrowDown, Square, ArrowRight, Quote, Hash,
   Building2, User, ShoppingCart, Megaphone,
+  RefreshCw, AlertCircle, Check, Sparkles,
 } from 'lucide-react';
+
+// 코드 블록 복사 버튼 (Claude/Gemini 스타일 헤더)
+function CodeCopyButton({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(content).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(() => {});
+      }}
+      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:text-text-heading hover:bg-bg-hover/50 transition-colors"
+    >
+      {copied ? (
+        <><Check className="w-3 h-3 text-green-400" /><span className="text-green-400">복사됨</span></>
+      ) : (
+        <><Copy className="w-3 h-3" />복사</>
+      )}
+    </button>
+  );
+}
 
 // Heading → Lucide icon mapping for structured AI responses
 const HEADING_ICONS: Array<{ pattern: RegExp; icon: React.ReactNode }> = [
@@ -165,6 +188,25 @@ const markdownComponents = {
 
   // ── HR: 명확한 섹션 구분 ──
   hr: () => <hr className="border-t border-border my-5" />,
+
+  // ── Code block: 언어 라벨 + 복사 버튼 (Claude/Gemini 표준) ──
+  pre: ({ children, ...props }: any) => {
+    const codeEl = children as any;
+    const className = codeEl?.props?.className || '';
+    const language = className.replace(/language-/, '') || '';
+    const code = String(codeEl?.props?.children || '').replace(/\n$/, '');
+    return (
+      <div className="code-block-wrapper my-3 rounded-lg overflow-hidden border border-border">
+        <div className="flex items-center justify-between bg-bg-input px-3 py-1.5 border-b border-border">
+          <span className="text-xs font-mono text-text-muted">{language || 'code'}</span>
+          <CodeCopyButton content={code} />
+        </div>
+        <pre {...props} className="!m-0 !rounded-none !border-0 p-4 overflow-x-auto">
+          {children}
+        </pre>
+      </div>
+    );
+  },
 };
 
 function timeAgo(dateStr: string): string {
@@ -221,6 +263,7 @@ export default function BrainPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const dragCounter = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [lastUserInput, setLastUserInput] = useState<string>('');
   // 사용자가 명시적으로 "새 대화"를 선택했을 때 sessions SWR 재검증으로 인한 자동 로드 방지
   const userChoseNewSessionRef = useRef(false);
   // 세션 전환 시 맨 아래로 즉시 스크롤 요청 플래그
@@ -445,16 +488,20 @@ export default function BrainPage() {
     addFiles(Array.from(e.target.files || []));
   }
 
-  async function handleSend() {
-    if (!input.trim() || loading) return;
-    const msg = input;
+  async function handleSend(overrideMsg?: string) {
+    const msgText = (overrideMsg ?? input).trim();
+    if (!msgText || loading) return;
+    const msg = msgText;
     const readyFiles = attachedFiles.filter(f => f.status === 'ready' && f.result);
     const currentFileIds = readyFiles.map(f => f.result!.fileId);
     const fileNames = readyFiles.map(f => f.name);
     const isNewSession = !activeChannelId;
     const channelIdAtSend = activeChannelId;
-    setInput('');
-    setAttachedFiles([]);
+    setLastUserInput(msg);
+    if (!overrideMsg) {
+      setInput('');
+      setAttachedFiles([]);
+    }
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -797,7 +844,9 @@ export default function BrainPage() {
                 <div className="flex-1 min-w-0">
                   <h3 className="text-text-heading font-medium text-sm">Brain</h3>
                   <p className="text-[11px] text-text-muted truncate">
-                    이메일, 일정, 메모, 연구실 정보 -- 무엇이든 물어보세요
+                    {activeChannelId
+                      ? (sessions.find((s: any) => s.id === activeChannelId)?.name || '대화 중')
+                      : '이메일, 일정, 메모, 연구실 정보 -- 무엇이든 물어보세요'}
                   </p>
                 </div>
                 <button
@@ -923,10 +972,10 @@ export default function BrainPage() {
                     )}
                   </div>
                 )}
-                {activeMessages.map(msg => (
+                {activeMessages.map((msg, idx) => (
                   <div key={msg.id} className="animate-msg-in group/msg">
                     {msg.role === 'user' ? (
-                      /* User message: right-aligned blue bubble */
+                      /* 사용자 메시지: 오른쪽 파란 말풍선 */
                       <div className="flex flex-col items-end">
                         <div className="bg-primary text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
                           {msg.content}
@@ -935,15 +984,31 @@ export default function BrainPage() {
                           {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
+                    ) : msg.id.startsWith('err-') ? (
+                      /* 에러 메시지: 빨간 테두리 + 재시도 버튼 */
+                      <div className="flex items-start gap-2.5 p-3 bg-red-500/5 border border-red-500/20 rounded-xl">
+                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-red-400">{msg.content}</p>
+                          {lastUserInput && (
+                            <button
+                              onClick={() => handleSend(lastUserInput)}
+                              className="mt-2 flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              <RefreshCw className="w-3 h-3" /> 다시 시도
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     ) : (
-                      /* AI message: left-aligned, no bubble, full width, with markdown */
+                      /* AI 메시지: 왼쪽 정렬, 마크다운 렌더링 */
                       <div className="group relative">
                         <div className="brain-prose max-w-none">
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
                             {msg.content}
                           </ReactMarkdown>
                         </div>
-                        {/* Hover action: copy + timestamp */}
+                        {/* 호버 액션: 복사 + 재생성(마지막 메시지) + 타임스탬프 */}
                         <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
                           <button
                             onClick={() => handleCopyMessage(msg.id, msg.content)}
@@ -955,6 +1020,16 @@ export default function BrainPage() {
                           {copiedId === msg.id && (
                             <span className="text-xs text-green-400">복사됨</span>
                           )}
+                          {/* 마지막 AI 메시지에만 재생성 버튼 */}
+                          {idx === activeMessages.length - 1 && lastUserInput && !loading && (
+                            <button
+                              onClick={() => handleSend(lastUserInput)}
+                              className="flex items-center gap-1 p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+                              title="다시 생성"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <span className="text-[10px] text-text-muted ml-1">
                             {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
@@ -963,31 +1038,21 @@ export default function BrainPage() {
                     )}
                   </div>
                 ))}
-                {/* Thinking steps — 현재 단계만 한 줄로 표시 (Gemini 스타일) */}
+                {/* 툴 실행 단계 — Gemini 스타일 */}
                 {(loading || recovering) && thinkingSteps.length > 0 && (
                   <div className="flex justify-start animate-msg-in">
-                    <div className="flex items-center gap-1.5 text-sm text-text-muted transition-all duration-300">
-                      <span className="flex gap-0.5 w-3.5 justify-center">
-                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1 h-1 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </span>
-                      <span key={thinkingSteps[thinkingSteps.length - 1]}>{thinkingSteps[thinkingSteps.length - 1]}</span>
+                    <div className="flex items-center gap-2 text-sm text-text-muted transition-all duration-300">
+                      <Sparkles className="w-3.5 h-3.5 text-primary/70 animate-pulse flex-shrink-0" />
+                      <span key={thinkingSteps[thinkingSteps.length - 1]} className="truncate max-w-xs">{thinkingSteps[thinkingSteps.length - 1]}</span>
                     </div>
                   </div>
                 )}
-                {/* Default spinner when loading with no steps yet */}
+                {/* 생각 중 — Brain 아이콘 + 단계별 텍스트 */}
                 {loading && thinkingSteps.length === 0 && !streamingContent && (
                   <div className="flex justify-start animate-msg-in">
-                    <div className="text-sm text-text-muted">
-                      <div className="flex items-center gap-1.5">
-                        <span>생각 중</span>
-                        <span className="flex gap-0.5">
-                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-2 text-sm text-text-muted">
+                      <Brain className="w-4 h-4 text-primary/70 animate-pulse" />
+                      <span className="thinking-dots">생각 중</span>
                     </div>
                   </div>
                 )}
@@ -1105,9 +1170,14 @@ export default function BrainPage() {
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-muted/50">Shift+Enter 줄바꿈</span>
+                      {input.length > 800 && (
+                        <span className={`text-xs ${input.length > 3500 ? 'text-red-400' : 'text-text-muted/50'}`}>
+                          {input.length.toLocaleString()}자
+                        </span>
+                      )}
+                      <span className="text-xs text-text-muted/50 hidden sm:inline">Shift+Enter 줄바꿈</span>
                       <button
-                        onClick={handleSend}
+                        onClick={() => handleSend()}
                         disabled={loading || !input.trim() || attachedFiles.some(f => f.status === 'uploading')}
                         className="p-2 bg-primary text-white rounded-lg disabled:opacity-30 hover:bg-primary/90 transition-colors"
                       >
