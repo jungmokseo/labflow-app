@@ -264,6 +264,7 @@ export default function BrainPage() {
   const dragCounter = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [lastUserInput, setLastUserInput] = useState<string>('');
+  const [copiedConversation, setCopiedConversation] = useState(false);
   // 사용자가 명시적으로 "새 대화"를 선택했을 때 sessions SWR 재검증으로 인한 자동 로드 방지
   const userChoseNewSessionRef = useRef(false);
   // 세션 전환 시 맨 아래로 즉시 스크롤 요청 플래그
@@ -414,6 +415,15 @@ export default function BrainPage() {
       stopRecording();
     }
   }, [isRecording, recordingTime]);
+
+  // Escape — 모바일 드로어 닫기
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMobileSessions(false);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   async function loadMessages(channelId: string) {
     // 세션 명시적 선택 시 "새 대화 선택" 플래그 해제
@@ -662,6 +672,8 @@ export default function BrainPage() {
       } else {
         setLocalLoading(false);
       }
+      // 응답 완료 후 입력창으로 포커스 복귀
+      setTimeout(() => textareaRef.current?.focus(), 50);
     }
   }
 
@@ -766,6 +778,17 @@ export default function BrainPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
+  function handleCopyConversation() {
+    if (activeMessages.length === 0) return;
+    const text = activeMessages
+      .map(m => `${m.role === 'user' ? '나' : 'Brain'}: ${m.content}`)
+      .join('\n\n');
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedConversation(true);
+      setTimeout(() => setCopiedConversation(false), 2000);
+    }).catch(() => {});
+  }
+
   function handleStopGenerating() {
     abortControllerRef.current?.abort();
   }
@@ -849,6 +872,19 @@ export default function BrainPage() {
                       : '이메일, 일정, 메모, 연구실 정보 -- 무엇이든 물어보세요'}
                   </p>
                 </div>
+                {/* 대화 전체 복사 — 메시지가 있을 때만 표시 */}
+                {activeMessages.length > 0 && (
+                  <button
+                    onClick={handleCopyConversation}
+                    className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+                    title="대화 전체 복사"
+                  >
+                    {copiedConversation
+                      ? <Check className="w-4 h-4 text-green-400" />
+                      : <Copy className="w-4 h-4" />
+                    }
+                  </button>
+                )}
                 <button
                   onClick={handleNewSession}
                   className="md:hidden p-1.5 rounded-lg bg-primary-light text-primary hover:bg-primary/30 transition-colors"

@@ -488,10 +488,22 @@ export default function PapersPage() {
           <div className="w-8 h-8 rounded-full border-[3px] border-border border-t-primary animate-spin" />
         </div>
       ) : results.length === 0 ? (
-        <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
-          <BookOpen className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
-          <p className="text-text-heading font-medium text-base">수집된 논문이 없습니다</p>
-          <p className="text-text-muted text-base mt-2">설정에서 저널과 키워드를 설정한 후 수집을 실행하세요</p>
+        <div className="bg-bg-card rounded-xl border border-border p-10 text-center">
+          <BookOpen className="w-12 h-12 text-primary/30 mx-auto mb-4" />
+          <p className="text-text-heading font-semibold text-lg mb-2">아직 수집된 논문이 없습니다</p>
+          <p className="text-text-muted text-sm mb-6">
+            {totalJournals}개 저널이 설정되어 있습니다.<br />
+            아래 버튼으로 지금 바로 수집을 시작하세요.
+          </p>
+          <button
+            onClick={handleCrawl}
+            disabled={crawling}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${crawling ? 'animate-spin' : ''}`} />
+            {crawling ? '수집 중...' : '지금 수집하기'}
+          </button>
+          <p className="text-text-muted/60 text-xs mt-4">매주 월요일 자동으로 수집됩니다</p>
         </div>
       ) : weekGroups.map(week => (
         <div key={week.label} className="space-y-4">
