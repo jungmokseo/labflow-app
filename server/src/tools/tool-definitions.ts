@@ -12,9 +12,11 @@ export type ToolName =
   | 'get_email_briefing'
   | 'read_email'
   | 'draft_email_reply'
+  | 'send_email'
   | 'get_calendar'
   | 'create_calendar_event'
   | 'save_capture'
+  | 'save_lab_info'
   | 'get_daily_brief'
   | 'get_weekly_review'
   | 'link_paper_grants'
@@ -114,6 +116,28 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'send_email',
+    description: '새 이메일을 작성하여 Gmail 임시보관함에 저장합니다. 사용자가 확인 후 전송합니다. "이메일 보내줘", "~에게 ~라고 이메일 써줘" 같은 요청에 사용. 단, 기존 이메일에 답장할 때는 draft_email_reply를 사용하세요.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        to: {
+          type: 'string',
+          description: '수신자 이메일 주소. search_lab_data로 먼저 찾아 정확한 주소를 사용하세요.',
+        },
+        subject: {
+          type: 'string',
+          description: '이메일 제목',
+        },
+        body: {
+          type: 'string',
+          description: '이메일 본문. 정중하고 자연스러운 한국어로 작성. 이모지 사용 금지.',
+        },
+      },
+      required: ['to', 'subject', 'body'],
+    },
+  },
+  {
     name: 'get_calendar',
     description: 'Google Calendar에서 일정을 조회합니다. 날짜 범위를 지정할 수 있습니다.',
     input_schema: {
@@ -161,6 +185,29 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ['content', 'type'],
+    },
+  },
+  {
+    name: 'save_lab_info',
+    description: '연구실 지식 DB에 정보를 저장하거나 업데이트합니다. 계정 정보(ID/PW), 장비 사용법, 규정, 절차, 링크, 연락처 등 나중에 검색할 수 있도록 저장합니다. "DB에 등록해", "저장해", "기록해", "등록해줘" 같은 요청에 사용하세요. 저장된 정보는 search_lab_data로 검색 가능합니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: {
+          type: 'string',
+          description: '정보 제목 (검색 키). 예: "Materials Science and Engineering R 계정", "SEM 장비 예약 방법"',
+        },
+        content: {
+          type: 'string',
+          description: '저장할 내용. 예: "ID: xxx@yyy.ac.kr / PW: Abc123!"',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '태그 목록 (검색용). 예: ["계정", "저널"], ["장비", "SEM"]',
+        },
+      },
+      required: ['title', 'content'],
     },
   },
   {

@@ -2347,4 +2347,109 @@ ${emailDataForPrompt.join('\n\n')}`,
       data: profileToResponse(profile, rawProfile.lastBriefingAt),
     });
   });
+
+  // ── POST /api/email/send-draft — Gmail 임시보관함 초안 전송 ──
+  app.post('/api/email/send-draft', { preHandler: [authMiddleware] }, async (request, reply) => {
+    const schema = z.object({
+      draftId: z.string().min(1),
+    });
+    const { draftId } = schema.parse(request.body);
+    const userId = request.userId!;
+
+    try {
+      const user = await prisma.user.findFirst({ where: { id: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail 연동이 필요합니다' });
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken.id },
+            data: {
+              accessToken: encryptToken(tokens.access_token!),
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+            },
+          });
+        } catch {}
+      });
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+      const sent = await gmail.users.drafts.send({
+        userId: 'me',
+        requestBody: { id: draftId },
+      });
+
+      return reply.send({ success: true, messageId: sent.data.id });
+    } catch (error: any) {
+      app.log.error('이메일 전송 실패:', error);
+      return reply.code(500).send({ error: '이메일 전송 실패', details: error.message });
+    }
+  });
+
+  // ── POST /api/email/send — 새 이메일 직접 전송 ──
+  app.post('/api/email/send', { preHandler: [authMiddleware] }, async (request, reply) => {
+    const schema = z.object({
+      to: z.string().min(1),
+      subject: z.string().min(1),
+      body: z.string().min(1),
+    });
+    const { to, subject, body } = schema.parse(request.body);
+    const userId = request.userId!;
+
+    try {
+      const user = await prisma.user.findFirst({ where: { id: userId } });
+      if (!user) return reply.code(404).send({ error: '사용자를 찾을 수 없습니다' });
+
+      const gmailToken = await prisma.gmailToken.findFirst({ where: { userId: user.id }, orderBy: { primary: 'desc' } });
+      if (!gmailToken) return reply.code(401).send({ error: 'Gmail 연동이 필요합니다' });
+
+      const oauth2Client = createOAuth2Client();
+      oauth2Client.setCredentials({
+        access_token: safeDecrypt(gmailToken.accessToken),
+        refresh_token: safeDecrypt(gmailToken.refreshToken),
+        expiry_date: gmailToken.expiresAt?.getTime(),
+      });
+      oauth2Client.on('tokens', async (tokens) => {
+        try {
+          await prisma.gmailToken.update({
+            where: { id: gmailToken.id },
+            data: {
+              accessToken: encryptToken(tokens.access_token!),
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+              ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+            },
+          });
+        } catch {}
+      });
+
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+      const rawMessage = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'Content-Type: text/plain; charset=utf-8',
+        '',
+        body,
+      ].join('\r\n');
+      const encodedMessage = Buffer.from(rawMessage).toString('base64url');
+
+      const sent = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: encodedMessage },
+      });
+
+      return reply.send({ success: true, messageId: sent.data.id });
+    } catch (error: any) {
+      app.log.error('이메일 직접 전송 실패:', error);
+      return reply.code(500).send({ error: '이메일 전송 실패', details: error.message });
+    }
+  });
 }

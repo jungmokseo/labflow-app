@@ -17,6 +17,14 @@ import { consolidateInstructions, consolidateImportanceRules, deduplicateKeyword
 import type { ToolName } from './tool-definitions.js';
 import { logError } from '../services/error-logger.js';
 
+export interface PendingAction {
+  type: 'send_draft' | 'send_email';
+  draftId: string;
+  to: string;
+  subject: string;
+  preview: string;
+}
+
 interface ExecutorContext {
   app: FastifyInstance;
   request: FastifyRequest;
@@ -25,6 +33,7 @@ interface ExecutorContext {
   sendProgress: (step: string) => void;
   stream: boolean;
   reply: any;
+  pendingActions: PendingAction[];
 }
 
 export async function executeToolCall(
@@ -43,12 +52,16 @@ export async function executeToolCall(
       return executeReadEmail(input, ctx);
     case 'draft_email_reply':
       return executeDraftEmailReply(input, ctx);
+    case 'send_email':
+      return executeSendEmail(input, ctx);
     case 'get_calendar':
       return executeGetCalendar(input, ctx);
     case 'create_calendar_event':
       return executeCreateCalendarEvent(input, ctx);
     case 'save_capture':
       return executeSaveCapture(input, ctx);
+    case 'save_lab_info':
+      return executeSaveLabInfo(input, ctx);
     case 'get_daily_brief':
       return executeGetDailyBrief(ctx);
     case 'get_weekly_review':
@@ -86,7 +99,7 @@ async function executeSearchLabData(
   const types: string[] = input.types || ['all'];
   const searchAll = types.includes('all');
 
-  const [members, projects, publications, memos] = await Promise.all([
+  const [members, projects, publications, memos, captures] = await Promise.all([
     (searchAll || types.includes('member'))
       ? prisma.labMember.findMany({ where: { labId: ctx.labId, active: true } })
       : Promise.resolve([]),
@@ -105,6 +118,13 @@ async function executeSearchLabData(
           where: { OR: [{ userId: ctx.userId }, { labId: ctx.labId }] },
           orderBy: { createdAt: 'desc' },
           take: 50,
+        })
+      : Promise.resolve([]),
+    (searchAll || types.includes('memo'))
+      ? prisma.capture.findMany({
+          where: { labId: ctx.labId, status: 'active' },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
         })
       : Promise.resolve([]),
   ]);
@@ -279,6 +299,21 @@ async function executeSearchLabData(
     if (matched.length > 0) {
       results.push('[메모]\n' + matched.slice(0, 5).map(m =>
         `- [${m.source || '메모'}] **${m.title || '(제목없음)'}**\n  ${m.content.substring(0, 300)}`
+      ).join('\n'));
+    }
+  }
+
+  // 캡처 매칭 (save_capture로 저장된 데이터)
+  if (captures.length > 0) {
+    const matched = captures.filter((c: any) =>
+      words.some(w =>
+        (c.summary && fuzzy(c.summary, w)) || fuzzy(c.content, w) ||
+        (c.tags && c.tags.some((t: string) => fuzzy(t, w)))
+      )
+    );
+    if (matched.length > 0) {
+      results.push('[캡처]\n' + matched.slice(0, 5).map((c: any) =>
+        `- [${c.category}] ${c.summary || c.content.substring(0, 100)}${c.tags?.length ? `\n  태그: ${c.tags.join(', ')}` : ''}`
       ).join('\n'));
     }
   }
@@ -571,7 +606,14 @@ async function executeDraftEmailReply(
     saveShadowMessage(shadowChannelId, `reply draft: ${email.subject}`, `답장 초안 작성: ${email.subject}`).catch(logError('brain', 'shadow 저장 실패 (reply draft)', { userId: ctx.userId }, 'warn'));
 
     if (draftData.success) {
-      return `**답장 초안이 Gmail 임시보관함에 저장되었습니다.**
+      ctx.pendingActions.push({
+        type: 'send_draft',
+        draftId: draftData.draftId,
+        to: senderEmail,
+        subject: draft.subject || `Re: ${email.subject}`,
+        preview: draft.body,
+      });
+      return `**답장 초안이 작성되었습니다.**
 
 **원본:** ${email.subject} (${email.from})
 **제목:** ${draft.subject}
@@ -579,8 +621,7 @@ async function executeDraftEmailReply(
 **초안 내용:**
 ${draft.body}
 
----
-Gmail에서 확인하고 수정한 후 전송하세요.`;
+(전송 버튼으로 바로 발송하거나 Gmail에서 수정 후 전송할 수 있습니다.)`;
     }
     return `답장 초안 생성은 완료했으나 Gmail 저장에 실패했습니다: ${draftData.error || '알 수 없는 오류'}\n\n**초안 내용:**\n${draft.body}`;
   } catch (err: any) {
@@ -818,6 +859,61 @@ async function executeSaveCapture(
       },
     });
     return `저장 완료 (기본 분류): ${content.slice(0, 60)}`;
+  }
+}
+
+// ── save_lab_info ────────────────────────────────────
+
+async function executeSaveLabInfo(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+
+  ctx.sendProgress('연구실 DB에 저장하고 있습니다...');
+
+  const title = input.title as string;
+  const content = input.content as string;
+  const tags: string[] = input.tags || [];
+
+  try {
+    // Check for existing memo with same title (case-insensitive)
+    const existing = await prisma.memo.findFirst({
+      where: {
+        labId: ctx.labId,
+        title: { equals: title, mode: 'insensitive' },
+      },
+    });
+
+    if (existing) {
+      await prisma.memo.update({
+        where: { id: existing.id },
+        data: {
+          content,
+          tags: tags.length > 0 ? tags : existing.tags,
+          lastVerified: new Date(),
+        },
+      });
+      return `기존 정보 업데이트 완료: "${title}"\n내용: ${content.slice(0, 200)}`;
+    }
+
+    await prisma.memo.create({
+      data: {
+        userId: ctx.userId,
+        labId: ctx.labId,
+        title,
+        content,
+        tags,
+        source: 'chat',
+        shared: true,
+        confidence: 1.0,
+      },
+    });
+
+    return `정보 저장 완료: "${title}"\n내용: ${content.slice(0, 200)}\n\n다음에 검색하면 바로 찾을 수 있습니다.`;
+  } catch (err: any) {
+    logError('brain', 'save_lab_info 실패', { userId: ctx.userId, title }, 'error')(err);
+    return `저장 실패: ${err.message}`;
   }
 }
 
