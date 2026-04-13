@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel,
-  pollForAssistantMessage,
-  type BrainMessage, type UploadResult,
+  pollForAssistantMessage, apiFetch,
+  type BrainMessage, type UploadResult, type PendingAction,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import { useWakeLock } from '@/lib/use-wake-lock';
@@ -44,6 +44,66 @@ function CodeCopyButton({ content }: { content: string }) {
         <><Copy className="w-3 h-3" />복사</>
       )}
     </button>
+  );
+}
+
+// 이메일 전송 확인 카드
+function EmailActionCard({ action, onDismiss }: { action: PendingAction; onDismiss: () => void }) {
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  async function handleSend() {
+    setStatus('sending');
+    try {
+      await apiFetch('/api/email/send-draft', {
+        method: 'POST',
+        body: JSON.stringify({ draftId: action.draftId }),
+      });
+      setStatus('sent');
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMsg(err.message || '전송 실패');
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-blue-500/30 bg-blue-950/20 p-4 text-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <Mail className="w-4 h-4 text-blue-400" />
+        <span className="text-blue-400 font-medium">이메일 전송 확인</span>
+      </div>
+      <div className="space-y-1 mb-3 text-text-muted">
+        <div><span className="text-text-secondary">받는 사람:</span> {action.to}</div>
+        <div><span className="text-text-secondary">제목:</span> {action.subject}</div>
+        <div className="mt-2 text-xs text-text-muted line-clamp-3 whitespace-pre-line bg-bg-hover/30 rounded p-2">
+          {action.preview.slice(0, 200)}{action.preview.length > 200 ? '...' : ''}
+        </div>
+      </div>
+      {status === 'sent' ? (
+        <div className="flex items-center gap-2 text-green-400">
+          <Check className="w-4 h-4" />
+          <span>전송 완료</span>
+        </div>
+      ) : status === 'error' ? (
+        <div className="text-red-400 text-xs">{errorMsg}</div>
+      ) : (
+        <div className="flex gap-2">
+          <button
+            onClick={handleSend}
+            disabled={status === 'sending'}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors"
+          >
+            {status === 'sending' ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />전송 중...</> : <><Send className="w-3.5 h-3.5" />전송하기</>}
+          </button>
+          <button
+            onClick={onDismiss}
+            className="px-3 py-1.5 bg-white/10 hover:bg-white/15 rounded-lg text-xs text-text-muted transition-colors"
+          >
+            닫기
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -279,6 +339,8 @@ export default function BrainPage() {
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [lastUserInput, setLastUserInput] = useState<string>('');
   const [copiedConversation, setCopiedConversation] = useState(false);
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const pendingActionsRef = useRef<PendingAction[]>([]);
   // 메시지 큐 — 생성 중에 전송한 메시지를 대기시켜 완료 후 자동 전송
   const [queuedInput, setQueuedInput] = useState<string>('');
   // 사용자가 명시적으로 "새 대화"를 선택했을 때 sessions SWR 재검증으로 인한 자동 로드 방지
@@ -532,6 +594,8 @@ export default function BrainPage() {
     const isNewSession = !activeChannelId;
     const channelIdAtSend = activeChannelId;
     setLastUserInput(msg);
+    setPendingActions([]);
+    pendingActionsRef.current = [];
     if (!overrideMsg) {
       setInput('');
       setAttachedFiles([]);
@@ -581,6 +645,9 @@ export default function BrainPage() {
           currentFileIds[0],
           isNewSession ? true : undefined,
           currentFileIds.length > 1 ? currentFileIds : undefined,
+          (action) => {
+            pendingActionsRef.current = [...pendingActionsRef.current, action];
+          },
         );
       } catch (streamErr: any) {
         // SSE 끊김 (모바일 화면 sleep 등) → polling으로 복구 시도
@@ -634,6 +701,9 @@ export default function BrainPage() {
       setThinkingSteps([]);
       setStreamingContent('');
       setIsTokenStreaming(false);
+      if (pendingActionsRef.current.length > 0) {
+        setPendingActions(pendingActionsRef.current);
+      }
       const assistantMsg: BrainMessage = {
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -1132,6 +1202,18 @@ export default function BrainPage() {
                       </ReactMarkdown>
                       <span className="inline-block w-0.5 h-4 bg-primary animate-pulse ml-0.5 align-text-bottom" />
                     </div>
+                  </div>
+                )}
+                {/* 이메일 전송 확인 카드 */}
+                {!loading && pendingActions.length > 0 && (
+                  <div className="px-4 pb-2">
+                    {pendingActions.map((action, i) => (
+                      <EmailActionCard
+                        key={i}
+                        action={action}
+                        onDismiss={() => setPendingActions(prev => prev.filter((_, j) => j !== i))}
+                      />
+                    ))}
                   </div>
                 )}
                 <div ref={messagesEndRef} />

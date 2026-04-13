@@ -629,6 +629,61 @@ ${draft.body}
   }
 }
 
+// ── send_email ────────────────────────────────────────
+
+async function executeSendEmail(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  ctx.sendProgress('이메일을 작성하고 있습니다...');
+
+  try {
+    const to = (input.to as string)?.trim();
+    const subject = (input.subject as string)?.trim();
+    const body = (input.body as string)?.trim();
+
+    if (!to || !subject || !body) {
+      return '수신자, 제목, 본문을 모두 입력해주세요.';
+    }
+
+    // Gmail 임시보관함에 저장 (확인 후 전송)
+    const draftRes = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/email/draft',
+      headers: {
+        authorization: ctx.request.headers.authorization || '',
+        'content-type': 'application/json',
+        'x-dev-user-id': ctx.request.headers['x-dev-user-id'] as string || '',
+      },
+      body: JSON.stringify({ to, subject, body }),
+    });
+
+    const draftData = JSON.parse(draftRes.body);
+
+    if (draftData.success) {
+      ctx.pendingActions.push({
+        type: 'send_email',
+        draftId: draftData.draftId,
+        to,
+        subject,
+        preview: body,
+      });
+      return `**이메일 초안이 작성되었습니다.**
+
+**받는 사람:** ${to}
+**제목:** ${subject}
+
+**내용:**
+${body}
+
+(전송 버튼으로 바로 발송하거나 Gmail에서 수정 후 전송할 수 있습니다.)`;
+    }
+    return `이메일 초안 생성 실패: ${draftData.error || '알 수 없는 오류'}`;
+  } catch (err: any) {
+    return `이메일 작성 실패: ${err.message}`;
+  }
+}
+
 // ── get_calendar ─────────────────────────────────────
 
 async function executeGetCalendar(

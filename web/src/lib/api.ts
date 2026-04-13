@@ -394,6 +394,14 @@ export type BrainChatResult = { response: string; channelId: string; intent: str
  * SSE 스트리밍 Brain Chat — 실시간 진행 표시 지원
  * onProgress 콜백으로 각 처리 단계를 전달받고, 최종 결과를 Promise로 반환
  */
+export interface PendingAction {
+  type: 'send_draft' | 'send_email';
+  draftId: string;
+  to: string;
+  subject: string;
+  preview: string;
+}
+
 export async function brainChatStream(
   message: string,
   onProgress: (step: string) => void,
@@ -402,6 +410,7 @@ export async function brainChatStream(
   fileId?: string,
   newSession?: boolean,
   fileIds?: string[],
+  onAction?: (action: PendingAction) => void,
 ): Promise<BrainChatResult> {
   const API_BASE_URL = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
   const body = JSON.stringify({ message, channelId, fileId, fileIds, newSession, stream: true });
@@ -486,6 +495,8 @@ export async function brainChatStream(
           onProgress(event.step);
         } else if (event.type === 'token') {
           onToken?.(event.content);
+        } else if (event.type === 'action') {
+          onAction?.(event.action);
         } else if (event.type === 'done') {
           return event as BrainChatResult;
         } else if (event.type === 'error') {

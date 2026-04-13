@@ -28,7 +28,7 @@ import { buildCoreSystemPrompt } from '../prompts/core-system.js';
 import { calculateConfidence, getStaleWarning, trackAccess } from '../services/metamemory.js';
 import { maybeGenerateSummary, autoExtractInfo, generateSessionTitle } from '../services/session-manager.js';
 import { TOOL_DEFINITIONS } from '../tools/tool-definitions.js';
-import { executeToolCall } from '../tools/tool-executor.js';
+import { executeToolCall, type PendingAction } from '../tools/tool-executor.js';
 import type Anthropic from '@anthropic-ai/sdk';
 
 // ── Schemas ─────────────────────────────────────────
@@ -431,6 +431,7 @@ export async function brainRoutes(app: FastifyInstance) {
 
     let responseText = '';
     let usedTools: string[] = [];
+    const pendingActions: PendingAction[] = [];
 
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
@@ -439,6 +440,7 @@ export async function brainRoutes(app: FastifyInstance) {
       const toolCtx = {
         app, request, userId, labId: lab?.id || null,
         sendProgress, stream: !!stream, reply,
+        pendingActions,
       };
 
       // Tool-use 루프: Claude가 tool 호출을 멈출 때까지 반복
@@ -546,6 +548,13 @@ export async function brainRoutes(app: FastifyInstance) {
     }
 
     // Stream text if Sonnet was used (Gemini already streamed above)
+    // 액션 확인 카드 전송 (이메일 초안 등 사용자 확인이 필요한 작업)
+    if (stream && pendingActions.length > 0) {
+      for (const action of pendingActions) {
+        try { reply.raw.write(`data: ${JSON.stringify({ type: 'action', action })}\n\n`); } catch {}
+      }
+    }
+
     if (stream && usedTools.length >= 0 && responseText && !responseText.startsWith('[streamed]')) {
       const chunkSize = 80;
       for (let i = 0; i < responseText.length; i += chunkSize) {
