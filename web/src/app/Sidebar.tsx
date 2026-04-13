@@ -104,6 +104,19 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
   const [searchResults, setSearchResults] = useState<any>(null);
   const [searching, setSearching] = useState(false);
 
+  // ⌘K / Ctrl+K — Brain 검색 토글
+  useEffect(() => {
+    if (!isBrainPage) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isBrainPage]);
+
   const todaySessions = sessions.filter((c) => isToday(c.lastMessageAt || c.createdAt));
   const weekSessions = sessions.filter((c) => !isToday(c.lastMessageAt || c.createdAt) && isThisWeek(c.lastMessageAt || c.createdAt));
   const olderSessions = sessions.filter((c) => !isThisWeek(c.lastMessageAt || c.createdAt));
