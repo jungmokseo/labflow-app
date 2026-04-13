@@ -572,7 +572,8 @@ export async function brainRoutes(app: FastifyInstance) {
     const msgCount = await prisma.message.count({ where: { channelId } });
     const channelUpdate: any = { messageCount: msgCount, lastMessageAt: new Date() };
     if (msgCount >= 3 && msgCount <= 5) {
-      channelUpdate.name = await generateSessionTitle(contextMessages, message);
+      const generatedTitle = await generateSessionTitle(contextMessages, message);
+      if (generatedTitle) channelUpdate.name = generatedTitle;
     }
     await prisma.channel.update({ where: { id: channelId }, data: channelUpdate });
 

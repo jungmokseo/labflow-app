@@ -110,7 +110,7 @@ JSON 배열: [{"type": "dict"|"memo", "data": {...}}]`;
 /**
  * 대화 내용 기반으로 세션 제목 자동 생성 (10자 내외)
  */
-export async function generateSessionTitle(messages: Array<{ role: string; content: string }>, latestMessage: string): Promise<string> {
+export async function generateSessionTitle(messages: Array<{ role: string; content: string }>, latestMessage: string): Promise<string | null> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -121,8 +121,8 @@ export async function generateSessionTitle(messages: Array<{ role: string; conte
       `다음 대화의 주제를 한국어 10자 이내로 요약하세요. 제목만 출력:\n\n${context}\nuser: ${latestMessage.slice(0, 100)}`
     );
     const title = result.response.text().trim().replace(/["']/g, '').slice(0, 30);
-    return title || '새 대화';
+    return title || null;
   } catch {
-    return latestMessage.slice(0, 20) || '새 대화';
+    return null;
   }
 }
