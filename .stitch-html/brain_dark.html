@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Research Flow - Brain</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#3B82F6",
+          "background": "#181A1F",
+          "surface": "#21242B",
+          "text": "#E5E7EB",
+          "muted": "#9CA3AF",
+          "border": "rgba(255, 255, 255, 0.05)",
+          "hover": "#1E293B",
+        },
+        fontFamily: {
+          "display": ["Plus Jakarta Sans", "sans-serif"],
+          "body": ["DM Sans", "sans-serif"]
+        },
+        borderRadius: {
+          "DEFAULT": "0.25rem",
+          "md": "0.75rem", // 12px
+          "lg": "1rem", // 16px
+          "full": "9999px"
+        },
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    font-family: 'DM Sans', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .material-symbols-outlined.filled {
+    font-variation-settings: 'FILL' 1;
+  }
+  
+  /* Custom scrollbar for dark mode */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+</style>
+</head>
+<body class="bg-background text-text overflow-hidden h-screen flex antialiased">
+<!-- Global Shell: Sidebar -->
+<aside class="w-[260px] h-full bg-surface border-r border-border flex flex-col flex-shrink-0 z-10">
+<!-- Sidebar Header -->
+<div class="px-5 pt-6 pb-4">
+<h1 class="font-display font-bold text-[18px] text-primary tracking-tight">Research Flow</h1>
+<p class="text-[12px] text-muted mt-1">Research Lab AI Agent</p>
+</div>
+<!-- Nav Items -->
+<nav class="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-muted hover:bg-hover hover:text-text transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="font-display font-semibold text-[14px]">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-hover text-primary transition-colors duration-150" href="#">
+<span class="material-symbols-outlined filled text-[20px]">memory</span>
+<span class="font-display font-semibold text-[14px]">Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-muted hover:bg-hover hover:text-text transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px]">library_books</span>
+<span class="font-display font-semibold text-[14px]">Papers</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-muted hover:bg-hover hover:text-text transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="font-display font-semibold text-[14px]">Settings</span>
+</a>
+</nav>
+<!-- Sidebar Footer -->
+<div class="p-4 border-t border-border mt-auto">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+<span class="font-display font-semibold text-white text-[12px]">DC</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="font-display font-semibold text-[14px] text-text truncate">Dr. Chen</p>
+<p class="text-[12px] text-muted truncate">chen@research.lab</p>
+</div>
+<button class="text-muted hover:text-text transition-colors p-1 rounded-md hover:bg-hover">
+<span class="material-symbols-outlined text-[20px]">light_mode</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex h-full overflow-hidden relative">
+<!-- Split Pane: Note List (Left) -->
+<div class="w-[300px] h-full border-r border-border flex flex-col bg-background flex-shrink-0 z-10">
+<!-- Sticky Search Bar -->
+<div class="p-4 border-b border-border sticky top-0 bg-background z-20">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted text-[18px]">search</span>
+<input class="w-full bg-surface border border-border rounded-md py-2 pl-9 pr-3 text-[14px] text-text placeholder:text-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors h-10" placeholder="Search notes..." type="text"/>
+</div>
+</div>
+<!-- Scrollable Note List -->
+<div class="flex-1 overflow-y-auto p-2 space-y-1">
+<!-- Active Note -->
+<div class="p-3 rounded-md bg-hover cursor-pointer border border-border">
+<h3 class="font-display font-semibold text-[14px] text-text mb-1 truncate">Synthesis: C. Elegans lifespan</h3>
+<p class="text-[13px] text-muted line-clamp-2 leading-relaxed">Initial findings from the new assay show a significant increase in lifespan when exposed to compound X under low-stress conditions.</p>
+<p class="text-[11px] text-muted mt-2">2 hours ago</p>
+</div>
+<!-- Inactive Note 1 -->
+<div class="p-3 rounded-md hover:bg-surface cursor-pointer border border-transparent transition-colors duration-150">
+<h3 class="font-display font-semibold text-[14px] text-text mb-1 truncate">Meeting: Dr. Aris</h3>
+<p class="text-[13px] text-muted line-clamp-2 leading-relaxed">Discussed the upcoming grant proposal for the neurogenesis project. Need to finalize the preliminary data section by Friday.</p>
+<p class="text-[11px] text-muted mt-2">Yesterday</p>
+</div>
+<!-- Inactive Note 2 -->
+<div class="p-3 rounded-md hover:bg-surface cursor-pointer border border-transparent transition-colors duration-150">
+<h3 class="font-display font-semibold text-[14px] text-text mb-1 truncate">Literature Review - Q3</h3>
+<p class="text-[13px] text-muted line-clamp-2 leading-relaxed">Key takeaways from the latest Cell and Nature papers regarding cellular senescence markers. The p16INK4a pathway seems to be...</p>
+<p class="text-[11px] text-muted mt-2">Oct 12</p>
+</div>
+<!-- Inactive Note 3 -->
+<div class="p-3 rounded-md hover:bg-surface cursor-pointer border border-transparent transition-colors duration-150">
+<h3 class="font-display font-semibold text-[14px] text-text mb-1 truncate">Protocol: Western Blot Update</h3>
+<p class="text-[13px] text-muted line-clamp-2 leading-relaxed">Adjusted the blocking buffer concentration. Using 5% BSA instead of milk reduces background noise for the phosphorylated target.</p>
+<p class="text-[11px] text-muted mt-2">Oct 08</p>
+</div>
+</div>
+</div>
+<!-- Split Pane: Editor (Right) -->
+<div class="flex-1 h-full overflow-y-auto bg-background relative">
+<!-- Top Toolbar (Minimal) -->
+<div class="sticky top-0 bg-background/80 backdrop-blur-sm border-b border-border px-8 py-3 flex items-center justify-between z-20">
+<div class="flex items-center gap-2 text-muted">
+<button class="p-1.5 rounded hover:bg-surface transition-colors" title="Bold"><span class="material-symbols-outlined text-[18px]">format_bold</span></button>
+<button class="p-1.5 rounded hover:bg-surface transition-colors" title="Italic"><span class="material-symbols-outlined text-[18px]">format_italic</span></button>
+<div class="w-px h-4 bg-border mx-1"></div>
+<button class="p-1.5 rounded hover:bg-surface transition-colors" title="Bullet List"><span class="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
+<button class="p-1.5 rounded hover:bg-surface transition-colors" title="Numbered List"><span class="material-symbols-outlined text-[18px]">format_list_numbered</span></button>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-[12px] text-muted">Saved just now</span>
+<button class="p-1.5 rounded hover:bg-surface text-muted transition-colors"><span class="material-symbols-outlined text-[20px]">more_horiz</span></button>
+</div>
+</div>
+<!-- Editor Content Area -->
+<div class="max-w-[800px] w-full mx-auto px-8 py-12 pb-32">
+<h1 class="font-display font-bold text-[32px] text-text mb-6 outline-none" contenteditable="true">Synthesis: C. Elegans lifespan</h1>
+<div class="space-y-6 text-[15px] leading-[1.6] text-text/90 outline-none" contenteditable="true">
+<p>Initial findings from the new assay show a significant increase in lifespan when exposed to compound X under low-stress conditions. We observed a roughly 25% extension in median survival compared to the control group.</p>
+<h2 class="font-display font-semibold text-[20px] text-text mt-8 mb-4">Methodology Outline</h2>
+<ul class="list-disc pl-6 space-y-2 text-muted">
+<li>Synchronized L4 larvae were transferred to NGM plates containing 50μM of compound X.</li>
+<li>Plates were maintained at 20°C.</li>
+<li>Scoring was performed every 2 days; animals were marked dead if they failed to respond to gentle prodding with a platinum wire.</li>
+</ul>
+<h2 class="font-display font-semibold text-[20px] text-text mt-8 mb-4">Preliminary Data &amp; Observations</h2>
+<p>The animals not only lived longer but also appeared to maintain mobility longer into chronological age. This suggests a potential extension of <em>healthspan</em> as well as lifespan, which is critical for our overall hypothesis.</p>
+<div class="bg-surface p-4 rounded-md border border-border my-6">
+<p class="text-[14px] text-muted"><span class="font-semibold text-text">Note to self:</span> Cross-reference these behavioral findings with the oxidative stress resistance assays completed last month. There might be a correlation with the DAF-16 nuclear localization.</p>
+</div>
+<p>Next steps will involve scaling up the assay and repeating it at 25°C to induce mild thermal stress and see if the protective effect holds.</p>
+</div>
+</div>
+<!-- Floating AI Assistant Button -->
+<button class="absolute bottom-8 right-8 w-10 h-10 bg-primary hover:bg-primary/90 text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 z-30 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background focus:ring-primary">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+</button>
+</div>
+</main>
+</body></html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Research Flow - Brain</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                        "surface": "#ffffff",
+                        "text-main": "#111827",
+                        "text-muted": "#6B7280",
+                        "border-color": "rgba(0, 0, 0, 0.08)",
+                        "active-bg": "#EFF6FF",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem", 
+                        "lg": "0.5rem", /* 8px */
+                        "xl": "1rem",   /* 16px */
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for inspector */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
+    </style>
+</head>
+<body class="bg-background-light text-text-main h-screen w-screen overflow-hidden flex p-4 box-border">
+<!-- App Shell: Fixed Left Sidebar -->
+<aside class="w-[260px] h-full flex-shrink-0 flex flex-col justify-between py-2 pr-4">
+<div class="flex flex-col gap-8">
+<!-- Header -->
+<div class="flex flex-col px-3">
+<h1 class="text-text-main text-xl font-semibold tracking-tight">Research Flow</h1>
+<p class="text-text-muted text-xs mt-1">Research Lab AI Agent</p>
+</div>
+<!-- Navigation (Derived from Shared Component) -->
+<nav class="flex flex-col gap-2">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-black/5 transition-colors group" href="#">
+<div class="text-text-muted group-hover:text-text-main">
+<svg fill="currentColor" height="20px" viewbox="0 0 256 256" width="20px" xmlns="http://www.w3.org/2000/svg"><path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V96H40V56ZM40,112H96v88H40Zm176,88H112V112H216v88Z"></path></svg>
+</div>
+<span class="text-sm font-medium text-text-muted group-hover:text-text-main">Dashboard</span>
+</a>
+<!-- Active Item -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-active-bg text-primary" href="#">
+<div class="text-primary">
+<svg fill="currentColor" height="20px" viewbox="0 0 256 256" width="20px" xmlns="http://www.w3.org/2000/svg"><path d="M212,76V72a44,44,0,0,0-74.86-31.31,3.93,3.93,0,0,0-1.14,2.8v88.72a4,4,0,0,0,6.2,3.33A47.67,47.67,0,0,1,167.68,128a8.18,8.18,0,0,1,8.31,7.58,8,8,0,0,1-8,8.42,32,32,0,0,0-32,32v33.88a4,4,0,0,0,1.49,3.12,47.92,47.92,0,0,0,74.21-17.16,4,4,0,0,0-4.49-5.56A68.06,68.06,0,0,1,192,192h-7.73a8.18,8.18,0,0,1-8.25-7.47,8,8,0,0,1,8-8.53h8a51.6,51.6,0,0,0,24-5.88v0A52,52,0,0,0,212,76Zm-12,36h-4a36,36,0,0,1-36-36V72a8,8,0,0,1,16,0v4a20,20,0,0,0,20,20h4a8,8,0,0,1,0,16ZM88,28A44.05,44.05,0,0,0,44,72v4a52,52,0,0,0-4,94.12h0A51.6,51.6,0,0,0,64,176h7.73A8.18,8.18,0,0,1,80,183.47,8,8,0,0,1,72,192H64a67.48,67.48,0,0,1-15.21-1.73,4,4,0,0,0-4.5,5.55A47.93,47.93,0,0,0,118.51,213a4,4,0,0,0,1.49-3.12V176a32,32,0,0,0-32-32,8,8,0,0,1-8-8.42A8.18,8.18,0,0,1,88.32,128a47.67,47.67,0,0,1,25.48,7.54,4,4,0,0,0,6.2-3.33V43.49a4,4,0,0,0-1.14-2.81A43.85,43.85,0,0,0,88,28Zm8,48a36,36,0,0,1-36,36H56a8,8,0,0,1,0-16h4A20,20,0,0,0,80,76V72a8,8,0,0,1,16,0Z"></path></svg>
+</div>
+<span class="text-sm font-medium">Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-black/5 transition-colors group" href="#">
+<div class="text-text-muted group-hover:text-text-main">
+<svg fill="currentColor" height="20px" viewbox="0 0 256 256" width="20px" xmlns="http://www.w3.org/2000/svg"><path d="M213.66,82.34l-56-56A8,8,0,0,0,152,24H56A16,16,0,0,0,40,40V216a16,16,0,0,0,16,16H200a16,16,0,0,0,16-16V88A8,8,0,0,0,213.66,82.34ZM160,51.31,188.69,80H160ZM200,216H56V40h88V88a8,8,0,0,0,8,8h48V216Zm-32-80a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,136Zm0,32a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h64A8,8,0,0,1,168,168Z"></path></svg>
+</div>
+<span class="text-sm font-medium text-text-muted group-hover:text-text-main">Papers</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-black/5 transition-colors group" href="#">
+<div class="text-text-muted group-hover:text-text-main">
+<svg fill="currentColor" height="20px" viewbox="0 0 256 256" width="20px" xmlns="http://www.w3.org/2000/svg"><path d="M128,80a48,48,0,1,0,48,48A48.05,48.05,0,0,0,128,80Zm0,80a32,32,0,1,1,32-32A32,32,0,0,1,128,160Zm88-29.84q.06-2.16,0-4.32l14.92-18.64a8,8,0,0,0,1.48-7.06,107.21,107.21,0,0,0-10.88-26.25,8,8,0,0,0-6-3.93l-23.72-2.64q-1.48-1.56-3-3L186,40.54a8,8,0,0,0-3.94-6,107.71,107.71,0,0,0-26.25-10.87,8,8,0,0,0-7.06,1.49L130.16,40Q128,40,125.84,40L107.2,25.11a8,8,0,0,0-7.06-1.48A107.6,107.6,0,0,0,73.89,34.51a8,8,0,0,0-3.93,6L67.32,64.27q-1.56,1.49-3,3L40.54,70a8,8,0,0,0-6,3.94,107.71,107.71,0,0,0-10.87,26.25,8,8,0,0,0,1.49,7.06L40,125.84Q40,128,40,130.16L25.11,148.8a8,8,0,0,0-1.48,7.06,107.21,107.21,0,0,0,10.88,26.25,8,8,0,0,0,6,3.93l23.72,2.64q1.49,1.56,3,3L70,215.46a8,8,0,0,0,3.94,6,107.71,107.71,0,0,0,26.25,10.87,8,8,0,0,0,7.06-1.49L125.84,216q2.16.06,4.32,0l18.64,14.92a8,8,0,0,0,7.06,1.48,107.21,107.21,0,0,0,26.25-10.88,8,8,0,0,0,3.93-6l2.64-23.72q1.56-1.48,3-3L215.46,186a8,8,0,0,0,6-3.94,107.71,107.71,0,0,0,10.87-26.25,8,8,0,0,0-1.49-7.06Zm-16.1-6.5a73.93,73.93,0,0,1,0,8.68,8,8,0,0,0,1.74,5.48l14.19,17.73a91.57,91.57,0,0,1-6.23,15L187,173.11a8,8,0,0,0-5.1,2.64,74.11,74.11,0,0,1-6.14,6.14,8,8,0,0,0-2.64,5.1l-2.51,22.58a91.32,91.32,0,0,1-15,6.23l-17.74-14.19a8,8,0,0,0-5-1.75h-.48a73.93,73.93,0,0,1-8.68,0,8,8,0,0,0-5.48,1.74L100.45,215.8a91.57,91.57,0,0,1-15-6.23L82.89,187a8,8,0,0,0-2.64-5.1,74.11,74.11,0,0,1-6.14-6.14,8,8,0,0,0-5.1-2.64L46.43,170.6a91.32,91.32,0,0,1-6.23-15l14.19-17.74a8,8,0,0,0,1.74-5.48,73.93,73.93,0,0,1,0-8.68,8,8,0,0,0-1.74-5.48L40.2,100.45a91.57,91.57,0,0,1,6.23-15L69,82.89a8,8,0,0,0,5.1-2.64,74.11,74.11,0,0,1,6.14-6.14A8,8,0,0,0,82.89,69L85.4,46.43a91.32,91.32,0,0,1,15-6.23l17.74,14.19a8,8,0,0,0,5.48,1.74,73.93,73.93,0,0,1,8.68,0,8,8,0,0,0,5.48-1.74L155.55,40.2a91.57,91.57,0,0,1,15,6.23L173.11,69a8,8,0,0,0,2.64,5.1,74.11,74.11,0,0,1,6.14,6.14,8,8,0,0,0,5.1,2.64l22.58,2.51a91.32,91.32,0,0,1,6.23,15l-14.19,17.74A8,8,0,0,0,199.87,123.66Z"></path></svg>
+</div>
+<span class="text-sm font-medium text-text-muted group-hover:text-text-main">Settings</span>
+</a>
+</nav>
+<div class="px-4 mt-2">
+<p class="text-xs text-text-muted">Search workspace <kbd class="font-sans border border-border-color rounded px-1 ml-1 bg-white">⌘K</kbd></p>
+</div>
+</div>
+<!-- Bottom User / Theme -->
+<div class="flex flex-col gap-4 px-3">
+<button class="flex items-center gap-3 py-2 rounded-lg hover:bg-black/5 transition-colors text-text-muted group w-full">
+<span class="material-symbols-outlined text-[20px] group-hover:text-text-main">light_mode</span>
+<span class="text-xs font-medium group-hover:text-text-main">Toggle Theme</span>
+</button>
+<div class="flex items-center gap-3 pt-4 border-t border-border-color">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                    JS
+                </div>
+<div class="flex flex-col">
+<span class="text-sm font-bold text-text-main">Dr. Smith</span>
+<span class="text-xs text-text-muted">jsmith@lab.edu</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Workspace Canvas -->
+<main class="flex-1 bg-surface rounded-xl shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] border border-border-color overflow-hidden flex flex-col relative">
+<!-- Header area -->
+<div class="flex flex-wrap justify-between items-center gap-3 p-6 pb-4 border-b border-border-color/50 z-10 bg-surface">
+<h2 class="text-text-main tracking-tight text-[28px] font-semibold leading-tight">Knowledge Graph</h2>
+<div class="flex gap-2">
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-background-light px-3 border border-border-color/50 cursor-pointer hover:bg-black/5">
+<span class="text-sm font-medium text-text-main">Deep Learning</span>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-background-light px-3 border border-border-color/50 cursor-pointer hover:bg-black/5">
+<span class="text-sm font-medium text-text-main">NLP</span>
+</div>
+</div>
+</div>
+<!-- Graph Viewer Area -->
+<div class="flex-1 relative w-full h-full overflow-hidden bg-surface cursor-grab active:cursor-grabbing">
+<!-- SVG for lines (Edges) -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(0,0,0,0.08)" stroke-width="1.5">
+<line x1="20%" x2="35%" y1="30%" y2="50%"></line>
+<line x1="35%" x2="55%" y1="50%" y2="45%"></line>
+<line x1="35%" x2="40%" y1="50%" y2="70%"></line>
+<line x1="55%" x2="70%" y1="45%" y2="35%"></line>
+<line x1="55%" x2="65%" y1="45%" y2="65%"></line>
+<line x1="55%" x2="40%" y1="45%" y2="70%"></line>
+<line x1="70%" x2="85%" y1="35%" y2="40%"></line>
+</g>
+</svg>
+<!-- Nodes -->
+<!-- Node 1 -->
+<div class="absolute group" style="left: 20%; top: 30%; transform: translate(-50%, -50%);">
+<div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20 cursor-pointer transition-transform duration-200 hover:scale-[1.3]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">Transformer Architecture</div>
+</div>
+<!-- Node 2 -->
+<div class="absolute group" style="left: 35%; top: 50%; transform: translate(-50%, -50%);">
+<div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20 cursor-pointer transition-transform duration-200 hover:scale-[1.3]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">Self-Attention Mechanism</div>
+</div>
+<!-- Node 3 (Active/Selected) -->
+<div class="absolute group" style="left: 55%; top: 45%; transform: translate(-50%, -50%); z-10">
+<div class="w-3.5 h-3.5 rounded-full bg-primary ring-4 ring-primary/40 cursor-pointer scale-[1.2]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-100 whitespace-nowrap pointer-events-none z-20">Attention Is All You Need</div>
+</div>
+<!-- Node 4 -->
+<div class="absolute group" style="left: 40%; top: 70%; transform: translate(-50%, -50%);">
+<div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20 cursor-pointer transition-transform duration-200 hover:scale-[1.3]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">Positional Encoding</div>
+</div>
+<!-- Node 5 -->
+<div class="absolute group" style="left: 70%; top: 35%; transform: translate(-50%, -50%);">
+<div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20 cursor-pointer transition-transform duration-200 hover:scale-[1.3]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">BERT</div>
+</div>
+<!-- Node 6 -->
+<div class="absolute group" style="left: 65%; top: 65%; transform: translate(-50%, -50%);">
+<div class="w-3 h-3 rounded-full bg-primary ring-4 ring-primary/20 cursor-pointer transition-transform duration-200 hover:scale-[1.3]"></div>
+<div class="absolute left-1/2 -top-8 -translate-x-1/2 bg-text-main text-surface text-[11px] font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">GPT-3 Scaling</div>
+</div>
+</div>
+<!-- Inspector Panel (Slide-in from right) -->
+<aside class="absolute top-0 right-0 h-full w-[300px] bg-surface border-l border-border-color shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] transform translate-x-0 transition-transform duration-300 z-30 flex flex-col">
+<div class="p-5 border-b border-border-color flex justify-between items-start bg-surface">
+<div class="flex-1 pr-4">
+<span class="text-[11px] font-medium tracking-wide text-primary uppercase mb-1 block">Literature Note</span>
+<h3 class="text-base font-semibold text-text-main leading-snug">Attention Is All You Need</h3>
+</div>
+<button class="text-text-muted hover:text-text-main transition-colors p-1 rounded-md hover:bg-background-light">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="p-5 flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+<!-- Metadata -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-muted">Authors</span>
+<span class="text-text-main font-medium truncate max-w-[150px]">Vaswani et al.</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-muted">Year</span>
+<span class="text-text-main font-medium">2017</span>
+</div>
+<div class="flex justify-between items-center text-sm">
+<span class="text-text-muted">Added</span>
+<span class="text-text-main font-medium">Oct 12, 2023</span>
+</div>
+</div>
+<!-- Tags -->
+<div>
+<h4 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Tags</h4>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 bg-background-light border border-border-color rounded-lg text-xs font-medium text-text-main">NLP</span>
+<span class="px-2 py-1 bg-background-light border border-border-color rounded-lg text-xs font-medium text-text-main">Transformers</span>
+<span class="px-2 py-1 bg-background-light border border-border-color rounded-lg text-xs font-medium text-text-main">Core</span>
+</div>
+</div>
+<!-- AI Summary -->
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-[16px] text-primary">auto_awesome</span>
+<h4 class="text-xs font-semibold text-text-main uppercase tracking-wider">AI Synthesis</h4>
+</div>
+<div class="p-3 bg-active-bg/50 rounded-lg border border-primary/10">
+<p class="text-sm text-text-main leading-relaxed">
+                            Proposes a novel network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Shows superior translation quality while being more parallelizable and requiring significantly less time to train.
+                        </p>
+</div>
+</div>
+<!-- Connections -->
+<div>
+<h4 class="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Direct Connections</h4>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-2 p-2 rounded-lg hover:bg-background-light border border-transparent hover:border-border-color transition-all group" href="#">
+<div class="w-2 h-2 rounded-full bg-text-muted group-hover:bg-primary"></div>
+<span class="text-sm text-text-main font-medium truncate">Self-Attention Mechanism</span>
+</a>
+<a class="flex items-center gap-2 p-2 rounded-lg hover:bg-background-light border border-transparent hover:border-border-color transition-all group" href="#">
+<div class="w-2 h-2 rounded-full bg-text-muted group-hover:bg-primary"></div>
+<span class="text-sm text-text-main font-medium truncate">BERT</span>
+</a>
+<a class="flex items-center gap-2 p-2 rounded-lg hover:bg-background-light border border-transparent hover:border-border-color transition-all group" href="#">
+<div class="w-2 h-2 rounded-full bg-text-muted group-hover:bg-primary"></div>
+<span class="text-sm text-text-main font-medium truncate">Positional Encoding</span>
+</a>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-border-color bg-surface">
+<button class="w-full py-2 bg-white border border-border-color rounded-lg text-sm font-medium text-text-main hover:bg-background-light transition-colors flex items-center justify-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[18px]">menu_book</span>
+                    Open Full Paper
+                </button>
+</div>
+</aside>
+</main>
+</body></html>

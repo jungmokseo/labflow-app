@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard - LabFlow</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#2463eb",
+          "background-light": "#ffffff",
+          "surface-light": "#fafafa",
+          "text-main": "#0a0a0a",
+          "text-muted": "#737373",
+          "border-color": "rgba(0, 0, 0, 0.08)",
+        },
+        fontFamily: {
+          "display": ["Inter", "sans-serif"]
+        },
+        borderRadius: {
+          "DEFAULT": "0.25rem",
+          "md": "0.375rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--color-background);
+    color: var(--color-text);
+  }
+  .sidebar {
+    width: 260px;
+    background-color: theme('colors.surface-light');
+    border-right: 1px solid theme('colors.border-color');
+  }
+  .main-content {
+    background-color: theme('colors.background-light');
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    border-color: theme('colors.border-color');
+  }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden bg-background-light text-text-main selection:bg-primary selection:text-white">
+<!-- Sidebar (Shared Component Logic Applied) -->
+<div class="sidebar flex h-full flex-col justify-between py-5 px-4 shrink-0">
+<div class="flex flex-col gap-6">
+<div class="px-2 flex flex-col">
+<h1 class="text-primary text-[14px] font-medium leading-tight">LabFlow</h1>
+<p class="text-text-muted text-[12px] font-normal leading-tight mt-0.5">연구실 AI 에이전트</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">smart_toy</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Brain</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md bg-primary/10 text-primary" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-[14px] font-medium text-primary">Dashboard</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">check_circle</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Tasks &amp; Ideas</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">mic</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Meeting Notes</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">article</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Papers</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">group</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Lab Profile</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-black/5 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-text-muted group-hover:text-text-main">settings</span>
+<span class="text-[14px] text-text-muted group-hover:text-text-main">Settings</span>
+</a>
+</nav>
+<div class="px-2 mt-2">
+<div class="flex items-center justify-between text-text-muted text-[12px]">
+<span>검색 또는 이동...</span>
+<kbd class="bg-black/5 px-1.5 py-0.5 rounded text-[10px] font-sans">⌘K</kbd>
+</div>
+</div>
+</div>
+<div class="mt-auto pt-4 border-t border-border-color px-2 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-black/10 flex items-center justify-center text-[10px] font-medium text-text-main">
+        K
+      </div>
+<div class="flex flex-col">
+<span class="text-[12px] font-medium text-text-main leading-tight">김연구</span>
+<span class="text-[10px] text-text-muted leading-tight">kim@lab.ac.kr</span>
+</div>
+</div>
+<button class="text-text-muted hover:text-text-main transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">light_mode</span>
+</button>
+</div>
+</div>
+<!-- Main Content Area -->
+<div class="main-content flex-1 h-full overflow-y-auto">
+<div class="max-w-[960px] mx-auto px-8 py-10 flex flex-col gap-8">
+<!-- Welcome Header -->
+<div class="flex items-end justify-between">
+<div class="flex flex-col gap-1">
+<h1 class="text-[20px] font-semibold text-text-main tracking-tight">안녕하세요, 김연구님</h1>
+<p class="text-[14px] text-text-muted">2026년 4월 25일 목요일</p>
+</div>
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-100">
+<div class="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+<span class="text-[12px] font-medium text-emerald-700">API 정상</span>
+</div>
+</div>
+<!-- Quick Access Grid -->
+<div class="grid grid-cols-4 gap-4">
+<a class="card-hover flex flex-col gap-3 p-4 rounded-md border border-border-color bg-white transition-all duration-200" href="#">
+<div class="w-8 h-8 rounded-md bg-indigo-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-indigo-600 text-[20px]">smart_toy</span>
+</div>
+<div>
+<h2 class="text-[14px] font-medium text-text-main">Brain</h2>
+<p class="text-[12px] text-text-muted mt-0.5">AI 비서</p>
+</div>
+</a>
+<a class="card-hover flex flex-col gap-3 p-4 rounded-md border border-border-color bg-white transition-all duration-200" href="#">
+<div class="w-8 h-8 rounded-md bg-blue-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-blue-600 text-[20px]">check_circle</span>
+</div>
+<div>
+<h2 class="text-[14px] font-medium text-text-main">Tasks</h2>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="flex w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+<p class="text-[12px] text-text-muted">3건 미완료</p>
+</div>
+</div>
+</a>
+<a class="card-hover flex flex-col gap-3 p-4 rounded-md border border-border-color bg-white transition-all duration-200" href="#">
+<div class="w-8 h-8 rounded-md bg-emerald-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-emerald-600 text-[20px]">article</span>
+</div>
+<div>
+<h2 class="text-[14px] font-medium text-text-main">Papers</h2>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="flex w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+<p class="text-[12px] text-text-muted">2편 새 논문</p>
+</div>
+</div>
+</a>
+<a class="card-hover flex flex-col gap-3 p-4 rounded-md border border-border-color bg-white transition-all duration-200" href="#">
+<div class="w-8 h-8 rounded-md bg-amber-50 flex items-center justify-center">
+<span class="material-symbols-outlined text-amber-600 text-[20px]">mic</span>
+</div>
+<div>
+<h2 class="text-[14px] font-medium text-text-main">Meetings</h2>
+<p class="text-[12px] text-text-muted mt-0.5">5건 기록</p>
+</div>
+</a>
+</div>
+<!-- Summary Section -->
+<div class="flex flex-col gap-4">
+<h3 class="text-[14px] font-medium text-text-muted">오늘의 요약</h3>
+<div class="flex items-center justify-between p-4 rounded-md border border-border-color bg-white">
+<div class="flex items-center divide-x divide-border-color">
+<div class="px-4 first:pl-0 flex flex-col gap-1">
+<span class="text-[12px] text-text-muted">미확인 이메일</span>
+<span class="text-[16px] font-semibold text-text-main">12</span>
+</div>
+<div class="px-4 flex flex-col gap-1">
+<span class="text-[12px] text-text-muted">오늘 일정</span>
+<span class="text-[16px] font-semibold text-text-main">3</span>
+</div>
+<div class="px-4 flex flex-col gap-1">
+<span class="text-[12px] text-text-muted">미완료 태스크</span>
+<span class="text-[16px] font-semibold text-text-main">5</span>
+</div>
+</div>
+<a class="text-[12px] text-primary hover:underline font-medium flex items-center gap-1" href="#">
+          Brain에서 자세히 보기 <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</a>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-8">
+<!-- Recent Meetings -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-[14px] font-medium text-text-muted">최근 회의</h3>
+<a class="text-[12px] text-primary hover:underline" href="#">모두 보기 →</a>
+</div>
+<div class="flex flex-col gap-2">
+<a class="group flex items-center justify-between p-3 rounded-md border border-transparent hover:border-border-color hover:bg-surface-light transition-all" href="#">
+<div class="flex flex-col gap-1">
+<span class="text-[14px] font-medium text-text-main group-hover:text-primary transition-colors">주간 랩미팅</span>
+<span class="text-[12px] text-text-muted">오늘 오전 10:00</span>
+</div>
+<div class="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700">
+<span class="material-symbols-outlined text-[12px]">task_alt</span>
+<span class="text-[10px] font-medium">2 액션아이템</span>
+</div>
+</a>
+<a class="group flex items-center justify-between p-3 rounded-md border border-transparent hover:border-border-color hover:bg-surface-light transition-all" href="#">
+<div class="flex flex-col gap-1">
+<span class="text-[14px] font-medium text-text-main group-hover:text-primary transition-colors">프로젝트 A 브레인스토밍</span>
+<span class="text-[12px] text-text-muted">어제 오후 2:30</span>
+</div>
+<div class="flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 text-blue-700">
+<span class="material-symbols-outlined text-[12px]">task_alt</span>
+<span class="text-[10px] font-medium">1 액션아이템</span>
+</div>
+</a>
+</div>
+</div>
+<!-- Recent Activity -->
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-[14px] font-medium text-text-muted">최근 활동</h3>
+</div>
+<div class="flex flex-col gap-3 pl-1">
+<div class="flex gap-3">
+<div class="mt-0.5 flex flex-col items-center">
+<span class="material-symbols-outlined text-[16px] text-emerald-500">article</span>
+<div class="w-[1px] h-full bg-border-color mt-1"></div>
+</div>
+<div class="flex flex-col pb-3">
+<span class="text-[14px] text-text-main"><span class="font-medium">Nature</span> 저널에서 새 논문을 수집했습니다.</span>
+<span class="text-[12px] text-text-muted">1시간 전</span>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="mt-0.5 flex flex-col items-center">
+<span class="material-symbols-outlined text-[16px] text-blue-500">check_circle</span>
+<div class="w-[1px] h-full bg-border-color mt-1"></div>
+</div>
+<div class="flex flex-col pb-3">
+<span class="text-[14px] text-text-main line-through text-text-muted">실험 데이터 정리</span>
+<span class="text-[12px] text-text-muted">3시간 전</span>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="mt-0.5 flex flex-col items-center">
+<span class="material-symbols-outlined text-[16px] text-indigo-500">smart_toy</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[14px] text-text-main">Brain이 주간 브리핑 초안을 작성했습니다.</span>
+<span class="text-[12px] text-text-muted">어제</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

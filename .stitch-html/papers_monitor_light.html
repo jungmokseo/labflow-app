@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LabFlow - Papers</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts (Inter used for Geist aesthetic as per config) -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#2463eb",
+              "background-light": "#f6f6f8",
+              "background-dark": "#111621",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Pure minimal scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+    </style>
+</head>
+<body class="bg-white text-gray-900 flex h-screen overflow-hidden antialiased">
+<!-- Global Application Shell - Sidebar (from Shared Components) -->
+<div class="w-[260px] h-full flex flex-col bg-background-light border-r border-gray-200 flex-shrink-0 relative">
+<div class="flex h-full flex-col justify-between p-4">
+<div class="flex flex-col gap-8">
+<!-- Sidebar Header -->
+<div class="flex flex-col px-3">
+<h1 class="text-primary text-base font-semibold leading-normal">LabFlow</h1>
+<p class="text-gray-500 text-xs font-normal leading-normal mt-1">연구실 AI 에이전트</p>
+</div>
+<!-- Navigation Menu -->
+<div class="flex flex-col gap-1">
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">neurology</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Brain</p>
+</button>
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">mobile_layout</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Dashboard</p>
+</button>
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">square</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Tasks &amp; Ideas</p>
+</button>
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">headset_mic</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Meeting Notes</p>
+</button>
+<!-- Active State -->
+<div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">files</span>
+<p class="text-sm font-medium leading-normal">Papers</p>
+</div>
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">architecture</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Lab Profile</p>
+</button>
+<button class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-200/50 transition-colors text-gray-600 group">
+<span class="material-symbols-outlined text-[20px] group-hover:text-gray-900">search_gear</span>
+<p class="text-sm font-medium leading-normal group-hover:text-gray-900">Settings</p>
+</button>
+</div>
+<!-- Global Search Hint -->
+<div class="px-3 mt-2 flex items-center justify-between text-xs text-gray-400">
+<span>검색 또는 이동...</span>
+<span class="bg-gray-200/50 text-gray-500 px-1.5 py-0.5 rounded text-[10px] font-medium tracking-widest">⌘K</span>
+</div>
+</div>
+<!-- User Footer -->
+<div class="flex items-center justify-between px-3 py-2 mt-4 hover:bg-gray-200/50 rounded-lg cursor-pointer transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-[10px] font-medium text-gray-600">
+                        HK
+                    </div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-gray-900 leading-none">홍길동 연구원</span>
+<span class="text-[10px] text-gray-500 mt-1 leading-none">hong@bliss.lab</span>
+</div>
+</div>
+<button class="text-gray-400 hover:text-gray-600">
+<span class="material-symbols-outlined text-[18px]">light_mode</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Main Content Area -->
+<main class="flex-1 flex justify-center overflow-y-auto relative">
+<div class="w-full max-w-[56rem] px-8 py-12 flex flex-col min-h-full">
+<!-- Header Section -->
+<header class="flex items-start justify-between mb-10">
+<div class="flex flex-col gap-2">
+<h2 class="text-2xl font-semibold text-gray-900 tracking-tight">연구동향</h2>
+<p class="text-sm text-gray-500">12개 저널 모니터링 · 주간 자동 업데이트</p>
+</div>
+<div class="flex gap-2">
+<button class="p-2.5 text-gray-500 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center justify-center" title="PDF 업로드">
+<span class="material-symbols-outlined text-[20px]">battery_plus</span>
+</button>
+<button class="p-2.5 text-gray-500 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center justify-center" title="업데이트">
+<span class="material-symbols-outlined text-[20px]">arrow_circle_right</span>
+</button>
+<button class="p-2.5 text-primary bg-primary/10 rounded-lg flex items-center justify-center" title="설정">
+<span class="material-symbols-outlined text-[20px]">search_gear</span>
+</button>
+</div>
+</header>
+<!-- Settings Panel (Expanded State) -->
+<div class="bg-background-light rounded-xl p-6 mb-12 flex flex-col gap-6">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<!-- Journals -->
+<div class="flex flex-col gap-3">
+<label class="text-sm font-medium text-gray-700 flex items-center gap-2">
+                            모니터링 저널
+                            <span class="bg-white px-1.5 py-0.5 rounded text-[10px] font-medium border border-gray-200">12</span>
+</label>
+<div class="flex flex-wrap gap-2 mb-1">
+<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700 shadow-sm">
+                                Nature
+                                <button class="text-gray-400 hover:text-gray-600"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700 shadow-sm">
+                                Science
+                                <button class="text-gray-400 hover:text-gray-600"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700 shadow-sm">
+                                Cell
+                                <button class="text-gray-400 hover:text-gray-600"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-medium text-gray-700 shadow-sm">
+                                NEJM
+                                <button class="text-gray-400 hover:text-gray-600"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</span>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-gray-400">search</span>
+<input class="w-full bg-white border-0 py-2.5 pl-10 pr-4 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 placeholder:text-gray-400 shadow-sm" placeholder="저널 검색 및 추가..." type="text"/>
+</div>
+</div>
+<!-- Keywords -->
+<div class="flex flex-col gap-3">
+<label class="text-sm font-medium text-gray-700">관심 키워드</label>
+<textarea class="w-full bg-white border-0 py-2.5 px-3 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 placeholder:text-gray-400 shadow-sm resize-none text-gray-700" placeholder="LLM, Agent, RAG, Reinforcement Learning (쉼표로 구분)" rows="3">LLM, AI Agent, LLMOps, Generative AI, Retrieval-Augmented Generation</textarea>
+</div>
+</div>
+<div class="flex justify-end pt-2">
+<button class="bg-gray-900 hover:bg-gray-800 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+                        저장
+                    </button>
+</div>
+</div>
+<!-- Results List -->
+<div class="flex flex-col gap-10 pb-20">
+<!-- Week Group 1 -->
+<section class="flex flex-col gap-4">
+<h3 class="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-3 mb-2 flex items-center justify-between">
+                        2026년 4월 1주차 (04.01~04.07)
+                        <span class="text-xs font-normal text-gray-500 bg-background-light px-2 py-1 rounded">새로운 논문 3편</span>
+</h3>
+<!-- Expanded Card -->
+<div class="group relative flex flex-col gap-3 p-5 -mx-5 rounded-xl bg-background-light transition-all">
+<div class="flex items-start justify-between gap-4">
+<div class="flex flex-col gap-1.5 flex-1">
+<h4 class="text-base font-semibold text-gray-900 leading-snug cursor-pointer hover:text-primary transition-colors">
+                                    Autonomous Research Agents: A Comprehensive Survey of Architectural Patterns
+                                </h4>
+<div class="flex items-center gap-3 text-xs text-gray-500">
+<span class="font-medium text-gray-700">Nature Machine Intelligence</span>
+<span>•</span>
+<span>Apr 3, 2026</span>
+</div>
+</div>
+<div class="flex text-primary gap-0.5 mt-1 shrink-0">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</div>
+<div class="mt-2 text-sm text-gray-600 leading-relaxed font-normal">
+                            이 논문은 복잡한 다단계 연구 작업을 자율적으로 수행하는 AI 에이전트의 아키텍처 패턴을 분석합니다. 특히 <strong>LLM</strong>과 <strong>AI Agent</strong> 간의 협업 프레임워크에서 발생하는 컨텍스트 창 한계와 환각 문제를 완화하기 위한 메모리 관리 기법(Hierarchical Memory)을 제시하여, 장기 실행 과제의 성공률을 42% 향상시켰습니다.
+                        </div>
+<div class="flex items-center gap-2 mt-2">
+<span class="bg-primary/10 text-primary text-[11px] px-2 py-0.5 rounded font-medium">AI Agent</span>
+<span class="bg-primary/10 text-primary text-[11px] px-2 py-0.5 rounded font-medium">LLM</span>
+</div>
+<div class="flex items-center gap-4 mt-4 pt-4 border-t border-gray-200/60">
+<a class="text-xs text-gray-500 hover:text-gray-900 font-medium flex items-center gap-1 transition-colors" href="#">
+<span class="material-symbols-outlined text-[14px]">link</span>
+                                DOI: 10.1038/s42256-026-0012-x
+                            </a>
+<div class="flex-1"></div>
+<button class="text-xs font-medium text-primary bg-white border border-gray-200 shadow-sm px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">check</span>
+                                확인 완료
+                            </button>
+</div>
+</div>
+<!-- Collapsed Card 1 -->
+<div class="group relative flex items-start justify-between gap-4 p-4 -mx-4 rounded-xl hover:bg-gray-50 cursor-pointer transition-all">
+<div class="flex flex-col gap-1.5 flex-1">
+<h4 class="text-[15px] font-medium text-gray-900 leading-snug group-hover:text-primary transition-colors">
+                                Evaluating RAG Systems in Academic Contexts: Metrics and Benchmarks
+                            </h4>
+<div class="flex items-center gap-3 text-xs text-gray-500">
+<span>arXiv (CS.CL)</span>
+<span>•</span>
+<span>Apr 1, 2026</span>
+</div>
+</div>
+<div class="flex text-primary gap-0.5 mt-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+</div>
+</div>
+<!-- Collapsed Card 2 -->
+<div class="group relative flex items-start justify-between gap-4 p-4 -mx-4 rounded-xl hover:bg-gray-50 cursor-pointer transition-all">
+<div class="flex flex-col gap-1.5 flex-1">
+<h4 class="text-[15px] font-medium text-gray-900 leading-snug group-hover:text-primary transition-colors">
+                                Scalable Generative AI Workflows for Scientific Literature Review
+                            </h4>
+<div class="flex items-center gap-3 text-xs text-gray-500">
+<span>Science Advances</span>
+<span>•</span>
+<span>Apr 1, 2026</span>
+</div>
+</div>
+<div class="flex text-primary gap-0.5 mt-1 shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+</div>
+</div>
+</section>
+<!-- Week Group 2 -->
+<section class="flex flex-col gap-4">
+<h3 class="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-3 mb-2 flex items-center justify-between mt-4">
+                        2026년 3월 4주차 (03.25~03.31)
+                    </h3>
+<div class="group relative flex items-start justify-between gap-4 p-4 -mx-4 rounded-xl hover:bg-gray-50 cursor-pointer transition-all opacity-70">
+<div class="flex flex-col gap-1.5 flex-1">
+<h4 class="text-[15px] font-medium text-gray-600 line-through leading-snug">
+                                Beyond Prompt Engineering: Fine-tuning Strategies for Specialized Domains
+                            </h4>
+<div class="flex items-center gap-3 text-xs text-gray-400">
+<span>Cell</span>
+<span>•</span>
+<span>Mar 28, 2026</span>
+</div>
+</div>
+<div class="flex text-gray-300 gap-0.5 mt-1 shrink-0">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+<span class="material-symbols-outlined text-[16px]">star</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+</body></html>

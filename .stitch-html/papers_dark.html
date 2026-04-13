@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Research Flow - Papers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=DM+Sans:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#3B82F6",
+          "background": "#181A1F",
+          "surface": "#21242B",
+          "text-primary": "#E5E7EB",
+          "text-muted": "#9CA3AF",
+          "border-color": "rgba(255, 255, 255, 0.05)",
+          "hover-bg": "#1E293B",
+        },
+        fontFamily: {
+          "display": ["Plus Jakarta Sans", "sans-serif"],
+          "body": ["DM Sans", "sans-serif"],
+        },
+        borderRadius: {
+          "DEFAULT": "8px",
+          "md": "12px",
+          "lg": "16px",
+          "pill": "4px",
+          "full": "9999px"
+        },
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background-color: #181A1F;
+    color: #E5E7EB;
+  }
+  h1, h2, h3, h4, h5, h6, .nav-text, .btn-text {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .icon-fill {
+    font-variation-settings: 'FILL' 1;
+  }
+  
+  /* Custom scrollbar for dark mode */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+</style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex bg-background text-text-primary selection:bg-primary/30 selection:text-white">
+<!-- Global Sidebar -->
+<div class="relative flex h-full w-[260px] flex-col bg-surface border-r border-[rgba(255,255,255,0.05)] shrink-0 z-20">
+<!-- Sidebar Header -->
+<div class="px-5 pt-6 pb-4 flex flex-col gap-1">
+<h1 class="text-primary text-[18px] font-bold leading-tight nav-text">Research Flow</h1>
+<p class="text-text-muted text-[12px] font-normal leading-normal">Research Lab AI Agent</p>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-1">
+<!-- Dashboard -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-hover-bg transition-colors duration-200 group cursor-pointer text-text-muted hover:text-text-primary" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="nav-text text-[14px] font-semibold leading-normal">Dashboard</span>
+</a>
+<!-- Brain -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-hover-bg transition-colors duration-200 group cursor-pointer text-text-muted hover:text-text-primary" href="#">
+<span class="material-symbols-outlined text-[20px]">psychology</span>
+<span class="nav-text text-[14px] font-semibold leading-normal">Brain</span>
+</a>
+<!-- Papers (Active) -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-hover-bg text-primary cursor-default group" href="#">
+<span class="material-symbols-outlined text-[20px] icon-fill">book_2</span>
+<span class="nav-text text-[14px] font-semibold leading-normal">Papers</span>
+</a>
+<!-- Settings -->
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-hover-bg transition-colors duration-200 group cursor-pointer text-text-muted hover:text-text-primary mt-auto mb-2" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="nav-text text-[14px] font-semibold leading-normal">Settings</span>
+</a>
+</div>
+<!-- User Profile Bottom -->
+<div class="p-4 border-t border-[rgba(255,255,255,0.05)] flex items-center justify-between hover:bg-hover-bg transition-colors duration-200 cursor-pointer">
+<div class="flex items-center gap-3 min-w-0">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-[13px] font-bold shrink-0 nav-text">
+        JC
+      </div>
+<div class="flex flex-col min-w-0">
+<span class="text-[14px] font-semibold text-text-primary truncate nav-text">Dr. Chen</span>
+<span class="text-[12px] font-normal text-text-muted truncate">j.chen@lab.edu</span>
+</div>
+</div>
+<button class="text-text-muted hover:text-text-primary transition-colors focus:outline-none">
+<span class="material-symbols-outlined text-[20px]">dark_mode</span>
+</button>
+</div>
+</div>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col h-full min-w-0 bg-background relative z-10">
+<!-- Control Bar (Sticky Top) -->
+<header class="px-8 py-6 border-b border-[rgba(255,255,255,0.05)] bg-background/95 backdrop-blur-sm z-10 sticky top-0 flex flex-wrap items-center justify-between gap-4">
+<h2 class="text-[24px] font-semibold text-text-primary nav-text tracking-tight">Literature Library</h2>
+<div class="flex items-center gap-4">
+<!-- Search Input -->
+<div class="relative flex items-center group w-64">
+<span class="material-symbols-outlined absolute left-3 text-[18px] text-text-muted group-focus-within:text-primary transition-colors pointer-events-none">search</span>
+<input class="w-full h-10 bg-surface border border-[rgba(255,255,255,0.05)] rounded-md pl-10 pr-12 text-[14px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all duration-200" placeholder="Search papers..." type="text"/>
+<div class="absolute right-2 flex items-center h-full pointer-events-none">
+<kbd class="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium text-text-muted bg-background border border-[rgba(255,255,255,0.1)]">⌘K</kbd>
+</div>
+</div>
+<!-- Filters Dropdown (Visual only) -->
+<button class="h-10 px-3 bg-surface border border-[rgba(255,255,255,0.05)] rounded-md flex items-center gap-2 text-[14px] text-text-primary hover:bg-hover-bg hover:border-[rgba(255,255,255,0.1)] transition-all duration-200 focus:outline-none">
+<span class="material-symbols-outlined text-[18px] text-text-muted">filter_list</span>
+<span class="nav-text font-medium hidden sm:inline">Filters</span>
+</button>
+<!-- Primary Action -->
+<button class="h-10 px-4 bg-primary hover:bg-primary/90 text-white rounded-md flex items-center gap-2 transition-colors duration-200 shadow-[0_2px_8px_rgba(59,130,246,0.2)] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background">
+<span class="material-symbols-outlined text-[18px]">upload</span>
+<span class="btn-text text-[14px] font-semibold">Upload Paper</span>
+</button>
+</div>
+</header>
+<!-- Data Table Container (Scrollable) -->
+<div class="flex-1 overflow-auto p-8 relative">
+<div class="w-full min-w-[800px] border border-[rgba(255,255,255,0.05)] rounded-lg overflow-hidden bg-surface">
+<!-- Table Header -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] text-[13px] font-medium text-text-muted nav-text">
+<div class="col-span-5 flex items-center gap-2">Title</div>
+<div class="col-span-3 flex items-center">Authors</div>
+<div class="col-span-1 flex items-center">Year</div>
+<div class="col-span-2 flex items-center">AI Tags</div>
+<div class="col-span-1 flex items-center justify-end">Status</div>
+</div>
+<!-- Table Body -->
+<div class="flex flex-col divide-y divide-[rgba(255,255,255,0.05)]">
+<!-- Row 1 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center group hover:bg-hover-bg transition-colors duration-150 cursor-pointer h-12">
+<div class="col-span-5 text-[15px] font-medium text-text-primary truncate pr-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">article</span>
+            Attention Is All You Need
+          </div>
+<div class="col-span-3 text-[14px] text-text-muted truncate pr-2">Vaswani et al.</div>
+<div class="col-span-1 text-[14px] text-text-muted">2017</div>
+<div class="col-span-2 flex items-center gap-2 overflow-hidden">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">Transformers</span>
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">NLP</span>
+</div>
+<div class="col-span-1 flex items-center justify-end">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-emerald-500/10 text-emerald-400 rounded-pill border border-emerald-500/20">Read</span>
+</div>
+</div>
+<!-- Row 2 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center group hover:bg-hover-bg transition-colors duration-150 cursor-pointer h-12">
+<div class="col-span-5 text-[15px] font-medium text-text-primary truncate pr-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">article</span>
+            Generative Adversarial Nets
+          </div>
+<div class="col-span-3 text-[14px] text-text-muted truncate pr-2">Goodfellow et al.</div>
+<div class="col-span-1 text-[14px] text-text-muted">2014</div>
+<div class="col-span-2 flex items-center gap-2 overflow-hidden">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">Vision</span>
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">Generative</span>
+</div>
+<div class="col-span-1 flex items-center justify-end">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-amber-500/10 text-amber-400 rounded-pill border border-amber-500/20">Skimmed</span>
+</div>
+</div>
+<!-- Row 3 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center group hover:bg-hover-bg transition-colors duration-150 cursor-pointer h-12">
+<div class="col-span-5 text-[15px] font-medium text-text-primary truncate pr-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">article</span>
+            Deep Residual Learning for Image Recognition
+          </div>
+<div class="col-span-3 text-[14px] text-text-muted truncate pr-2">He et al.</div>
+<div class="col-span-1 text-[14px] text-text-muted">2016</div>
+<div class="col-span-2 flex items-center gap-2 overflow-hidden">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">ResNet</span>
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">CNN</span>
+</div>
+<div class="col-span-1 flex items-center justify-end">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-emerald-500/10 text-emerald-400 rounded-pill border border-emerald-500/20">Read</span>
+</div>
+</div>
+<!-- Row 4 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center group hover:bg-hover-bg transition-colors duration-150 cursor-pointer h-12">
+<div class="col-span-5 text-[15px] font-medium text-text-primary truncate pr-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">article</span>
+            Language Models are Few-Shot Learners
+          </div>
+<div class="col-span-3 text-[14px] text-text-muted truncate pr-2">Brown et al.</div>
+<div class="col-span-1 text-[14px] text-text-muted">2020</div>
+<div class="col-span-2 flex items-center gap-2 overflow-hidden">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">LLM</span>
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">GPT-3</span>
+</div>
+<div class="col-span-1 flex items-center justify-end">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-muted rounded-pill border border-[rgba(255,255,255,0.1)]">Unread</span>
+</div>
+</div>
+<!-- Row 5 -->
+<div class="grid grid-cols-12 gap-4 px-4 py-3 items-center group hover:bg-hover-bg transition-colors duration-150 cursor-pointer h-12">
+<div class="col-span-5 text-[15px] font-medium text-text-primary truncate pr-4 flex items-center gap-3">
+<span class="material-symbols-outlined text-[18px] text-text-muted opacity-50 group-hover:opacity-100 transition-opacity">article</span>
+            BERT: Pre-training of Deep Bidirectional Transformers
+          </div>
+<div class="col-span-3 text-[14px] text-text-muted truncate pr-2">Devlin et al.</div>
+<div class="col-span-1 text-[14px] text-text-muted">2018</div>
+<div class="col-span-2 flex items-center gap-2 overflow-hidden">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">NLP</span>
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-[rgba(255,255,255,0.05)] text-text-primary rounded-pill whitespace-nowrap">Embeddings</span>
+</div>
+<div class="col-span-1 flex items-center justify-end">
+<span class="inline-flex items-center h-6 px-2 text-[12px] font-medium bg-emerald-500/10 text-emerald-400 rounded-pill border border-emerald-500/20">Read</span>
+</div>
+</div>
+</div>
+<!-- Footer Pagination / Info -->
+<div class="px-4 py-3 border-t border-[rgba(255,255,255,0.05)] flex items-center justify-between text-[13px] text-text-muted">
+<span>Showing 1 to 5 of 124 papers</span>
+<div class="flex items-center gap-1">
+<button class="p-1 rounded hover:bg-[rgba(255,255,255,0.05)] transition-colors disabled:opacity-50"><span class="material-symbols-outlined text-[18px]">chevron_left</span></button>
+<span class="px-2">1 / 25</span>
+<button class="p-1 rounded hover:bg-[rgba(255,255,255,0.05)] transition-colors"><span class="material-symbols-outlined text-[18px]">chevron_right</span></button>
+</div>
+</div>
+</div>
+<!-- Empty State Example (Hidden by default, comment out to test)
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none mt-20">
+      <div class="flex flex-col items-center justify-center p-8 border-2 border-dashed border-[rgba(255,255,255,0.05)] rounded-lg bg-surface/50 backdrop-blur-sm max-w-md w-full pointer-events-auto">
+        <div class="w-16 h-16 rounded-full bg-[rgba(255,255,255,0.03)] flex items-center justify-center mb-4">
+          <span class="material-symbols-outlined text-[32px] text-text-muted">post_add</span>
+        </div>
+        <h3 class="text-[16px] font-semibold text-text-primary mb-2 nav-text">No papers in library</h3>
+        <p class="text-[14px] text-text-muted text-center mb-6">Drag and drop PDFs here, or click upload to add your first paper to the repository.</p>
+        <button class="h-10 px-4 bg-primary hover:bg-primary/90 text-white rounded-md flex items-center gap-2 transition-colors duration-200">
+          <span class="material-symbols-outlined text-[18px]">upload</span>
+          <span class="btn-text text-[14px] font-semibold">Upload Paper</span>
+        </button>
+      </div>
+    </div>
+    -->
+</div>
+</div>
+</body></html>

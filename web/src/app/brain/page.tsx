@@ -359,6 +359,22 @@ export default function BrainPage() {
     if (saved) setInput(saved);
   }, []);
 
+  // 모바일 키보드 대응 — Visual Viewport API로 키보드 높이 CSS 변수 업데이트
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    function handleVVChange() {
+      const keyboardHeight = Math.max(0, window.innerHeight - vv!.height - vv!.offsetTop);
+      document.documentElement.style.setProperty('--keyboard-height', `${keyboardHeight}px`);
+    }
+    vv.addEventListener('resize', handleVVChange);
+    vv.addEventListener('scroll', handleVVChange);
+    return () => {
+      vv.removeEventListener('resize', handleVVChange);
+      vv.removeEventListener('scroll', handleVVChange);
+    };
+  }, []);
+
   // Pending job 복구 — 페이지 진입 시 (새로고침/재방문 후) 끊긴 작업이 있으면 polling으로 결과 가져오기
   useEffect(() => {
     const pending = getPendingBrainJob();
@@ -628,6 +644,10 @@ export default function BrainPage() {
       fileIds: currentFileIds.length > 0 ? currentFileIds : undefined,
     });
 
+    // 새 AbortController 생성 — Stop 버튼과 연결
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
+
     try {
       setThinkingSteps([]);
       setStreamingContent('');
@@ -648,6 +668,7 @@ export default function BrainPage() {
           (action) => {
             pendingActionsRef.current = [...pendingActionsRef.current, action];
           },
+          abortCtrl.signal,
         );
       } catch (streamErr: any) {
         // SSE 끊김 (모바일 화면 sleep 등) → polling으로 복구 시도
@@ -892,6 +913,7 @@ export default function BrainPage() {
 
   function handleStopGenerating() {
     abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
   }
 
   function scrollToBottom() {
@@ -900,10 +922,11 @@ export default function BrainPage() {
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value);
-    // Auto-resize
+    // Auto-resize (모바일: 120px, 데스크톱: 200px)
     const el = e.target;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    const maxH = window.innerWidth < 768 ? 120 : 200;
+    el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
   }
 
   function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -933,7 +956,7 @@ export default function BrainPage() {
   }
 
   return (
-    <div className="flex h-screen md:h-[calc(100vh-2rem)] p-0 md:p-4">
+    <div className="flex h-[100dvh] md:h-[calc(100dvh-2rem)] p-0 md:p-4">
       {/* Main area — full width (sidebar is in the main nav now) */}
       <div
         className="flex-1 bg-bg-card rounded-xl flex flex-col relative"
@@ -1244,7 +1267,7 @@ export default function BrainPage() {
             )}
 
             {/* Input area */}
-            <div className="border-t border-border">
+            <div className="border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
               {/* 첨부 파일 칩 — Claude Desktop 스타일 */}
               {attachedFiles.length > 0 && (
                 <div className="px-4 pt-3 max-w-4xl mx-auto w-full">
@@ -1298,7 +1321,7 @@ export default function BrainPage() {
                     onKeyDown={handleTextareaKeyDown}
                     placeholder={loading && !queuedInput ? "다음 질문을 입력하면 완료 후 자동으로 전송됩니다..." : "메시지를 입력하세요..."}
                     rows={2}
-                    className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[72px] max-h-[200px]"
+                    className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[52px] max-h-[120px] md:max-h-[200px]"
                   />
                   {/* 하단 도구 바 */}
                   <div className="flex items-center justify-between px-3 pb-2">

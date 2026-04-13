@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+
+<html data-theme="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LabFlow - 회의 노트</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#2463eb",
+          "background-light": "#f6f6f8",
+          "background-dark": "#111621",
+        },
+        fontFamily: {
+          "display": ["Inter"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        keyframes: {
+            pulse: {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: .5 },
+            }
+        },
+        animation: {
+            pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        }
+      },
+    },
+  }
+</script>
+<style>
+  :root {
+    --color-primary: #2563EB;
+    --color-background: #FFFFFF;
+    --color-surface: #FAFAFA;
+    --color-text: #0A0A0A;
+    --color-muted: #737373;
+    --color-border: rgba(0, 0, 0, 0.08);
+    --font-primary: 'Inter', sans-serif;
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-full: 9999px;
+    --sidebar-width: 260px;
+    --spacing-shell: 24px;
+  }
+
+  [data-theme="dark"] {
+    --color-primary: #3B82F6;
+    --color-background: #0A0A0A;
+    --color-surface: #121212;
+    --color-text: #FAFAFA;
+    --color-muted: #A3A3A3;
+    --color-border: rgba(255, 255, 255, 0.05);
+  }
+
+  body {
+    font-family: var(--font-primary);
+    background-color: var(--color-background);
+    color: var(--color-text);
+  }
+
+  .sidebar {
+    background-color: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+  }
+
+  .nav-item:hover {
+    background-color: var(--color-border);
+  }
+
+  .nav-item.active {
+    color: var(--color-primary);
+    background-color: rgba(37, 99, 235, 0.08);
+  }
+
+  .border-subtle {
+    border-color: var(--color-border);
+  }
+
+  .bg-subtle {
+    background-color: var(--color-surface);
+  }
+
+  .text-muted {
+    color: var(--color-muted);
+  }
+
+  /* Theme toggle switch */
+  .theme-toggle-btn {
+      color: var(--color-muted);
+  }
+  .theme-toggle-btn:hover {
+      color: var(--color-text);
+  }
+</style>
+</head>
+<body class="flex h-screen overflow-hidden antialiased selection:bg-primary selection:text-white">
+<!-- Sidebar (Shared Component Logic) -->
+<div class="sidebar w-[260px] h-full flex flex-col justify-between p-4 z-10 shrink-0">
+<div class="flex flex-col gap-6">
+<!-- Header -->
+<div class="flex gap-3 px-2">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 flex items-center justify-center bg-primary text-white font-bold text-lg" style="background-image: linear-gradient(135deg, #2463eb 0%, #3b82f6 100%);">
+<span class="material-symbols-outlined text-white" style="font-size: 20px;">science</span>
+</div>
+<div class="flex flex-col justify-center">
+<h1 class="text-base font-medium leading-none mb-1">LabFlow</h1>
+<p class="text-muted text-xs font-normal leading-none">연구실 AI 에이전트</p>
+</div>
+</div>
+<!-- Navigation -->
+<nav class="flex flex-col gap-1">
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">psychology</span>
+<span class="text-sm font-medium">Brain</span>
+</a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">dashboard</span>
+<span class="text-sm font-medium">대시보드</span>
+</a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">check_box</span>
+<span class="text-sm font-medium">Tasks &amp; Ideas</span>
+</a>
+<a class="nav-item active flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-primary" style="font-size: 16px; font-variation-settings: 'FILL' 1;">mic</span>
+<span class="text-sm font-medium text-primary">회의 노트</span>
+</a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">menu_book</span>
+<span class="text-sm font-medium">연구동향</span>
+</a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">person</span>
+<span class="text-sm font-medium">Lab Profile</span>
+</a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)]" style="font-size: 16px;">settings</span>
+<span class="text-sm font-medium">설정</span>
+</a>
+</nav>
+<!-- Global Search Hint -->
+<div class="px-3 mt-2 flex items-center justify-between">
+<span class="text-xs text-muted">검색 또는 이동...</span>
+<div class="bg-subtle border border-subtle rounded-sm px-1.5 py-0.5 text-[10px] text-muted flex items-center">
+        ⌘K
+      </div>
+</div>
+</div>
+<!-- Footer -->
+<div class="flex items-center justify-between px-2 pt-4 border-t border-subtle">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-subtle flex items-center justify-center text-xs font-medium border border-subtle">
+        SJ
+      </div>
+<div class="flex flex-col">
+<span class="text-sm font-medium leading-none mb-0.5">김석진</span>
+<span class="text-[10px] text-muted leading-none">sj.kim@bliss.lab</span>
+</div>
+</div>
+<button class="theme-toggle-btn w-6 h-6 flex items-center justify-center rounded-md hover:bg-subtle transition-colors" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark')">
+<span class="material-symbols-outlined" style="font-size: 16px;">light_mode</span>
+</button>
+</div>
+</div>
+<!-- Main Content Area -->
+<main class="flex-1 h-full overflow-y-auto overflow-x-hidden p-8 flex justify-center">
+<div class="w-full max-w-[56rem] flex flex-col gap-8 pb-20">
+<!-- Page Header -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-md bg-[rgba(37,99,235,0.08)] flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-size: 24px;">mic</span>
+</div>
+<h2 class="text-2xl font-semibold tracking-tight">회의 노트</h2>
+</div>
+<p class="text-muted text-sm ml-13">음성 녹음 및 AI 자동 전사로 연구 회의를 기록하세요.</p>
+</div>
+<!-- Dynamic Recording Card (Idle State) -->
+<div class="border border-subtle rounded-lg bg-subtle p-12 flex flex-col items-center justify-center gap-6 shadow-sm">
+<button class="w-24 h-24 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition-colors focus:ring-4 focus:ring-blue-300 focus:outline-none">
+<span class="material-symbols-outlined" style="font-size: 40px; font-variation-settings: 'FILL' 1;">mic</span>
+</button>
+<div class="flex flex-col items-center gap-2 text-center">
+<p class="font-medium text-lg">탭하여 녹음 시작</p>
+<div class="flex items-center gap-4 w-full max-w-[240px] my-1">
+<div class="h-px bg-[var(--color-border)] flex-1"></div>
+<span class="text-xs text-muted uppercase">또는</span>
+<div class="h-px bg-[var(--color-border)] flex-1"></div>
+</div>
+<p class="text-sm text-muted">오디오 파일을 여기에 드래그 앤 드롭하세요.</p>
+<button class="mt-2 px-4 py-2 border border-subtle rounded-md text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined" style="font-size: 16px;">upload</span>
+                파일 업로드
+            </button>
+</div>
+</div>
+<!-- Processing Queue -->
+<div class="flex flex-col gap-3">
+<h3 class="text-sm font-medium text-muted uppercase tracking-wider">처리 대기열</h3>
+<div class="flex flex-col gap-2">
+<div class="border border-subtle rounded-md p-3 flex items-center justify-between bg-[var(--color-background)]">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary animate-pulse" style="font-size: 18px;">sync</span>
+<span class="text-sm font-medium">주간 랩미팅 (04.12).m4a</span>
+</div>
+<span class="text-xs text-muted">전사 및 요약 중... (65%)</span>
+</div>
+</div>
+</div>
+<!-- Meeting List -->
+<div class="flex flex-col gap-6 mt-4">
+<!-- Month Group -->
+<div class="flex flex-col gap-3">
+<h3 class="text-sm font-medium border-b border-subtle pb-2">2026년 4월 (3건)</h3>
+<div class="flex flex-col gap-2">
+<!-- Collapsed Item -->
+<div class="border border-subtle rounded-md p-4 bg-[var(--color-background)] hover:bg-subtle transition-colors cursor-pointer flex items-center justify-between group">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-subtle flex items-center justify-center border border-subtle">
+<span class="material-symbols-outlined text-muted" style="font-size: 16px;">description</span>
+</div>
+<div class="flex flex-col">
+<span class="font-medium text-sm">프로젝트 A 진척도 리뷰</span>
+<span class="text-xs text-muted">2026. 04. 10 · 45분 소요</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] rounded-full font-medium">2 액션아이템</span>
+<span class="material-symbols-outlined text-muted group-hover:text-[var(--color-text)] transition-colors" style="font-size: 20px;">expand_more</span>
+</div>
+</div>
+<!-- Expanded Item -->
+<div class="border border-[var(--color-primary)] rounded-md p-0 bg-[var(--color-background)] shadow-sm overflow-hidden flex flex-col">
+<div class="p-4 border-b border-subtle flex items-center justify-between bg-subtle">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-size: 16px;">description</span>
+</div>
+<div class="flex flex-col">
+<span class="font-medium text-sm text-primary">LLM 논문 리뷰 및 적용 방안</span>
+<span class="text-xs text-muted">2026. 04. 05 · 1시간 12분 소요</span>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-1.5 rounded-md text-muted hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors tooltip" title="복사">
+<span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span>
+</button>
+<button class="p-1.5 rounded-md text-muted hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors tooltip" title="내보내기">
+<span class="material-symbols-outlined" style="font-size: 16px;">download</span>
+</button>
+<button class="p-1.5 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors tooltip" title="삭제">
+<span class="material-symbols-outlined" style="font-size: 16px;">delete</span>
+</button>
+<span class="material-symbols-outlined text-muted ml-2 cursor-pointer" style="font-size: 20px;">expand_less</span>
+</div>
+</div>
+<div class="p-6 prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-a:text-primary">
+<h4 class="text-base font-semibold mb-3">핵심 요약</h4>
+<p class="text-sm text-muted leading-relaxed mb-4">
+                            최근 발표된 Retrieval-Augmented Generation (RAG) 관련 논문 3편을 리뷰하고, 현재 연구실에서 진행 중인 문서 챗봇 프로젝트에 적용할 수 있는 방안을 논의함. 특히 하이브리드 검색 방식의 도입이 필요하다는 결론을 도출함.
+                        </p>
+<h4 class="text-base font-semibold mb-3">액션 아이템 (3건)</h4>
+<ul class="list-disc pl-5 text-sm text-muted space-y-2 mb-4 marker:text-primary">
+<li><span class="font-medium text-[var(--color-text)]">김석진:</span> 하이브리드 검색 파이프라인 프로토타입 구현 (다음 주 금요일까지)</li>
+<li><span class="font-medium text-[var(--color-text)]">이박사:</span> 벤치마크 데이터셋 구성 및 평가지표 확립</li>
+<li><span class="font-medium text-[var(--color-text)]">전체:</span> 다음 주 세미나 전까지 관련 논문 숙지</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<!-- Empty Month Group (Example) -->
+<div class="flex flex-col gap-3 mt-4">
+<h3 class="text-sm font-medium border-b border-subtle pb-2 text-muted">2026년 3월 (0건)</h3>
+<div class="py-8 flex flex-col items-center justify-center text-center">
+<div class="w-12 h-12 rounded-full bg-subtle flex items-center justify-center text-muted mb-3">
+<span class="material-symbols-outlined" style="font-size: 24px;">mic_off</span>
+</div>
+<p class="text-sm text-muted">이 달의 회의 기록이 없습니다.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

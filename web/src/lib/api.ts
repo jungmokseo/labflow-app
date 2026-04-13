@@ -411,6 +411,7 @@ export async function brainChatStream(
   newSession?: boolean,
   fileIds?: string[],
   onAction?: (action: PendingAction) => void,
+  externalSignal?: AbortSignal,
 ): Promise<BrainChatResult> {
   const API_BASE_URL = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
   const body = JSON.stringify({ message, channelId, fileId, fileIds, newSession, stream: true });
@@ -421,6 +422,9 @@ export async function brainChatStream(
   const RETRY_DELAYS = [0, 2500, 5000]; // 3 attempts: immediate, 2.5s, 5s
 
   for (let attempt = 0; attempt < 3; attempt++) {
+    // 외부에서 abort된 경우 즉시 중단
+    if (externalSignal?.aborted) throw new Error('AbortError: 사용자가 중단했습니다.');
+
     // On retry: wake up server with lightweight ping, then wait
     if (attempt > 0) {
       clearTokenCache();
@@ -435,15 +439,19 @@ export async function brainChatStream(
       throw new Error('인증 토큰을 가져올 수 없습니다. 페이지를 새로고침해주세요.');
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout
+    // 타임아웃 + 외부 abort signal 합성
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), 120000); // 120s timeout
+    const combinedSignal = externalSignal
+      ? AbortSignal.any([timeoutController.signal, externalSignal])
+      : timeoutController.signal;
 
     try {
       res = await fetch(`${API_BASE_URL}/api/brain/chat?_t=${Date.now()}`, {
         method: 'POST',
         headers: { ...authHeaders },
         body,
-        signal: controller.signal,
+        signal: combinedSignal,
         cache: 'no-store',
       });
       clearTimeout(timeoutId);
@@ -451,6 +459,7 @@ export async function brainChatStream(
     } catch (fetchErr: any) {
       clearTimeout(timeoutId);
       if (fetchErr.name === 'AbortError') {
+        if (externalSignal?.aborted) throw new Error('사용자가 생성을 중단했습니다.');
         throw new Error('응답 시간이 초과되었습니다. 다시 시도해주세요.');
       }
       lastError = fetchErr;

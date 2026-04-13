@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Research Flow - Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#3caff6",
+          "background-light": "#f5f7f8",
+          "background-dark": "#101b22",
+          "app-bg": "#181A1F",
+          "app-surface": "#21242B",
+          "app-text": "#E5E7EB",
+          "app-muted": "#9CA3AF",
+          "app-border": "rgba(255, 255, 255, 0.05)",
+          "app-hover": "#1E293B",
+        },
+        fontFamily: {
+          "display": ["Plus Jakarta Sans", "sans-serif"],
+          "body": ["Plus Jakarta Sans", "sans-serif"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "sm": "0.5rem", "md": "0.75rem", "lg": "1rem", "xl": "1.25rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+</style>
+</head>
+<body class="bg-app-bg text-app-text h-screen overflow-hidden flex selection:bg-primary/30 selection:text-white">
+<!-- Sidebar -->
+<aside class="w-[260px] flex-shrink-0 bg-app-surface border-r border-app-border flex flex-col justify-between h-full">
+<div>
+<div class="px-5 pt-6 pb-4">
+<h1 class="text-primary text-[18px] font-bold leading-tight">Research Flow</h1>
+<p class="text-app-muted text-[12px] font-normal mt-0.5">Research Lab AI Agent</p>
+</div>
+<!-- Search Hint -->
+<div class="px-3 mb-4">
+<button class="w-full flex items-center justify-between px-3 py-2 bg-app-bg border border-app-border rounded-md text-app-muted hover:text-app-text hover:border-app-muted/50 transition-colors group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">search</span>
+<span class="text-sm font-medium">Search...</span>
+</div>
+<div class="flex items-center gap-1 opacity-70">
+<kbd class="font-sans text-[11px] px-1.5 py-0.5 bg-app-surface rounded border border-app-border">⌘</kbd>
+<kbd class="font-sans text-[11px] px-1.5 py-0.5 bg-app-surface rounded border border-app-border">K</kbd>
+</div>
+</button>
+</div>
+<!-- Nav Items -->
+<nav class="px-3 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-app-hover text-primary group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="text-[14px] font-semibold">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-app-muted hover:bg-app-hover/50 hover:text-app-text transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">psychology</span>
+<span class="text-[14px] font-medium">Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-app-muted hover:bg-app-hover/50 hover:text-app-text transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">article</span>
+<span class="text-[14px] font-medium">Papers</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-app-muted hover:bg-app-hover/50 hover:text-app-text transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-[14px] font-medium">Settings</span>
+</a>
+</nav>
+</div>
+<!-- User Profile -->
+<div class="p-4 border-t border-app-border">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">
+          DC
+        </div>
+<div class="flex flex-col overflow-hidden">
+<span class="text-[14px] font-semibold text-app-text truncate">Dr. Chen</span>
+<span class="text-[12px] font-normal text-app-muted truncate">chen@research.lab</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto w-[calc(100vw-260px)] scroll-smooth">
+<div class="max-w-[1024px] mx-auto px-8 pt-12 pb-24 flex flex-col gap-8">
+<!-- Welcome Header -->
+<header>
+<h2 class="text-[32px] font-bold text-app-text tracking-tight">Good morning, Dr. Chen</h2>
+</header>
+<!-- AI Agent Update Card -->
+<section class="bg-app-surface border border-app-border rounded-md p-6 relative overflow-hidden group">
+<!-- Decorative gradient orb -->
+<div class="absolute -top-24 -right-24 w-64 h-64 bg-primary/10 rounded-full blur-3xl group-hover:bg-primary/20 transition-all duration-700 ease-in-out pointer-events-none"></div>
+<div class="flex gap-4 relative z-10">
+<div class="flex-shrink-0 mt-1">
+<div class="w-10 h-10 rounded-md bg-app-bg border border-app-border flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[24px]">auto_awesome</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<h3 class="text-[18px] font-semibold text-app-text flex items-center gap-2">
+              AI Lab Synthesis
+              <span class="px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[11px] font-bold uppercase tracking-wider">Update</span>
+</h3>
+<p class="text-app-muted text-[15px] leading-relaxed max-w-3xl">
+<strong class="text-app-text font-medium">3 new papers</strong> related to quantum optics were added by Sarah. Your notes on <strong class="text-app-text font-medium">photon entanglement</strong> have been processed and linked to <strong class="text-app-text font-medium">2 active tasks</strong>.
+            </p>
+<div class="mt-2 flex gap-3">
+<button class="text-[13px] font-medium text-primary hover:text-white transition-colors flex items-center gap-1">
+                 View new papers <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+</button>
+<button class="text-[13px] font-medium text-app-muted hover:text-app-text transition-colors flex items-center gap-1">
+                 Review linked tasks
+               </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Quick Metrics Grid -->
+<section class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Metric Card 1 -->
+<a class="bg-app-surface border border-app-border rounded-md p-5 h-[100px] flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.2)] hover:border-app-border/80 transition-all duration-200 group" href="#">
+<div class="flex items-center justify-between text-app-muted">
+<span class="text-[14px] font-medium group-hover:text-app-text transition-colors">Active Tasks</span>
+<span class="material-symbols-outlined text-[20px]">task_alt</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-[28px] font-bold text-app-text leading-none">12</span>
+<span class="text-[13px] text-primary font-medium pb-1">Needs attention</span>
+</div>
+</a>
+<!-- Metric Card 2 -->
+<a class="bg-app-surface border border-app-border rounded-md p-5 h-[100px] flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.2)] hover:border-app-border/80 transition-all duration-200 group" href="#">
+<div class="flex items-center justify-between text-app-muted">
+<span class="text-[14px] font-medium group-hover:text-app-text transition-colors">New Papers</span>
+<span class="material-symbols-outlined text-[20px]">menu_book</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-[28px] font-bold text-app-text leading-none">5</span>
+<span class="text-[13px] text-app-muted font-medium pb-1">Unread this week</span>
+</div>
+</a>
+<!-- Metric Card 3 -->
+<a class="bg-app-surface border border-app-border rounded-md p-5 h-[100px] flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.2)] hover:border-app-border/80 transition-all duration-200 group" href="#">
+<div class="flex items-center justify-between text-app-muted">
+<span class="text-[14px] font-medium group-hover:text-app-text transition-colors">Lab Notes</span>
+<span class="material-symbols-outlined text-[20px]">edit_note</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-[28px] font-bold text-app-text leading-none">3</span>
+<span class="text-[13px] text-green-400 font-medium pb-1">Synthesized by AI</span>
+</div>
+</a>
+</section>
+</div>
+</main>
+</body></html>

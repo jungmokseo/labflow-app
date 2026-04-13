@@ -431,6 +431,7 @@ export async function brainRoutes(app: FastifyInstance) {
 
     let responseText = '';
     let usedTools: string[] = [];
+    let textAlreadyStreamed = false;
     const pendingActions: PendingAction[] = [];
 
     try {
@@ -443,7 +444,7 @@ export async function brainRoutes(app: FastifyInstance) {
         pendingActions,
       };
 
-      // Tool-use 루프: Claude가 tool 호출을 멈출 때까지 반복
+      // Tool-use 루프: streaming API로 최종 응답을 토큰별 실시간 전달
       let messages: Anthropic.MessageParam[] = anthropicMessages.map(m => ({
         role: m.role,
         content: m.content,
@@ -451,7 +452,8 @@ export async function brainRoutes(app: FastifyInstance) {
 
       const MAX_TOOL_ROUNDS = 5;
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const response = await anthropic.messages.create({
+        // messages.stream()으로 토큰별 실시간 스트리밍
+        const streamObj = anthropic.messages.stream({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 4096,
           system: systemPrompt,
@@ -459,20 +461,34 @@ export async function brainRoutes(app: FastifyInstance) {
           messages,
         });
 
-        // 매 라운드 실제 토큰 기반 비용 추적
-        const roundCost = calculateAnthropicCost('claude-sonnet', response.usage);
-        trackAICost(userId, 'claude-sonnet', roundCost, usedTools[usedTools.length - 1] || 'general_chat');
+        let roundText = '';
+        for await (const event of streamObj) {
+          // 클라이언트 연결 끊김 감지 → 스트림 중단
+          if (stream && (reply.raw.destroyed || reply.raw.writableEnded)) break;
 
-        // 텍스트 블록 수집
-        const textBlocks = response.content.filter(b => b.type === 'text');
-        const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-
-        if (textBlocks.length > 0) {
-          responseText += textBlocks.map(b => b.type === 'text' ? b.text : '').join('');
+          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+            const text = event.delta.text;
+            roundText += text;
+            if (stream) {
+              try { reply.raw.write(`data: ${JSON.stringify({ type: 'token', content: text })}\n\n`); } catch {}
+              textAlreadyStreamed = true;
+            }
+          }
         }
 
+        // finalMessage()로 전체 메시지 구조 획득 (tool_use 블록 포함)
+        const finalMsg = await streamObj.finalMessage();
+
+        // 매 라운드 실제 토큰 기반 비용 추적
+        const roundCost = calculateAnthropicCost('claude-sonnet', finalMsg.usage);
+        trackAICost(userId, 'claude-sonnet', roundCost, usedTools[usedTools.length - 1] || 'general_chat');
+
+        if (roundText) responseText += roundText;
+
+        const toolUseBlocks = finalMsg.content.filter(b => b.type === 'tool_use');
+
         // tool 호출이 없으면 종료
-        if (response.stop_reason === 'end_turn' || toolUseBlocks.length === 0) {
+        if (finalMsg.stop_reason === 'end_turn' || toolUseBlocks.length === 0) {
           break;
         }
 
@@ -504,7 +520,7 @@ export async function brainRoutes(app: FastifyInstance) {
         // 다음 라운드를 위해 메시지에 추가
         messages = [
           ...messages,
-          { role: 'assistant' as const, content: response.content },
+          { role: 'assistant' as const, content: finalMsg.content },
           { role: 'user' as const, content: toolResults },
         ];
       }
@@ -538,6 +554,7 @@ export async function brainRoutes(app: FastifyInstance) {
           if (text) {
             responseText += text;
             try { reply.raw.write(`data: ${JSON.stringify({ type: 'token', content: text })}\n\n`); } catch {}
+            textAlreadyStreamed = true;
           }
         }
       } else {
@@ -555,7 +572,8 @@ export async function brainRoutes(app: FastifyInstance) {
       }
     }
 
-    if (stream && usedTools.length >= 0 && responseText && !responseText.startsWith('[streamed]')) {
+    // 이미 실시간 스트리밍된 경우 재전송 방지 (이중 출력 버그 수정)
+    if (stream && !textAlreadyStreamed && responseText) {
       const chunkSize = 80;
       for (let i = 0; i < responseText.length; i += chunkSize) {
         const chunk = responseText.slice(i, i + chunkSize);

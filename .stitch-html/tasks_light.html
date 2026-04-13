@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tasks &amp; Ideas - LabFlow</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        :root {
+            /* Light Theme Defaults */
+            --color-primary: #2563eb;
+            --color-background-main: #ffffff;
+            --color-surface: #fafafa;
+            --color-text-main: #0a0a0a;
+            --color-muted: #737373;
+            --color-border: rgba(0, 0, 0, 0.08);
+            
+            --sidebar-width: 260px;
+        }
+
+        html[data-theme="dark"] {
+            --color-primary: #3b82f6;
+            --color-background-main: #0a0a0a;
+            --color-surface: #121212;
+            --color-text-main: #fafafa;
+            --color-muted: #a3a3a3;
+            --color-border: rgba(255, 255, 255, 0.05);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--color-background-main);
+            color: var(--color-text-main);
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .theme-transition {
+            transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: ["class", '[data-theme="dark"]'],
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "var(--color-primary)",
+                        background: "var(--color-background-main)",
+                        surface: "var(--color-surface)",
+                        text: "var(--color-text-main)",
+                        muted: "var(--color-muted)",
+                        border: "var(--color-border)",
+                    },
+                    fontFamily: {
+                        display: ["Inter"],
+                        body: ["Inter"]
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.375rem", // 6px
+                        sm: "0.25rem",
+                        md: "0.375rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px"
+                    },
+                    spacing: {
+                        shell: "24px"
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="overflow-x-hidden min-h-screen antialiased flex text-[14px]">
+<!-- Sidebar Navigation -->
+<aside class="w-[var(--sidebar-width)] h-screen flex-shrink-0 bg-surface border-r border-border flex flex-col justify-between fixed top-0 left-0 theme-transition z-10 p-4">
+<div class="flex flex-col gap-6">
+<div class="flex flex-col px-2">
+<h1 class="text-text font-medium text-[14px]">LabFlow</h1>
+<p class="text-muted text-[12px] mt-1">연구실 AI 에이전트</p>
+</div>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="neurology">neurology</span>
+<span class="font-medium">Brain</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="dashboard">dashboard</span>
+<span class="font-medium">대시보드</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-primary bg-primary/10 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-primary" data-icon="task_alt" style="font-variation-settings: 'FILL' 1;">task_alt</span>
+<span class="font-medium">Tasks &amp; Ideas</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="mic">mic</span>
+<span class="font-medium">회의 노트</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="menu_book">menu_book</span>
+<span class="font-medium">논문</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="group">group</span>
+<span class="font-medium">연구실 프로필</span>
+</a>
+<a class="flex items-center gap-2 px-3 py-2 rounded-md text-text hover:bg-border transition-colors group" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted group-hover:text-text transition-colors" data-icon="settings">settings</span>
+<span class="font-medium">설정</span>
+</a>
+</nav>
+<div class="px-2 mt-2 flex items-center justify-between text-muted text-[12px]">
+<span>검색 또는 이동...</span>
+<span class="bg-border px-1.5 py-0.5 rounded-sm text-[10px]">⌘K</span>
+</div>
+</div>
+<div class="flex items-center justify-between px-2 pt-4 border-t border-border mt-auto">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-border flex items-center justify-center text-[10px] font-medium text-text">
+                    JD
+                </div>
+<div class="flex flex-col">
+<span class="text-text font-medium text-[14px] leading-tight">홍길동</span>
+<span class="text-muted text-[12px] leading-tight">user@lab.com</span>
+</div>
+</div>
+<button class="text-muted hover:text-text transition-colors p-1 rounded-md hover:bg-border" onclick="toggleTheme()">
+<span class="material-symbols-outlined text-[16px]" data-icon="light_mode" id="theme-icon">light_mode</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-[var(--sidebar-width)] flex justify-center py-shell px-6 theme-transition">
+<div class="w-full max-w-[56rem] flex flex-col gap-8">
+<!-- Header Section -->
+<div class="flex flex-col gap-4">
+<div class="flex items-end gap-4">
+<h2 class="text-[20px] font-semibold text-text">Tasks &amp; Ideas</h2>
+<div class="flex gap-2 text-[12px]">
+<span class="px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">새로운 항목 3</span>
+<span class="px-2 py-1 rounded-full bg-border text-text font-medium">미완료 5</span>
+<span class="px-2 py-1 rounded-full bg-border text-text font-medium">아이디어 2</span>
+</div>
+</div>
+<!-- Quick Input -->
+<div class="relative flex items-center w-full">
+<input class="w-full h-14 pl-4 pr-12 rounded-lg bg-surface border border-border text-text placeholder:text-muted focus:ring-1 focus:ring-primary focus:border-primary transition-colors text-[14px] shadow-sm" placeholder="할일, 아이디어, 메모를 입력하세요... (AI가 자동 분류)" type="text"/>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-md bg-primary text-white hover:bg-blue-600 transition-colors">
+<span class="material-symbols-outlined text-[20px]" data-icon="send">send</span>
+</button>
+</div>
+</div>
+<!-- Filters & Controls -->
+<div class="flex flex-wrap items-center justify-between gap-4 py-2 border-b border-border">
+<div class="flex gap-2">
+<button class="px-3 py-1.5 rounded-full bg-border text-text text-[12px] font-medium hover:bg-border/80 transition-colors flex items-center gap-1.5">
+                        전체 <span class="text-muted text-[10px]">10</span>
+</button>
+<button class="px-3 py-1.5 rounded-full hover:bg-border text-muted hover:text-text text-[12px] font-medium transition-colors flex items-center gap-1.5">
+                        할일 <span class="text-[10px]">5</span>
+</button>
+<button class="px-3 py-1.5 rounded-full hover:bg-border text-muted hover:text-text text-[12px] font-medium transition-colors flex items-center gap-1.5">
+                        아이디어 <span class="text-[10px]">2</span>
+</button>
+<button class="px-3 py-1.5 rounded-full hover:bg-border text-muted hover:text-text text-[12px] font-medium transition-colors flex items-center gap-1.5">
+                        메모 <span class="text-[10px]">3</span>
+</button>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex bg-border p-0.5 rounded-md">
+<button class="px-3 py-1 rounded-sm bg-surface text-text shadow-sm text-[12px] font-medium">진행중</button>
+<button class="px-3 py-1 rounded-sm text-muted hover:text-text text-[12px] font-medium transition-colors">완료됨</button>
+</div>
+<div class="flex items-center gap-2 text-[12px] text-muted">
+<span>최신순</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="expand_more">expand_more</span>
+</div>
+<div class="relative w-48 hidden sm:block">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-[16px] text-muted" data-icon="search">search</span>
+<input class="w-full h-8 pl-8 pr-2 rounded-md bg-surface border border-border text-text placeholder:text-muted focus:ring-1 focus:ring-primary focus:border-primary text-[12px] transition-colors" placeholder="검색..." type="text"/>
+</div>
+</div>
+</div>
+<!-- Task List -->
+<div class="flex flex-col gap-2">
+<!-- Unreviewed Task Item -->
+<div class="group flex items-center gap-4 p-3 rounded-lg bg-surface border border-border hover:shadow-sm hover:-translate-y-[1px] transition-all relative overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<button class="flex-shrink-0 w-5 h-5 rounded-full border border-muted hover:border-primary flex items-center justify-center transition-colors">
+<!-- empty circle for uncompleted -->
+</button>
+<div class="flex-1 flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary" data-icon="task">task</span>
+<span class="text-text font-medium truncate">논문 리뷰를 위한 관련 문헌 조사 및 정리</span>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-[12px]">
+<span class="px-1.5 py-0.5 rounded text-red-600 bg-red-100 dark:bg-red-900/30 font-medium">높음</span>
+<span class="text-muted flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="event">event</span> 4월 15일
+                            </span>
+<span class="px-1.5 py-0.5 rounded bg-border text-muted">#문헌조사</span>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 text-muted hover:text-red-500 transition-all p-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="close">close</span>
+</button>
+</div>
+<!-- Idea Item -->
+<div class="group flex items-center gap-4 p-3 rounded-lg bg-surface border border-border hover:shadow-sm hover:-translate-y-[1px] transition-all">
+<button class="flex-shrink-0 w-5 h-5 rounded-full border border-muted hover:border-primary flex items-center justify-center transition-colors">
+</button>
+<div class="flex-1 flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-amber-500" data-icon="lightbulb">lightbulb</span>
+<span class="text-text font-medium truncate">새로운 데이터 전처리 파이프라인 구조 스케치</span>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-[12px]">
+<span class="px-1.5 py-0.5 rounded text-orange-600 bg-orange-100 dark:bg-orange-900/30 font-medium">중간</span>
+<span class="px-1.5 py-0.5 rounded bg-border text-muted">#아이디어</span>
+<span class="px-1.5 py-0.5 rounded bg-border text-muted">#개발</span>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 text-muted hover:text-red-500 transition-all p-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="close">close</span>
+</button>
+</div>
+<!-- Memo Item -->
+<div class="group flex items-center gap-4 p-3 rounded-lg bg-surface border border-border hover:shadow-sm hover:-translate-y-[1px] transition-all">
+<button class="flex-shrink-0 w-5 h-5 rounded-full border border-muted hover:border-primary flex items-center justify-center transition-colors">
+</button>
+<div class="flex-1 flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-teal-500" data-icon="description">description</span>
+<span class="text-text font-medium truncate">교수님 미팅 피드백 요약 - 모델 파라미터 조정 필요성</span>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-[12px]">
+<span class="px-1.5 py-0.5 rounded text-gray-600 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 font-medium">낮음</span>
+<span class="px-1.5 py-0.5 rounded bg-border text-muted">#메모</span>
+<span class="px-1.5 py-0.5 rounded bg-border text-muted">#미팅</span>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 text-muted hover:text-red-500 transition-all p-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="close">close</span>
+</button>
+</div>
+<!-- Completed Task Item -->
+<div class="group flex items-center gap-4 p-3 rounded-lg bg-surface/50 border border-border/50 transition-all opacity-60">
+<button class="flex-shrink-0 w-5 h-5 rounded-full bg-green-500 border-green-500 flex items-center justify-center text-white transition-colors">
+<span class="material-symbols-outlined text-[14px]" data-icon="check" style="font-variation-settings: 'wght' 600;">check</span>
+</button>
+<div class="flex-1 flex flex-col gap-1 min-w-0">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-muted" data-icon="task">task</span>
+<span class="text-muted font-medium truncate line-through">주간 연구 보고서 초안 작성</span>
+</div>
+<div class="flex flex-wrap items-center gap-2 text-[12px]">
+<span class="text-muted flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="event">event</span> 4월 10일
+                            </span>
+</div>
+</div>
+<button class="opacity-0 group-hover:opacity-100 text-muted hover:text-red-500 transition-all p-1">
+<span class="material-symbols-outlined text-[18px]" data-icon="close">close</span>
+</button>
+</div>
+</div>
+<!-- Example Empty State (Hidden by default, shown for demonstration if list was empty) -->
+<!--
+            <div class="flex flex-col items-center justify-center py-16 text-center">
+                <div class="w-16 h-16 rounded-full bg-surface border border-border flex items-center justify-center mb-4">
+                    <span class="material-symbols-outlined text-[32px] text-muted" data-icon="inbox">inbox</span>
+                </div>
+                <h3 class="text-text font-medium text-[16px] mb-1">아직 항목이 없습니다</h3>
+                <p class="text-muted text-[14px]">상단의 입력창에 할일이나 아이디어를 자유롭게 입력해보세요.</p>
+            </div>
+            -->
+</div>
+</main>
+<script>
+        // Simple theme toggle logic
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const icon = document.getElementById('theme-icon');
+            
+            if (currentTheme === 'dark') {
+                html.removeAttribute('data-theme');
+                icon.textContent = 'light_mode';
+            } else {
+                html.setAttribute('data-theme', 'dark');
+                icon.textContent = 'dark_mode';
+            }
+        }
+        
+        // Optional: Check system preference on load
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.getElementById('theme-icon').textContent = 'dark_mode';
+        }
+    </script>
+</body></html>

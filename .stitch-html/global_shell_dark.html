@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Research Flow - Global Shell</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#3caff6",
+              "background-light": "#FAFAFA",
+              "background-dark": "#181A1F",
+              "surface-dark": "#21242B",
+              "text-dark": "#E5E7EB",
+              "muted-dark": "#9CA3AF",
+              "border-dark": "rgba(255, 255, 255, 0.05)",
+              "hover-dark": "#1E293B",
+            },
+            fontFamily: {
+              "display": ["Plus Jakarta Sans", "sans-serif"],
+              "body": ["Plus Jakarta Sans", "sans-serif"], // Using Plus Jakarta Sans for all as per specific instructions
+            },
+            borderRadius: {
+              "DEFAULT": "0.25rem", 
+              "md": "12px", // Override md to 12px for Soft Professional
+              "lg": "16px", 
+              "full": "9999px"
+            },
+          },
+        },
+      }
+    </script>
+<style>
+      /* Base styles to ensure no scroll on body */
+      body, html {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        overflow: hidden;
+        background-color: #181A1F;
+        color: #E5E7EB;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+      }
+    </style>
+</head>
+<body class="font-body text-text-dark bg-background-dark antialiased flex h-screen overflow-hidden">
+<!-- Global Layout Wrapper -->
+<div class="flex h-full w-full">
+<!-- Sidebar -->
+<aside class="w-[260px] h-full flex flex-col bg-surface-dark border-r border-border-dark flex-shrink-0 relative z-10">
+<!-- Sidebar Header -->
+<div class="px-5 pt-6 pb-4 flex flex-col gap-1">
+<h1 class="text-primary text-[18px] font-bold leading-tight">Research Flow</h1>
+<p class="text-muted-dark text-[12px] font-normal leading-tight">Research Lab AI Agent</p>
+</div>
+<!-- Global Search Trigger -->
+<div class="px-3 pb-4 pt-2">
+<button class="w-full flex items-center justify-between px-3 py-2 bg-background-dark border border-border-dark rounded-md text-muted-dark hover:text-text-dark transition-colors duration-150 cursor-text group">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] group-hover:text-text-dark transition-colors duration-150">search</span>
+<span class="text-[13px] font-medium">Search...</span>
+</div>
+<span class="text-[12px] font-medium px-1.5 py-0.5 rounded bg-surface-dark border border-border-dark">⌘K</span>
+</button>
+</div>
+<!-- Navigation Menu -->
+<nav class="flex-1 px-3 overflow-y-auto">
+<ul class="flex flex-col gap-1">
+<!-- Active Item: Dashboard -->
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-hover-dark text-primary font-semibold text-[14px] transition-colors duration-150" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+                            Dashboard
+                        </a>
+</li>
+<!-- Default Items -->
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-text-dark hover:bg-hover-dark hover:text-text-dark font-medium text-[14px] transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px] text-muted-dark group-hover:text-text-dark transition-colors duration-150">psychology</span>
+                            Brain
+                        </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-text-dark hover:bg-hover-dark hover:text-text-dark font-medium text-[14px] transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px] text-muted-dark group-hover:text-text-dark transition-colors duration-150">description</span>
+                            Papers
+                        </a>
+</li>
+<li>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md text-text-dark hover:bg-hover-dark hover:text-text-dark font-medium text-[14px] transition-colors duration-150 group" href="#">
+<span class="material-symbols-outlined text-[20px] text-muted-dark group-hover:text-text-dark transition-colors duration-150">settings</span>
+                            Settings
+                        </a>
+</li>
+</ul>
+</nav>
+<!-- User Profile Footer -->
+<div class="p-3 border-t border-border-dark mt-auto">
+<div class="flex items-center justify-between p-2 rounded-md hover:bg-hover-dark transition-colors duration-150 cursor-pointer">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+<span class="text-white text-[13px] font-bold">DC</span>
+</div>
+<div class="flex flex-col overflow-hidden">
+<span class="text-text-dark text-[14px] font-semibold leading-tight truncate">Dr. Chen</span>
+<span class="text-muted-dark text-[12px] font-normal leading-tight truncate">chen@research.edu</span>
+</div>
+</div>
+<button aria-label="Toggle Theme" class="w-8 h-8 flex items-center justify-center rounded-md text-muted-dark hover:text-text-dark hover:bg-background-dark transition-colors duration-150">
+<span class="material-symbols-outlined text-[18px]">dark_mode</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 h-full bg-background-dark overflow-y-auto relative">
+<!-- Content will be injected here by specific views -->
+<div class="w-full h-full flex items-center justify-center text-muted-dark text-sm">
+                Main Content Area Placeholder
+            </div>
+</main>
+</div>
+</body></html>

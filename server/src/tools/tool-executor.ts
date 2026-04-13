@@ -93,10 +93,10 @@ async function executeSearchLabData(
 ): Promise<string> {
   if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
 
-  ctx.sendProgress('연구실 정보를 검색하고 있습니다...');
-
   const query = input.query as string;
   const types: string[] = input.types || ['all'];
+  const typeLabel = types.includes('all') ? '전체' : types.join('/');
+  ctx.sendProgress(`"${(query || '').slice(0, 30)}" ${typeLabel} 검색 중...`);
   const searchAll = types.includes('all');
 
   const [members, projects, publications, memos, captures] = await Promise.all([
@@ -343,7 +343,7 @@ async function executeSearchKnowledge(
   ctx: ExecutorContext,
 ): Promise<string> {
   const query = input.query as string;
-  ctx.sendProgress('지식 베이스를 검색하고 있습니다...');
+  ctx.sendProgress(`"${(query || '').slice(0, 30)}" 관련 내용 찾는 중...`);
 
   const results: string[] = [];
 
@@ -389,16 +389,17 @@ async function executeGetEmailBriefing(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('Gmail에서 이메일을 가져오고 있습니다...');
+  const maxResults = input.max_results || 150;
+  const hoursLabel = input.hours_ago ? `최근 ${input.hours_ago}시간` : '최신';
+  ctx.sendProgress(`Gmail ${hoursLabel} 이메일 ${maxResults}개 불러오는 중...`);
 
   const keepaliveId = ctx.stream
     ? setInterval(() => {
-        try { ctx.reply.raw.write(`data: ${JSON.stringify({ type: 'progress', step: '이메일을 처리하고 있습니다...' })}\n\n`); } catch {}
+        try { ctx.reply.raw.write(`data: ${JSON.stringify({ type: 'progress', step: '이메일 분류 중...' })}\n\n`); } catch {}
       }, 12000)
     : null;
 
   try {
-    const maxResults = input.max_results || 150;
     // hours_ago가 지정된 경우 since 파라미터 계산
     let sinceParam = '';
     if (input.hours_ago && typeof input.hours_ago === 'number' && input.hours_ago > 0) {
@@ -452,7 +453,8 @@ async function executeReadEmail(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('이메일함을 확인하고 있습니다...');
+  const readQuery = (input.search_query as string || '').slice(0, 30);
+  ctx.sendProgress(readQuery ? `"${readQuery}" 이메일 검색 중...` : '최근 이메일 확인 중...');
 
   try {
     const searchTerms = input.search_query || '';
@@ -527,7 +529,8 @@ async function executeDraftEmailReply(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('원본 이메일을 확인하고 있습니다...');
+  const replyQuery = (input.search_query as string || '').slice(0, 30);
+  ctx.sendProgress(replyQuery ? `"${replyQuery}" 이메일 찾는 중...` : '답장할 이메일 찾는 중...');
 
   try {
     const searchTerms = input.search_query || '';
@@ -635,7 +638,7 @@ async function executeSendEmail(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('이메일을 작성하고 있습니다...');
+  ctx.sendProgress(`${(input.to as string || '').slice(0, 25)} 에게 이메일 작성 중...`);
 
   try {
     const to = (input.to as string)?.trim();
@@ -690,7 +693,8 @@ async function executeGetCalendar(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('일정을 확인하고 있습니다...');
+  const calStart = (input.start_date as string) || new Date().toLocaleDateString('en-CA');
+  ctx.sendProgress(`${calStart} 일정 확인 중...`);
 
   try {
     const userProfile = await prisma.emailProfile.findUnique({ where: { userId: ctx.userId } });
@@ -812,7 +816,7 @@ async function executeCreateCalendarEvent(
   input: Record<string, any>,
   ctx: ExecutorContext,
 ): Promise<string> {
-  ctx.sendProgress('캘린더에 등록하고 있습니다...');
+  ctx.sendProgress(`"${(input.title as string || '일정').slice(0, 20)}" 캘린더에 등록 중...`);
 
   try {
     const eventData = {
@@ -925,7 +929,7 @@ async function executeSaveLabInfo(
 ): Promise<string> {
   if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
 
-  ctx.sendProgress('연구실 DB에 저장하고 있습니다...');
+  ctx.sendProgress(`"${(input.title as string || '정보').slice(0, 25)}" DB에 저장 중...`);
 
   const title = input.title as string;
   const content = input.content as string;

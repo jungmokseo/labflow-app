@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LabFlow - Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#ffffff",
+                        "background-dark": "#0a0a0a",
+                        "surface-light": "#fafafa",
+                        "surface-dark": "#121212",
+                        "text-light": "#0a0a0a",
+                        "text-dark": "#fafafa",
+                        "muted-light": "#737373",
+                        "muted-dark": "#a3a3a3",
+                        "border-light": "rgba(0, 0, 0, 0.08)",
+                        "border-dark": "rgba(255, 255, 255, 0.05)",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .bg-background { @apply bg-background-light dark:bg-background-dark; }
+            .bg-surface { @apply bg-surface-light dark:bg-surface-dark; }
+            .text-main { @apply text-text-light dark:text-text-dark; }
+            .text-muted { @apply text-muted-light dark:text-muted-dark; }
+            .border-subtle { @apply border-border-light dark:border-border-dark; }
+        }
+    </style>
+</head>
+<body class="bg-background text-main font-display antialiased min-h-screen flex overflow-hidden selection:bg-primary/20">
+<!-- Sidebar Shell -->
+<div class="relative flex h-screen w-full bg-background group/design-root overflow-hidden">
+<!-- Shared SideNavBar -->
+<aside class="flex-shrink-0 w-[260px] flex h-full flex-col bg-surface border-r border-subtle pt-6 pb-4">
+<div class="px-6 flex flex-col gap-1 mb-8">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">science</span>
+<h1 class="text-main text-[14px] font-medium leading-normal tracking-tight">LabFlow</h1>
+</div>
+<p class="text-muted text-[12px] font-normal leading-normal">연구실 AI 에이전트</p>
+</div>
+<nav class="flex flex-col gap-1 px-4 flex-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">psychology</span>
+<span class="text-main text-[14px] font-normal">Brain</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">space_dashboard</span>
+<span class="text-main text-[14px] font-normal">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">check_box</span>
+<span class="text-main text-[14px] font-normal">Tasks &amp; Ideas</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">mic</span>
+<span class="text-main text-[14px] font-normal">Meeting Notes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">auto_stories</span>
+<span class="text-main text-[14px] font-normal">Papers</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-border-light dark:hover:bg-border-dark transition-colors group" href="#">
+<span class="material-symbols-outlined text-muted group-hover:text-main text-[16px]">group</span>
+<span class="text-main text-[14px] font-normal">Lab Profile</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-md bg-primary/10 text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-primary text-[16px]">settings</span>
+<span class="text-primary text-[14px] font-medium">Settings</span>
+</a>
+</nav>
+<div class="px-6 mt-4 mb-6">
+<div class="flex items-center gap-2 text-muted text-[12px]">
+<span class="material-symbols-outlined text-[14px]">search</span>
+<span>검색 또는 이동...</span>
+<span class="ml-auto bg-border-light dark:bg-border-dark px-1.5 py-0.5 rounded text-[10px]">⌘K</span>
+</div>
+</div>
+<div class="px-6 pt-4 border-t border-subtle flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-full bg-border-light dark:bg-border-dark flex items-center justify-center text-[10px] font-medium text-main">
+                        DK
+                    </div>
+<div class="flex flex-col">
+<span class="text-main text-[14px] leading-tight">Dr. Kim</span>
+<span class="text-muted text-[12px] leading-tight">kim@lab.ac.kr</span>
+</div>
+</div>
+<button class="text-muted hover:text-main transition-colors flex items-center justify-center p-1 rounded-md hover:bg-border-light dark:hover:bg-border-dark">
+<span class="material-symbols-outlined text-[16px]">light_mode</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col h-full overflow-y-auto bg-background">
+<div class="w-full max-w-[56rem] mx-auto px-10 py-12 flex flex-col flex-1">
+<!-- Page Header -->
+<header class="mb-10">
+<h2 class="text-main text-2xl font-semibold tracking-tight mb-2">설정</h2>
+<p class="text-muted text-sm">연구실 설정 및 프로필 관리</p>
+</header>
+<!-- Tabs -->
+<div class="flex border-b border-subtle mb-10 gap-8">
+<button class="pb-3 text-sm font-medium text-primary border-b-2 border-primary">시스템 상태</button>
+<button class="pb-3 text-sm font-medium text-muted hover:text-main transition-colors">이메일 분류</button>
+<button class="pb-3 text-sm font-medium text-muted hover:text-main transition-colors">용어 사전</button>
+</div>
+<!-- Tab Content: System Status -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+<!-- API Server -->
+<div class="p-6 rounded-lg bg-surface border border-subtle flex items-start justify-between group hover:border-border-dark transition-colors">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-muted text-[18px]">dns</span>
+<h3 class="text-main text-sm font-medium">API 서버</h3>
+</div>
+<p class="text-muted text-xs mb-4">Railway 클라우드 인프라 상태</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="text-sm font-medium">Railway 정상</span>
+</div>
+</div>
+</div>
+<!-- Gmail -->
+<div class="p-6 rounded-lg bg-surface border border-subtle flex items-start justify-between group hover:border-border-dark transition-colors">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-muted text-[18px]">mail</span>
+<h3 class="text-main text-sm font-medium">Gmail 통합</h3>
+</div>
+<p class="text-muted text-xs mb-4">연구실 대표 이메일 연결 상태</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="text-sm font-medium">연결됨 (lab@university.ac.kr)</span>
+</div>
+</div>
+<button class="text-xs font-medium text-primary hover:underline">재연결</button>
+</div>
+<!-- Lab Profile -->
+<div class="p-6 rounded-lg bg-surface border border-subtle flex items-start justify-between group hover:border-border-dark transition-colors">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-muted text-[18px]">science</span>
+<h3 class="text-main text-sm font-medium">Lab Profile</h3>
+</div>
+<p class="text-muted text-xs mb-4">연구실 기본 정보 및 구성원 설정</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+<span class="text-sm font-medium">미설정 (정보 필요)</span>
+</div>
+</div>
+<button class="text-xs font-medium text-primary hover:underline">설정하기</button>
+</div>
+<!-- AI Assistant -->
+<div class="p-6 rounded-lg bg-surface border border-subtle flex items-start justify-between group hover:border-border-dark transition-colors">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-muted text-[18px]">psychology</span>
+<h3 class="text-main text-sm font-medium">AI Assistant</h3>
+</div>
+<p class="text-muted text-xs mb-4">Brain 에이전트 구동 상태</p>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-blue-500"></span>
+<span class="text-sm font-medium">활성 (모델: Claude 3 Opus)</span>
+</div>
+</div>
+<button class="text-xs font-medium text-primary hover:underline">모델 변경</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

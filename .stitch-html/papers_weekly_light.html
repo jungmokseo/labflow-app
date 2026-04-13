@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Papers - LabFlow</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#2463eb",
+          "background-light": "#ffffff",
+          "background-dark": "#0a0a0a",
+          "surface-light": "#fafafa",
+          "surface-dark": "#121212",
+          "text-light": "#0a0a0a",
+          "text-dark": "#fafafa",
+          "muted-light": "#737373",
+          "muted-dark": "#a3a3a3",
+          "border-light": "rgba(0, 0, 0, 0.08)",
+          "border-dark": "rgba(255, 255, 255, 0.05)",
+        },
+        fontFamily: {
+          "display": ["Inter", "sans-serif"],
+          "body": ["Inter", "sans-serif"]
+        },
+        borderRadius: {
+          "DEFAULT": "0.25rem",
+          "md": "6px",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+      },
+    },
+  }
+</script>
+<style>
+  :root {
+    --color-primary: #2463eb;
+    --color-background: #ffffff;
+    --color-surface: #fafafa;
+    --color-text: #0a0a0a;
+    --color-muted: #737373;
+    --color-border: rgba(0, 0, 0, 0.08);
+  }
+
+  [data-theme="dark"] {
+    --color-primary: #3B82F6;
+    --color-background: #0a0a0a;
+    --color-surface: #121212;
+    --color-text: #fafafa;
+    --color-muted: #a3a3a3;
+    --color-border: rgba(255, 255, 255, 0.05);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-family: 'Inter', sans-serif;
+    transition: background-color 0.2s, color 0.2s;
+  }
+
+  .bg-surface { background-color: var(--color-surface); }
+  .bg-background { background-color: var(--color-background); }
+  .text-text { color: var(--color-text); }
+  .text-muted { color: var(--color-muted); }
+  .border-border { border-color: var(--color-border); }
+  .bg-primary { background-color: var(--color-primary); }
+  .text-primary { color: var(--color-primary); }
+  
+  .nav-item:hover { background-color: var(--color-border); }
+  .nav-item.active { 
+    background-color: rgba(36, 99, 235, 0.08);
+    color: var(--color-primary);
+  }
+  .nav-item.active .material-symbols-outlined { color: var(--color-primary); }
+
+  .paper-row:hover { background-color: var(--color-surface); }
+</style>
+<script>
+  function toggleTheme() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    if (isDark) {
+      html.setAttribute('data-theme', 'light');
+      html.classList.remove('dark');
+    } else {
+      html.setAttribute('data-theme', 'dark');
+      html.classList.add('dark');
+    }
+  }
+  
+  function toggleSettings() {
+    const panel = document.getElementById('settings-panel');
+    panel.classList.toggle('hidden');
+  }
+
+  function togglePaper(id) {
+    const expanded = document.getElementById(`paper-${id}-expanded`);
+    const icon = document.getElementById(`paper-${id}-icon`);
+    
+    if (expanded.classList.contains('hidden')) {
+      expanded.classList.remove('hidden');
+      icon.style.transform = 'rotate(90deg)';
+    } else {
+      expanded.classList.add('hidden');
+      icon.style.transform = 'rotate(0deg)';
+    }
+  }
+</script>
+</head>
+<body class="flex h-screen overflow-hidden text-text bg-background font-body">
+<!-- Sidebar -->
+<aside class="w-[260px] h-full flex flex-col bg-surface border-r border-border shrink-0 flex-none transition-colors duration-200">
+<!-- Header -->
+<div class="px-6 py-6 flex flex-col gap-1">
+<h1 class="text-sm font-semibold text-primary">LabFlow</h1>
+<p class="text-xs text-muted">연구실 AI 에이전트</p>
+</div>
+<!-- Navigation -->
+<nav class="flex-1 px-3 py-2 flex flex-col gap-1 overflow-y-auto">
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">psychology</span>
+        Brain
+      </a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">dashboard</span>
+        Dashboard
+      </a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">check_box</span>
+        Tasks &amp; Ideas
+      </a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">mic</span>
+        Meeting Notes
+      </a>
+<a class="nav-item active flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium" href="#">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">description</span>
+        Papers
+      </a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">person</span>
+        Lab Profile
+      </a>
+<a class="nav-item flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-sm font-medium text-text" href="#">
+<span class="material-symbols-outlined text-[16px] text-muted">settings</span>
+        Settings
+      </a>
+</nav>
+<!-- Search Hint -->
+<div class="px-6 py-4">
+<div class="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-background">
+<span class="text-xs text-muted">검색 또는 이동...</span>
+<span class="text-[10px] font-medium text-muted bg-surface px-1.5 py-0.5 rounded border border-border">⌘K</span>
+</div>
+</div>
+<!-- Footer Profile -->
+<div class="px-6 py-4 flex items-center justify-between border-t border-border bg-surface mt-auto">
+<div class="flex items-center gap-3">
+<div class="w-6 h-6 rounded-md bg-border flex items-center justify-center text-[10px] font-medium text-text">
+          JD
+        </div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-text">John Doe</span>
+<span class="text-xs text-muted">john@lab.edu</span>
+</div>
+</div>
+<button class="p-1 rounded-md text-muted hover:text-text hover:bg-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary" onclick="toggleTheme()">
+<span class="material-symbols-outlined text-[16px]">light_mode</span>
+</button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 h-full overflow-y-auto bg-background transition-colors duration-200">
+<div class="max-w-[56rem] mx-auto px-8 py-10 flex flex-col gap-8">
+<!-- Page Header -->
+<div class="flex items-start justify-between">
+<div class="flex flex-col gap-2">
+<h2 class="text-xl font-semibold text-text">연구동향</h2>
+<p class="text-sm text-muted">12개 저널 모니터링 · 주간 자동 업데이트</p>
+</div>
+<div class="flex items-center gap-2">
+<button aria-label="Upload PDF" class="p-2 rounded-md text-text hover:bg-surface border border-transparent hover:border-border transition-colors flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[20px] text-muted group-hover:text-text">upload_file</span>
+</button>
+<button aria-label="Refresh" class="p-2 rounded-md text-text hover:bg-surface border border-transparent hover:border-border transition-colors flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[20px] text-muted group-hover:text-text">refresh</span>
+</button>
+<button aria-label="Settings" class="p-2 rounded-md text-text hover:bg-surface border border-transparent hover:border-border transition-colors flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-primary" onclick="toggleSettings()">
+<span class="material-symbols-outlined text-[20px] text-muted group-hover:text-text">settings</span>
+</button>
+</div>
+</div>
+<!-- Settings Panel (Collapsible) -->
+<div class="hidden flex flex-col gap-6 p-6 bg-surface rounded-lg border border-border" id="settings-panel">
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-text">모니터링 저널</label>
+<div class="flex flex-wrap gap-2 mb-2">
+<div class="flex items-center gap-1 px-3 py-1 bg-background border border-border rounded-md text-sm text-text">
+<span>Nature</span>
+<button class="text-muted hover:text-text focus:outline-none"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+<div class="flex items-center gap-1 px-3 py-1 bg-background border border-border rounded-md text-sm text-text">
+<span>Science</span>
+<button class="text-muted hover:text-text focus:outline-none"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+<div class="flex items-center gap-1 px-3 py-1 bg-background border border-border rounded-md text-sm text-text">
+<span>Cell</span>
+<button class="text-muted hover:text-text focus:outline-none"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+</div>
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-muted text-[18px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-background border border-border rounded-md text-sm text-text placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" placeholder="저널 검색 및 추가..." type="text"/>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-text">관심 키워드</label>
+<textarea class="w-full max-w-2xl px-4 py-2 bg-background border border-border rounded-md text-sm text-text placeholder-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none" placeholder="LLM, Agentic Workflow, RAG, Knowledge Graph... (쉼표로 구분)" rows="3">LLM, Agentic Workflow, AI alignment</textarea>
+</div>
+<div class="flex justify-end">
+<button class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+            설정 저장
+          </button>
+</div>
+</div>
+<!-- Paper List Group -->
+<div class="flex flex-col gap-4">
+<h3 class="text-sm font-medium text-text pb-2 border-b border-border flex items-center gap-2">
+<span>2026년 4월 1주차 (04.01~04.07)</span>
+<span class="text-xs text-muted bg-surface px-2 py-0.5 rounded-full border border-border">14편</span>
+</h3>
+<div class="flex flex-col gap-1">
+<!-- Item 1 (Expanded) -->
+<div class="flex flex-col border border-border rounded-lg overflow-hidden bg-background">
+<button class="paper-row flex items-start gap-4 p-4 text-left w-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset" onclick="togglePaper(1)">
+<span class="material-symbols-outlined text-muted text-[20px] mt-0.5 transition-transform duration-200" id="paper-1-icon" style="transform: rotate(90deg);">chevron_right</span>
+<div class="flex flex-col gap-1 flex-1">
+<h4 class="text-base font-medium text-text leading-tight pr-4">Self-Reflective Agents for Complex Reasoning Tasks</h4>
+<span class="text-sm text-muted">Nature Machine Intelligence</span>
+</div>
+<div class="flex items-center gap-0.5 text-primary">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+</button>
+<div class="p-4 pt-0 pl-12 bg-background border-t border-border border-opacity-50" id="paper-1-expanded">
+<div class="flex flex-col gap-4 mt-4">
+<a class="text-sm text-primary hover:underline w-fit inline-flex items-center gap-1 font-medium focus:outline-none focus:ring-1 focus:ring-primary rounded" href="#">
+<span class="material-symbols-outlined text-[14px]">link</span>
+                  10.1038/s42256-026-00000-1
+                </a>
+<div class="text-sm text-text leading-relaxed p-4 bg-surface rounded-md border border-border">
+                  이 연구는 복잡한 추론 작업을 수행할 때 자기 반성(self-reflection) 메커니즘을 통합한 새로운 LLM 에이전트 아키텍처를 제안합니다. 실험 결과, 기존의 단일 프롬프트 접근 방식에 비해 수학적 증명 및 코딩 작업에서 정확도가 34% 향상되었습니다. 특히 다단계 논리적 오류를 식별하고 수정하는 과정에서 높은 효율성을 보였습니다.
+                </div>
+<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center gap-2">
+<span class="text-xs text-muted mr-1">매칭 키워드:</span>
+<span class="px-2 py-1 bg-surface border border-border rounded-md text-xs font-medium text-text">LLM</span>
+<span class="px-2 py-1 bg-surface border border-border rounded-md text-xs font-medium text-text">Agentic Workflow</span>
+</div>
+<button class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:opacity-90 transition-opacity flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[16px]">check</span>
+                    확인 완료
+                  </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2 (Collapsed) -->
+<div class="flex flex-col rounded-lg overflow-hidden bg-background">
+<button class="paper-row flex items-start gap-4 p-4 text-left w-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg" onclick="togglePaper(2)">
+<span class="material-symbols-outlined text-muted text-[20px] mt-0.5 transition-transform duration-200" id="paper-2-icon">chevron_right</span>
+<div class="flex flex-col gap-1 flex-1">
+<h4 class="text-base font-medium text-text leading-tight pr-4">Optimizing Retrieval-Augmented Generation for Long-context Windows</h4>
+<span class="text-sm text-muted">arXiv CS.AI</span>
+</div>
+<div class="flex items-center gap-0.5 text-primary opacity-80">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px] text-border">star</span>
+</div>
+</button>
+<div class="hidden p-4 pt-0 pl-12 bg-background border-t border-border border-opacity-50" id="paper-2-expanded">
+<div class="flex flex-col gap-4 mt-4">
+<a class="text-sm text-primary hover:underline w-fit inline-flex items-center gap-1 font-medium focus:outline-none focus:ring-1 focus:ring-primary rounded" href="#">
+<span class="material-symbols-outlined text-[14px]">link</span>
+                  10.48550/arXiv.2604.00123
+                </a>
+<div class="text-sm text-text leading-relaxed p-4 bg-surface rounded-md border border-border">
+                  긴 문맥 창을 가진 모델에서 RAG의 효율성을 최적화하는 방안을 다룹니다.
+                </div>
+<div class="flex items-center justify-between">
+<div class="flex flex-wrap items-center gap-2">
+<span class="text-xs text-muted mr-1">매칭 키워드:</span>
+<span class="px-2 py-1 bg-surface border border-border rounded-md text-xs font-medium text-text">RAG</span>
+</div>
+<button class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:opacity-90 transition-opacity flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+<span class="material-symbols-outlined text-[16px]">check</span>
+                    확인 완료
+                  </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 3 (Collapsed) -->
+<div class="flex flex-col rounded-lg overflow-hidden bg-background">
+<button class="paper-row flex items-start gap-4 p-4 text-left w-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset rounded-lg opacity-60" onclick="togglePaper(3)">
+<span class="material-symbols-outlined text-muted text-[20px] mt-0.5 transition-transform duration-200" id="paper-3-icon">chevron_right</span>
+<div class="flex flex-col gap-1 flex-1">
+<h4 class="text-base font-medium text-text leading-tight pr-4">Knowledge Graphs in Biomedicine: A Comprehensive Survey</h4>
+<span class="text-sm text-muted">Bioinformatics</span>
+</div>
+<div class="flex items-center gap-0.5 text-primary opacity-60">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="material-symbols-outlined text-[16px] text-border">star</span>
+<span class="material-symbols-outlined text-[16px] text-border">star</span>
+</div>
+</button>
+<div class="hidden p-4 pt-0 pl-12 bg-background border-t border-border border-opacity-50" id="paper-3-expanded">
+<div class="flex flex-col gap-4 mt-4">
+<!-- Content omitted for brevity in collapsed state -->
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Previous Week List Group -->
+<div class="flex flex-col gap-4 opacity-75">
+<h3 class="text-sm font-medium text-text pb-2 border-b border-border flex items-center gap-2 mt-4">
+<span>2026년 3월 4주차 (03.25~03.31)</span>
+<span class="text-xs text-muted bg-surface px-2 py-0.5 rounded-full border border-border">8편</span>
+</h3>
+<div class="flex flex-col gap-1">
+<!-- Items would go here -->
+<div class="p-4 text-center text-sm text-muted">
+                이전 주 항목은 접혀있습니다.
+            </div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

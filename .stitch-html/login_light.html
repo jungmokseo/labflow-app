@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LabFlow - 로그인</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "var(--color-primary)",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        :root {
+            --color-primary: #2563EB;
+            --color-background: #FFFFFF;
+            --color-surface: #FAFAFA;
+            --color-text: #0A0A0A;
+            --color-muted: #737373;
+            --color-border: rgba(0, 0, 0, 0.08);
+            --radius-md: 6px;
+        }
+
+        body:has(#theme-toggle:checked) {
+            --color-primary: #3B82F6;
+            --color-background: #0A0A0A;
+            --color-surface: #121212;
+            --color-text: #FAFAFA;
+            --color-muted: #A3A3A3;
+            --color-border: rgba(255, 255, 255, 0.05);
+        }
+
+        body {
+            background-color: var(--color-background);
+            color: var(--color-text);
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .surface-bg { background-color: var(--color-surface); }
+        .border-custom { border-color: var(--color-border); }
+        .text-custom-primary { color: var(--color-primary); }
+        .bg-custom-primary { background-color: var(--color-primary); color: #FFFFFF; }
+        .text-custom-muted { color: var(--color-muted); }
+        .rounded-md-custom { border-radius: var(--radius-md); }
+
+        .input-base {
+            background-color: transparent;
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .input-base:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 1px var(--color-primary);
+        }
+
+        /* Hide light icon when dark is checked, hide dark icon when light is unchecked */
+        #theme-toggle:checked ~ * .light-icon { display: none; }
+        #theme-toggle:not(:checked) ~ * .dark-icon { display: none; }
+        
+        /* Ensure the shared Google button adapts slightly to dark mode if possible without altering structure */
+        body:has(#theme-toggle:checked) .shared-google-btn {
+            background-color: #1A1A1A !important;
+            color: #FAFAFA !important;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        body:has(#theme-toggle:checked) .shared-google-btn div {
+            color: #FAFAFA !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center relative">
+<!-- Functional CSS-only Theme Toggle -->
+<input class="hidden" id="theme-toggle" type="checkbox"/>
+<div class="absolute top-6 right-6">
+<label class="cursor-pointer p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 flex items-center justify-center text-custom-muted transition-colors" for="theme-toggle">
+<span class="material-symbols-outlined light-icon">dark_mode</span>
+<span class="material-symbols-outlined dark-icon">light_mode</span>
+</label>
+</div>
+<!-- Main Container -->
+<main class="w-full max-w-[400px] px-6 flex flex-col items-center">
+<!-- Header -->
+<div class="flex flex-col items-center mb-8">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-custom-primary text-[28px]" style="font-variation-settings: 'FILL' 1;">science</span>
+<h1 class="text-custom-primary text-2xl font-semibold tracking-tight">LabFlow</h1>
+</div>
+<p class="text-custom-muted text-sm font-medium tracking-wide">연구실 AI OS</p>
+</div>
+<!-- Auth Card -->
+<div class="w-full surface-bg border border-custom rounded-md-custom p-8 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+<!-- Shared Component: Google Login Button (Structure Kept Intact) -->
+<button class="shared-google-btn flex w-full cursor-pointer items-center justify-center overflow-hidden h-10 px-4 mb-6 bg-[#f0f1f4] text-[#111318] gap-2 rounded-md-custom text-sm font-semibold leading-normal transition-colors hover:opacity-90">
+<div class="text-[#111318] flex items-center" data-icon="GoogleLogo" data-size="20px" data-weight="regular">
+<svg fill="currentColor" height="20px" viewbox="0 0 256 256" width="20px" xmlns="http://www.w3.org/2000/svg">
+<path d="M224,128a96,96,0,1,1-21.95-61.09,8,8,0,1,1-12.33,10.18A80,80,0,1,0,207.6,136H128a8,8,0,0,1,0-16h88A8,8,0,0,1,224,128Z"></path>
+</svg>
+</div>
+<span class="truncate">Google로 계속하기</span>
+</button>
+<!-- Divider -->
+<div class="relative flex items-center py-2 mb-6">
+<div class="flex-grow border-t border-custom"></div>
+<span class="flex-shrink-0 px-3 text-custom-muted text-xs">또는</span>
+<div class="flex-grow border-t border-custom"></div>
+</div>
+<!-- Form -->
+<form class="flex flex-col gap-4">
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium" for="email">이메일</label>
+<input class="input-base w-full h-10 px-3 rounded-md-custom text-sm" id="email" placeholder="name@lab.ac.kr" required="" type="email"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-medium" for="password">비밀번호</label>
+<input class="input-base w-full h-10 px-3 rounded-md-custom text-sm" id="password" placeholder="••••••••" required="" type="password"/>
+</div>
+<button class="bg-custom-primary w-full h-10 mt-2 rounded-md-custom text-sm font-semibold transition-opacity hover:opacity-90" type="submit">
+                    로그인
+                </button>
+</form>
+<!-- Register Link -->
+<div class="mt-6 text-center">
+<a class="text-sm text-custom-muted hover:text-custom-primary transition-colors" href="#">계정이 없으신가요? 회원가입</a>
+</div>
+</div>
+<!-- Footer Links -->
+<div class="mt-8 text-center">
+<p class="text-xs text-custom-muted flex gap-2 justify-center">
+<a class="hover:underline" href="#">이용약관</a>
+<span>·</span>
+<a class="hover:underline" href="#">개인정보처리방침</a>
+</p>
+</div>
+</main>
+</body></html>
