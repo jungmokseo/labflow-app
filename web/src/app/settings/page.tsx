@@ -71,25 +71,27 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
       <div>
-        <h2 className="text-3xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-6 h-6 text-primary" /> 설정</h2>
-        <p className="text-text-muted text-base mt-1">연구실 설정 및 프로필 관리</p>
+        <h2 className="text-2xl md:text-3xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-primary" /> 설정</h2>
+        <p className="text-text-muted text-sm md:text-base mt-1">연구실 설정 및 프로필 관리</p>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors relative
-              ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
-          >
-            {TAB_ICONS[t.key]} {t.label}
-            {t.badge ? <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">{t.badge}</span> : null}
-          </button>
-        ))}
+      {/* Tab Navigation — 모바일에서 가로 스크롤 */}
+      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+        <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border min-w-max md:min-w-0">
+          {TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex-shrink-0 py-2 px-3 rounded-md text-sm font-medium transition-colors relative whitespace-nowrap
+                ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
+            >
+              {TAB_ICONS[t.key]} {t.label}
+              {t.badge ? <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">{t.badge}</span> : null}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} calendarConnected={calendarConnected} calendarMessage={calendarMessage} lab={lab} />}

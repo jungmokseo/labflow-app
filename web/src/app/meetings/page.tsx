@@ -331,7 +331,7 @@ export default function MeetingsPage() {
         </div>
       )}
 
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
         {/* Header */}
         <div>
           <h2 className="text-3xl font-bold text-text-heading flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
@@ -365,8 +365,11 @@ export default function MeetingsPage() {
                 >
                   <Paperclip className="w-4 h-4" /> 파일 첨부
                 </button>
-                <span className="text-xs text-text-muted">
+                <span className="hidden sm:inline text-xs text-text-muted">
                   드래그 앤 드롭도 가능 (webm, mp3, m4a, wav)
+                </span>
+                <span className="sm:hidden text-xs text-text-muted">
+                  webm, mp3, m4a, wav
                 </span>
               </div>
               <input

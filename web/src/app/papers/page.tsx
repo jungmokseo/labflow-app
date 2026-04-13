@@ -346,7 +346,7 @@ export default function PapersPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -435,7 +435,7 @@ export default function PapersPage() {
             ))}
           </div>
           {expandedField && fieldData[expandedField] && (
-            <div className="bg-bg-input rounded-lg p-4 grid grid-cols-2 gap-1.5">
+            <div className="bg-bg-input rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {fieldData[expandedField].map(j => (
                 <label key={j.name} className={`flex items-center gap-2 text-xs cursor-pointer px-2 py-1.5 rounded hover:bg-bg-hover/30 ${!j.hasRss ? 'opacity-50' : ''}`}>
                   <input type="checkbox" checked={selectedJournals.includes(j.name)} onChange={() => toggleJournal(j.name)} disabled={!j.hasRss} className="accent-primary rounded" />

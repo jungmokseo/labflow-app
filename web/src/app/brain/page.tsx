@@ -847,34 +847,74 @@ export default function BrainPage() {
             <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 relative">
               <div className="max-w-4xl mx-auto space-y-6">
                 {activeMessages.length === 0 && (
-                  <div className="text-center text-text-muted py-8">
-                    <Brain className="w-12 h-12 text-primary/40 mx-auto mb-4" />
-                    <p className="text-lg font-medium text-text-heading">연구실 AI 비서</p>
-                    <p className="text-sm mt-2">무엇이든 물어보세요.</p>
-                    <div className="mt-6 grid grid-cols-2 gap-3 max-w-md mx-auto">
-                      {['이메일 브리핑 해줘', '오늘 일정 뭐야?', '이거 메모해줘: 내일 장비 예약', '학생 명단 보여줘'].map(q => (
-                        <button key={q} onClick={() => setInput(q)} className="px-4 py-2.5 bg-bg-input rounded-lg text-sm text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors">
-                          {q}
-                        </button>
+                  <div className="text-text-muted py-6 max-w-lg mx-auto w-full">
+                    <div className="text-center mb-6">
+                      <Brain className="w-10 h-10 text-primary/40 mx-auto mb-3" />
+                      <p className="text-base font-semibold text-text-heading">연구실 AI 비서</p>
+                      <p className="text-xs mt-1 text-text-muted">자연어로 지시하면 이메일·일정·연구실 정보를 처리합니다</p>
+                    </div>
+
+                    {/* 기능 카테고리 힌트 */}
+                    <div className="space-y-2">
+                      {[
+                        {
+                          icon: '📧',
+                          label: '이메일 & 일정',
+                          examples: ['지난 12시간 이메일 브리핑 해줘', '오늘 일정 알려줘', '김철수 교수 메일 초안 작성해줘'],
+                        },
+                        {
+                          icon: '🔬',
+                          label: '연구실 정보 조회',
+                          examples: ['진행 중인 과제 알려줘', '이번 주 회의 요약해줘', '최근 논문 동향 알려줘'],
+                        },
+                        {
+                          icon: '📝',
+                          label: '빠른 메모 & 할일',
+                          examples: ['내일 9시 장비 예약 메모해줘', '아이디어: 새 센서 방향 저장', '이번 주 제출 마감 태스크 추가'],
+                        },
+                        {
+                          icon: '⚙️',
+                          label: '설정 변경 — "기억해줘"',
+                          examples: ['내 이름 언급 이메일 중요도 높여줘. 기억해줘', '브리핑에서 광고 섹션 빼줘. 기억해줘', '앞으로 답변 짧게 해줘. 기억해줘'],
+                        },
+                      ].map(cat => (
+                        <div key={cat.label} className="bg-bg-input rounded-xl p-3">
+                          <p className="text-xs font-semibold text-text-heading mb-2">{cat.icon} {cat.label}</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {cat.examples.map(q => (
+                              <button
+                                key={q}
+                                onClick={() => setInput(q)}
+                                className="px-2.5 py-1.5 bg-bg-card rounded-lg text-xs text-text-muted hover:text-primary hover:bg-primary/5 border border-border/50 hover:border-primary/30 transition-all"
+                              >
+                                {q}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
 
-                    {/* 지난 대화 목록 (모바일+데스크톱 공통) */}
+                    <p className="text-center text-[11px] text-text-muted mt-4 opacity-70">
+                      예시를 클릭하거나 직접 입력하세요
+                    </p>
+
+                    {/* 지난 대화 목록 */}
                     {sessions.length > 0 && (
-                      <div className="mt-10 text-left max-w-md mx-auto">
-                        <h4 className="text-sm font-medium text-text-muted mb-3 px-1">지난 대화</h4>
-                        <div className="space-y-1">
-                          {sessions.slice(0, 10).map((ch: any) => (
+                      <div className="mt-6 text-left">
+                        <h4 className="text-xs font-medium text-text-muted mb-2 px-1">지난 대화</h4>
+                        <div className="space-y-0.5">
+                          {sessions.slice(0, 8).map((ch: any) => (
                             <button
                               key={ch.id}
                               onClick={() => loadMessages(ch.id)}
-                              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
                                 activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
                               }`}
                             >
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between gap-2">
                                 <span className="truncate flex-1">{ch.name || `대화 #${ch.id.slice(-4)}`}</span>
-                                <span className="text-xs text-text-muted ml-2 flex-shrink-0">{timeAgo(ch.lastMessageAt || ch.createdAt)}</span>
+                                <span className="text-[10px] text-text-muted flex-shrink-0">{timeAgo(ch.lastMessageAt || ch.createdAt)}</span>
                               </div>
                             </button>
                           ))}
