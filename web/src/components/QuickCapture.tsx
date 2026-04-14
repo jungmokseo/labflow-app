@@ -86,22 +86,23 @@ export function QuickCapture() {
     }
   }
 
-  // Brain 페이지에서는 FAB 위치 조정 불필요 — 항상 오른쪽 하단
-  const isBrainPage = pathname.startsWith('/brain');
+  // Brain / Tasks 페이지는 자체 입력 UI가 있으므로 FAB 미표시
+  const hideFab = pathname.startsWith('/brain') || pathname.startsWith('/tasks');
 
   return (
     <>
-      {/* ── FAB 버튼 ── */}
-      <button
-        onClick={() => setOpen(true)}
-        className={`fixed z-40 w-12 h-12 rounded-full bg-primary text-white shadow-lg flex items-center justify-center
-          hover:bg-primary/90 active:scale-95 transition-all duration-150
-          ${isBrainPage ? 'bottom-24 right-4 md:bottom-6' : 'bottom-6 right-4'}`}
-        aria-label="빠른 캡처 (Cmd+Shift+N)"
-        title="빠른 캡처 (Cmd+Shift+N)"
-      >
-        <Plus className="w-5 h-5" />
-      </button>
+      {/* ── FAB 버튼 — Brain·Tasks 페이지 제외 ── */}
+      {!hideFab && (
+        <button
+          onClick={() => setOpen(true)}
+          className="fixed z-40 bottom-6 right-4 w-12 h-12 rounded-full bg-primary text-white shadow-lg flex items-center justify-center
+            hover:bg-primary/90 active:scale-95 transition-all duration-150"
+          aria-label="빠른 캡처 (Cmd+Shift+N)"
+          title="빠른 캡처 (Cmd+Shift+N)"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+      )}
 
       {/* ── 바텀 시트 오버레이 ── */}
       {open && (

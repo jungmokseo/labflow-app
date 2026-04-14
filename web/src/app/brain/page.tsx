@@ -930,6 +930,9 @@ export default function BrainPage() {
   }
 
   function handleTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    // 모바일: Enter = 줄바꿈 (전송은 버튼으로만 — Gemini/Claude 방식)
+    if (window.innerWidth < 768) return;
+    // 데스크톱: Enter = 전송, Shift+Enter = 줄바꿈
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
@@ -1359,14 +1362,16 @@ export default function BrainPage() {
                           {input.length.toLocaleString()}자
                         </span>
                       )}
+                      {/* 데스크톱: Shift+Enter 줄바꿈 / 모바일: Enter 줄바꿈 */}
                       <span className="text-xs text-text-muted/50 hidden sm:inline">Shift+Enter 줄바꿈</span>
+                      <span className="text-xs text-text-muted/50 sm:hidden">Enter 줄바꿈</span>
                       <button
                         onClick={() => handleSend()}
                         disabled={!input.trim() || !!queuedInput || attachedFiles.some(f => f.status === 'uploading')}
-                        className="p-2 bg-primary text-white rounded-lg disabled:opacity-30 hover:bg-primary/90 transition-colors"
+                        className="p-2.5 sm:p-2 bg-primary text-white rounded-xl sm:rounded-lg disabled:opacity-30 hover:bg-primary/90 active:scale-95 transition-all"
                         title={loading ? "완료 후 자동 전송" : "전송"}
                       >
-                        <Send className="w-4 h-4" />
+                        <Send className="w-5 h-5 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   </div>
