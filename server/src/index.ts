@@ -27,6 +27,7 @@ import { calendarRoutes } from './routes/calendar.js';
 import { errorRoutes } from './routes/errors.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
+import { syncAllGdriveData } from './services/gdrive-sync.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -104,6 +105,33 @@ async function start() {
       // 논문 알림 cron + 세션 아카이브
       startPaperAlertCron();
       setInterval(() => archiveOldSessions().catch((err) => console.error('[background] archiveOldSessions:', err.message || err)), 24 * 60 * 60 * 1000);
+
+      // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)
+      if (env.LAB_ID && env.GOOGLE_REFRESH_TOKEN && (env.GDRIVE_FILE_ACCOUNTS || env.GDRIVE_FILE_PROJECT_INFO || env.GDRIVE_FILE_ACKNOWLEDGMENT || env.GDRIVE_FILE_MEMBER_INFO)) {
+        // 서버 시작 10초 후 1회 동기화
+        setTimeout(async () => {
+          try {
+            console.log('[gdrive-cron] 시작 동기화 실행...');
+            await syncAllGdriveData(env.LAB_ID!);
+            console.log('[gdrive-cron] 시작 동기화 완료');
+          } catch (e: any) {
+            console.error('[gdrive-cron] 시작 동기화 실패:', e.message);
+          }
+        }, 10000);
+
+        // 매 24시간마다 동기화
+        setInterval(async () => {
+          try {
+            console.log('[gdrive-cron] 정기 동기화 실행...');
+            await syncAllGdriveData(env.LAB_ID!);
+            console.log('[gdrive-cron] 정기 동기화 완료');
+          } catch (e: any) {
+            console.error('[gdrive-cron] 정기 동기화 실패:', e.message);
+          }
+        }, 24 * 60 * 60 * 1000);
+
+        console.log('[gdrive-cron] GDrive 자동 동기화 예약됨 (24시간 주기)');
+      }
 
       console.log(`
       ╔═══════════════════════════════════════════════╗

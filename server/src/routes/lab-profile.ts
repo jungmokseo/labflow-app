@@ -34,7 +34,7 @@ import { analyzeSeedPaper, analyzeSeedPapers, type SeedPaperResult } from '../se
 import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
 import { logError } from '../services/error-logger.js';
 import { deduplicateKeywords } from '../lib/consolidate.js';
-import { syncLabAccounts, resetAuthCache } from '../services/gdrive-sync.js';
+import { syncAllGdriveData, syncLabAccounts, resetAuthCache } from '../services/gdrive-sync.js';
 
 // ── Zod Schemas ─────────────────────────────────────
 const createLabSchema = z.object({
@@ -807,19 +807,22 @@ ${combinedText.slice(0, 50000)}
 
   // ── GDrive 동기화 ──────────────────────────────────────────────
 
-  // POST /api/lab/sync/gdrive — 계정 정보 동기화
+  // POST /api/lab/sync/gdrive — GDrive 전체 동기화 (과제정보 + 사사 + 인적사항 + 계정)
   app.post('/api/lab/sync/gdrive', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
     const lab = await requireLab(request.userId!, reply);
     if (!lab) return;
 
-    if (!env.GDRIVE_FILE_ACCOUNTS) {
-      return reply.code(400).send({ error: 'GDRIVE_FILE_ACCOUNTS 환경변수가 설정되지 않았습니다.' });
-    }
-
     try {
       resetAuthCache();
-      const count = await syncLabAccounts(lab.id);
-      return { success: true, synced: count, message: `계정 정보 ${count}건 동기화 완료` };
+      const results = await syncAllGdriveData(lab.id);
+      const totalRows = results.reduce((sum, r) => sum + r.rows, 0);
+      const errors = results.filter(r => r.status === 'error');
+      return {
+        success: errors.length === 0,
+        results,
+        totalRows,
+        message: `GDrive 동기화 완료: ${totalRows}건 (${results.length}개 파일)`,
+      };
     } catch (e: any) {
       logError('brain', 'GDrive 동기화 실패', { userId: request.userId })(e);
       return reply.code(500).send({ error: e.message || 'GDrive 동기화 실패' });

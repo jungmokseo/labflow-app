@@ -284,6 +284,8 @@ model Lab {
   paperAlerts     PaperAlert[]
   captures        Capture[]
   accounts        LabAccount[]
+  acknowledgments Acknowledgment[]
+  memberInfos     MemberInfo[]
 
   @@map("labs")
 }
@@ -325,27 +327,36 @@ enum LabPermission {
 
 // ── 연구 프로젝트 ────────────────────────────────────────
 model Project {
-  id              String    @id @default(cuid())
-  labId           String    @map("lab_id")
-  name            String
-  number          String?
-  funder          String?
-  period          String?
-  pi              String?
-  pm              String?
-  acknowledgment  String?
-  status          String    @default("active")
-  confidence      Float     @default(1.0)
-  metadata        Json?     @default("{}")
-  accessCount     Int       @default(0) @map("access_count")
-  lastVerified    DateTime? @map("last_verified")
-  lastAccessed    DateTime? @map("last_accessed")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id               String    @id @default(cuid())
+  labId            String    @map("lab_id")
+  name             String
+  number           String?
+  funder           String?
+  period           String?
+  pi               String?
+  pm               String?
+  acknowledgment   String?
+  status           String    @default("active")
+  confidence       Float     @default(1.0)
+  metadata         Json?     @default("{}")
+  accessCount      Int       @default(0) @map("access_count")
+  lastVerified     DateTime? @map("last_verified")
+  lastAccessed     DateTime? @map("last_accessed")
+  gdriveRowIndex   Int?      @map("gdrive_row_index")
+  syncedAt         DateTime? @map("synced_at")
+  shortName        String?   @map("short_name")
+  businessName     String?   @map("business_name")
+  ministry         String?
+  responsibility   String?
+  acknowledgmentKo String?   @map("acknowledgment_ko")
+  acknowledgmentEn String?   @map("acknowledgment_en")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   lab             Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
   grantedPapers   PublicationGrant[]                // 이 과제를 사사한 논문들
 
+  @@unique([labId, name])
   @@index([labId])
   @@map("projects")
 }
@@ -579,6 +590,71 @@ model LabAccount {
 
   @@index([labId])
   @@map("lab_accounts")
+}
+
+// ── 과제 사사 (GDrive 동기화) ──────────────────────────────
+model Acknowledgment {
+  id                   String    @id @default(cuid())
+  labId                String    @map("lab_id")
+  type                 String?                       // 논문, 특허, 학회
+  paperTitle           String    @map("paper_title")
+  authors              String?
+  journal              String?
+  publishedAt          String?   @map("published_at")
+  patentNumber         String?   @map("patent_number")
+  acknowledgedProjects String?   @map("acknowledged_projects") // JSON array
+  gdriveRowIndex       Int?      @map("gdrive_row_index")
+  syncedAt             DateTime? @map("synced_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  lab                  Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, type])
+  @@map("acknowledgments")
+}
+
+// ── 연구실 인적사항 (GDrive 동기화) ──────────────────────────
+model MemberInfo {
+  id             String    @id @default(cuid())
+  labId          String    @map("lab_id")
+  name           String
+  studentId      String?   @map("student_id")
+  researcherId   String?   @map("researcher_id")
+  department     String?
+  degree         String?
+  email          String?
+  phone          String?
+  joinYear       Int?      @map("join_year")
+  graduationYear Int?      @map("graduation_year")
+  bankName       String?   @map("bank_name")
+  accountNumber  String?   @map("account_number")
+  gdriveRowIndex Int?      @map("gdrive_row_index")
+  syncedAt       DateTime? @map("synced_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  lab            Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, name])
+  @@index([labId])
+  @@map("member_infos")
+}
+
+// ── GDrive 동기화 로그 ──────────────────────────────────────
+model GdriveSyncLog {
+  id        String   @id @default(cuid())
+  labId     String   @map("lab_id")
+  fileId    String   @map("file_id")
+  fileName  String   @map("file_name")
+  dataType  String   @map("data_type")
+  rowsSync  Int      @default(0) @map("rows_sync")
+  status    String
+  errorMsg  String?  @map("error_msg")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([labId, createdAt(sort: Desc)])
+  @@map("gdrive_sync_logs")
 }
 
 // ── 에러 로그 (운영 모니터링) ────────────────────────────

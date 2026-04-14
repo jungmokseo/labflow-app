@@ -101,7 +101,7 @@ async function executeSearchLabData(
   ctx.sendProgress(`"${(query || '').slice(0, 30)}" ${typeLabel} 검색 중...`);
   const searchAll = types.includes('all');
 
-  const [members, projects, publications, memos, captures] = await Promise.all([
+  const [members, projects, publications, memos, captures, acknowledgments, memberInfos] = await Promise.all([
     (searchAll || types.includes('member'))
       ? prisma.labMember.findMany({ where: { labId: ctx.labId, active: true } })
       : Promise.resolve([]),
@@ -128,6 +128,12 @@ async function executeSearchLabData(
           orderBy: { createdAt: 'desc' },
           take: 30,
         })
+      : Promise.resolve([]),
+    (searchAll || types.includes('acknowledgment'))
+      ? prisma.acknowledgment.findMany({ where: { labId: ctx.labId }, orderBy: { syncedAt: 'desc' } })
+      : Promise.resolve([]),
+    (searchAll || types.includes('memberinfo'))
+      ? prisma.memberInfo.findMany({ where: { labId: ctx.labId } })
       : Promise.resolve([]),
   ]);
 
@@ -218,18 +224,50 @@ async function executeSearchLabData(
     }
   }
 
-  // 사사 문구
+  // 사사 문구 (Project 필드 기반)
   if (queryLower.includes('사사') || queryLower.includes('acknowledgment')) {
-    const projsWithAck = projects.filter(p => p.acknowledgment);
-    if (projsWithAck.length > 0) {
-      results.push('[사사 문구]\n' + projsWithAck.map(p =>
-        `- **${p.name}**: ${p.acknowledgment}`
-      ).join('\n'));
+    // Project의 acknowledgmentKo/En 필드 우선
+    const projsWithAckKo = projects.filter((p: any) => (p as any).acknowledgmentKo || (p as any).acknowledgmentEn);
+    if (projsWithAckKo.length > 0) {
+      results.push('[사사 문구]\n' + projsWithAckKo.map((p: any) => {
+        const lines = [`- **${p.name}**`];
+        if ((p as any).acknowledgmentKo) lines.push(`  국문: ${(p as any).acknowledgmentKo}`);
+        if ((p as any).acknowledgmentEn) lines.push(`  영문: ${(p as any).acknowledgmentEn}`);
+        return lines.join('\n');
+      }).join('\n'));
     } else {
-      const lab = await prisma.lab.findUnique({ where: { id: ctx.labId } });
-      if (lab?.acknowledgment) {
-        results.push(`[연구실 기본 사사 문구]\n"${lab.acknowledgment}"`);
+      const projsWithAck = projects.filter((p: any) => (p as any).acknowledgment);
+      if (projsWithAck.length > 0) {
+        results.push('[사사 문구]\n' + projsWithAck.map((p: any) =>
+          `- **${p.name}**: ${(p as any).acknowledgment}`
+        ).join('\n'));
+      } else {
+        const lab = await prisma.lab.findUnique({ where: { id: ctx.labId } });
+        if (lab?.acknowledgment) {
+          results.push(`[연구실 기본 사사 문구]\n"${lab.acknowledgment}"`);
+        }
       }
+    }
+  }
+
+  // 과제 사사 목록 (Acknowledgment 테이블 — 논문/특허/학회별 사사 기록)
+  if (acknowledgments.length > 0) {
+    const isSasaAck = queryLower.includes('사사') || queryLower.includes('acknowledgment');
+    const matched = (acknowledgments as any[]).filter((a: any) =>
+      words.some(w =>
+        fuzzy(a.paperTitle, w) ||
+        (a.authors && fuzzy(a.authors, w)) ||
+        (a.journal && fuzzy(a.journal, w)) ||
+        (a.acknowledgedProjects && fuzzy(a.acknowledgedProjects, w))
+      )
+    );
+    if (matched.length > 0) {
+      results.push('[사사 기록]\n' + matched.slice(0, 10).map((a: any) => {
+        const projs = a.acknowledgedProjects ? (() => { try { return JSON.parse(a.acknowledgedProjects).join(', '); } catch { return a.acknowledgedProjects; } })() : '';
+        return `- **${a.paperTitle}** [${a.type || '?'}]\n  저자: ${a.authors || '미등록'}  저널: ${a.journal || '미등록'}${projs ? `\n  사사과제: ${projs}` : ''}`;
+      }).join('\n'));
+    } else if (isSasaAck && acknowledgments.length > 0) {
+      results.push(`[사사 기록] 총 ${acknowledgments.length}건 (논문/특허/학회)`);
     }
   }
 
@@ -317,6 +355,32 @@ async function executeSearchLabData(
       results.push('[캡처]\n' + matched.slice(0, 5).map((c: any) =>
         `- [${c.category}] ${c.summary || c.content.substring(0, 100)}${c.tags?.length ? `\n  태그: ${c.tags.join(', ')}` : ''}`
       ).join('\n'));
+    }
+  }
+
+  // 인적사항 (MemberInfo 테이블 — GDrive 동기화 기반)
+  if ((memberInfos as any[]).length > 0) {
+    const isPersonalQuery = queryLower.includes('학번') || queryLower.includes('계좌') || queryLower.includes('은행') || queryLower.includes('연구자번호') || queryLower.includes('인적사항');
+    const matched = (memberInfos as any[]).filter((m: any) =>
+      words.some(w =>
+        fuzzy(m.name, w) ||
+        (m.studentId && fuzzy(m.studentId, w)) ||
+        (m.researcherId && fuzzy(m.researcherId, w)) ||
+        (m.email && fuzzy(m.email, w))
+      )
+    );
+    if (matched.length > 0) {
+      results.push('[인적사항]\n' + matched.slice(0, 10).map((m: any) => {
+        const lines = [`- **${m.name}** (${m.degree || '?'}) ${m.joinYear ? `${m.joinYear}년 입학` : ''}`];
+        if (m.studentId) lines.push(`  학번: ${m.studentId}`);
+        if (m.researcherId) lines.push(`  연구자번호: ${m.researcherId}`);
+        if (m.email) lines.push(`  이메일: ${m.email}`);
+        if (m.phone) lines.push(`  연락처: ${m.phone}`);
+        if (isPersonalQuery && m.bankName) lines.push(`  은행: ${m.bankName} / 계좌: ${m.accountNumber || '미등록'}`);
+        return lines.join('\n');
+      }).join('\n'));
+    } else if (isPersonalQuery) {
+      results.push(`[인적사항] 총 ${(memberInfos as any[]).length}명 등록됨`);
     }
   }
 
