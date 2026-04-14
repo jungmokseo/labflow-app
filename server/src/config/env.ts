@@ -13,7 +13,9 @@ const envSchema = z.object({
   TOKEN_ENCRYPTION_KEY: z.string().optional(), // AES-256 for OAuth token encryption
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_REFRESH_TOKEN: z.string().optional(), // GDrive 동기화용 고정 토큰 (PI 계정)
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),
+  GDRIVE_FILE_ACCOUNTS: z.string().optional(), // BLISS 아이디/비밀번호 스프레드시트 ID
   FRONTEND_URL: z.string().default('https://labflow-web.vercel.app'), // Vercel 프로젝트: labflow-web
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default('0.0.0.0'),

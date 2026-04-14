@@ -9,6 +9,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 export type ToolName =
   | 'search_lab_data'
   | 'search_knowledge'
+  | 'get_account_info'
   | 'get_email_briefing'
   | 'read_email'
   | 'draft_email_reply'
@@ -59,6 +60,24 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: ['query'],
+    },
+  },
+  {
+    name: 'get_account_info',
+    description: 'GDrive에서 동기화된 연구실 계정 정보를 조회합니다. 저널 계정, 학회 계정, 학교 시스템 계정 등 아이디/비밀번호 정보를 포함합니다.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: '검색할 서비스명 또는 키워드 (예: "nature communications", "elsevier", "학교 계정")',
+        },
+        category: {
+          type: 'string',
+          description: '분류 필터 (시트탭명, 예: "저널", "학회", "학교")',
+        },
+      },
+      required: [],
     },
   },
   {

@@ -46,6 +46,8 @@ export async function executeToolCall(
       return executeSearchLabData(input, ctx);
     case 'search_knowledge':
       return executeSearchKnowledge(input, ctx);
+    case 'get_account_info':
+      return executeGetAccountInfo(input, ctx);
     case 'get_email_briefing':
       return executeGetEmailBriefing(input, ctx);
     case 'read_email':
@@ -381,6 +383,54 @@ async function executeSearchKnowledge(
   return results.length > 0
     ? results.join('\n\n')
     : '관련 지식 데이터를 찾지 못했습니다.';
+}
+
+// ── get_account_info ─────────────────────────────────
+
+async function executeGetAccountInfo(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+  ctx.sendProgress('계정 정보 조회 중...');
+
+  const accounts = await prisma.labAccount.findMany({ where: { labId: ctx.labId } });
+
+  if (accounts.length === 0) {
+    return '등록된 계정 정보가 없습니다. GDrive 동기화(/api/lab/sync/gdrive)를 먼저 실행하세요.';
+  }
+
+  let list = accounts;
+
+  // 카테고리 필터 (service 앞부분 [저널], [학회], [기타])
+  if (input.category) {
+    const cat = (input.category as string).replace(/[\[\]]/g, '');
+    list = list.filter(a => a.service.includes(`[${cat}]`));
+  }
+
+  // 키워드 필터
+  if (input.query) {
+    const q = (input.query as string).toLowerCase();
+    list = list.filter(
+      a =>
+        a.service.toLowerCase().includes(q) ||
+        (a.url || '').toLowerCase().includes(q) ||
+        (a.username || '').toLowerCase().includes(q) ||
+        (a.notes || '').toLowerCase().includes(q),
+    );
+  }
+
+  if (list.length === 0) {
+    return `"${input.query || input.category}"에 해당하는 계정을 찾지 못했습니다.`;
+  }
+
+  return `[계정 정보] ${list.length}건\n` +
+    list
+      .map(
+        a =>
+          `• ${a.service}\n  URL: ${a.url || '-'} | 아이디: ${a.username || '-'} | 비밀번호: ${a.passwordEnc || '-'}${a.notes ? ` | 메모: ${a.notes}` : ''}`,
+      )
+      .join('\n');
 }
 
 // ── get_email_briefing ───────────────────────────────

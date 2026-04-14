@@ -283,6 +283,7 @@ model Lab {
   memos           Memo[]
   paperAlerts     PaperAlert[]
   captures        Capture[]
+  accounts        LabAccount[]
 
   @@map("labs")
 }
@@ -555,6 +556,29 @@ model ChannelSummary {
   @@index([userId])
   @@index([channelId, createdAt(sort: Desc)])
   @@map("channel_summaries")
+}
+
+// ── 계정 정보 (GDrive 동기화) ────────────────────────────
+model LabAccount {
+  id    String @id @default(cuid())
+  labId String @map("lab_id")
+
+  service     String
+  url         String?
+  username    String?
+  passwordEnc String?   @map("password_enc")
+  notes       String?
+
+  gdriveRowIndex Int?      @map("gdrive_row_index")
+  syncedAt       DateTime? @map("synced_at")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  lab  Lab @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId])
+  @@map("lab_accounts")
 }
 
 // ── 에러 로그 (운영 모니터링) ────────────────────────────
