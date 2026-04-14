@@ -85,16 +85,19 @@ export default function WikiPage() {
   const loadArticles = useCallback(async () => {
     setLoading(true);
     try {
-      const [articlesRes, statusRes] = await Promise.all([
-        getWikiArticles({ category: categoryFilter || undefined, limit: 200 }),
-        getWikiStatus(),
-      ]);
+      const articlesRes = await getWikiArticles({ category: categoryFilter || undefined, limit: 200 });
       setArticles(articlesRes.articles ?? []);
-      setStatus(statusRes as WikiStatus);
-    } catch {
-      showToast('아티클 로드 실패', 'err');
+    } catch (err: any) {
+      showToast('아티클 로드 실패: ' + (err?.message ?? '알 수 없는 오류'), 'err');
     } finally {
       setLoading(false);
+    }
+    // status는 아티클 로드와 독립적으로 처리
+    try {
+      const statusRes = await getWikiStatus();
+      setStatus(statusRes as WikiStatus);
+    } catch {
+      // status 실패는 무시 (아티클은 이미 로드됨)
     }
   }, [categoryFilter]);
 
