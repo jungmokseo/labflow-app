@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { mutate as globalMutate } from 'swr';
 import {
   getCaptures, createCapture, updateCapture, deleteCapture, deleteCompletedCaptures,
   type Capture,
@@ -116,12 +117,15 @@ export default function TasksPage() {
       inputRef.current.focus(); // 연속 입력을 위해 즉시 포커스 유지
     }
     // API 호출은 백그라운드 — 입력창은 즉시 비워서 연속 입력 가능
-    createCapture(inputText).then(res => {
+    // 현재 탭의 카테고리를 명시 전달 (AI 재분류로 다른 탭에 뜨는 문제 방지)
+    createCapture(inputText, tab !== 'all' ? tab : undefined).then(res => {
       if (res.data) {
         refreshActive((prev: any) => prev ? { ...prev, data: [res.data, ...(prev.data || [])] } : prev, { revalidate: false });
       }
-      // 1초 후 서버와 동기화 (연속 입력이 끝난 뒤 최종 상태 확인)
-      setTimeout(() => refreshActive(), 1000);
+      // 1초 후 서버와 동기화 — 모든 탭 캐시 갱신
+      setTimeout(() => {
+        globalMutate((key: any) => typeof key === 'string' && key.startsWith('captures-'));
+      }, 1000);
     }).catch((err: any) => {
       setError(err.message);
       toast('저장 실패: ' + inputText.slice(0, 20), 'error');
@@ -189,8 +193,10 @@ export default function TasksPage() {
     try {
       await updateCapture(c.id, { content: updatedContent, summary: updatedSummary });
       toast('수정됨', 'success');
-      // 서버 응답으로 최신 상태 동기화 (AI 재분류 결과 반영)
-      setTimeout(() => { refreshActive(); refreshCompleted(); }, 1500);
+      // 서버 응답으로 최신 상태 동기화 (AI 재분류 결과 반영) — 모든 탭 캐시 갱신
+      setTimeout(() => {
+        globalMutate((key: any) => typeof key === 'string' && key.startsWith('captures-'));
+      }, 1500);
     } catch {
       refreshActive();
       refreshCompleted();

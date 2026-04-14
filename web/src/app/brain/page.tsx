@@ -403,7 +403,7 @@ export default function BrainPage() {
       const recovered = await pollForAssistantMessage(
         pollChannelId,
         pending.sentAt,
-        (n) => !cancelled && setThinkingSteps([`백그라운드 결과를 가져오고 있습니다... (${n}회 시도)`]),
+        () => !cancelled && setThinkingSteps(['백그라운드 결과를 확인하고 있습니다...']),
         2 * 60 * 1000, // 복구 시 2분만 시도
       );
 
@@ -700,7 +700,7 @@ export default function BrainPage() {
         const recovered = await pollForAssistantMessage(
           pollChannelId,
           sentAtIso,
-          (n) => setThinkingSteps([`백그라운드에서 결과를 가져오고 있습니다... (${n}회 시도)`]),
+          () => setThinkingSteps(['백그라운드 결과를 확인하고 있습니다...']),
         );
 
         setRecovering(false);
@@ -1053,7 +1053,7 @@ export default function BrainPage() {
             )}
 
             {/* Messages area — Claude-style */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 relative">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4">
               <div className="max-w-4xl mx-auto space-y-6">
                 {activeMessages.length === 0 && (
                   <div className="text-text-muted py-6 max-w-lg mx-auto w-full">
@@ -1241,18 +1241,18 @@ export default function BrainPage() {
                 )}
                 <div ref={messagesEndRef} />
               </div>
-
-              {/* Scroll to bottom button */}
-              {showScrollDown && (
-                <button
-                  onClick={scrollToBottom}
-                  className="absolute bottom-4 left-1/2 -translate-x-1/2 p-2 rounded-full bg-bg-card border border-border shadow-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-all"
-                  title="아래로 스크롤"
-                >
-                  <ArrowDown className="w-4 h-4" />
-                </button>
-              )}
             </div>
+
+            {/* Scroll to bottom button — fixed above input area */}
+            {showScrollDown && (
+              <button
+                onClick={scrollToBottom}
+                className="fixed bottom-36 left-1/2 -translate-x-1/2 z-10 p-2 rounded-full bg-bg-card border border-border shadow-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-all"
+                title="아래로 스크롤"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Stop generating button */}
             {loading && (
