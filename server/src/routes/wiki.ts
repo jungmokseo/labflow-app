@@ -136,6 +136,39 @@ export async function wikiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── PUT /api/wiki/:id — 아티클 수정 (OWNER만) ───────────
+  app.put(
+    '/api/wiki/:id',
+    { preHandler: requirePermission('OWNER') },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const labId = request.labId;
+      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+
+      const { id } = request.params as { id: string };
+      const body = request.body as { title?: string; category?: string; content?: string; tags?: string[] };
+
+      try {
+        const article = await prisma.wikiArticle.findFirst({ where: { id, labId } });
+        if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
+
+        const updated = await prisma.wikiArticle.update({
+          where: { id },
+          data: {
+            ...(body.title !== undefined ? { title: body.title } : {}),
+            ...(body.category !== undefined ? { category: body.category } : {}),
+            ...(body.content !== undefined ? { content: body.content } : {}),
+            ...(body.tags !== undefined ? { tags: body.tags } : {}),
+            version: { increment: 1 },
+          },
+        });
+        return reply.send(updated);
+      } catch (err) {
+        logError('background', 'PUT /api/wiki/:id 실패', { labId })(err);
+        return reply.code(500).send({ error: '아티클 수정 실패' });
+      }
+    },
+  );
+
   // ── DELETE /api/wiki/:id — 아티클 삭제 (OWNER만) ─────────
   app.delete(
     '/api/wiki/:id',

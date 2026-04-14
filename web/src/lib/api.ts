@@ -1044,3 +1044,57 @@ export async function resolveAllErrors(category?: string) {
 export async function cleanupOldErrors() {
   return apiFetch<{ success: boolean; deletedCount: number }>('/api/errors/cleanup', { method: 'DELETE' });
 }
+
+// ── Wiki ──────────────────────────────────────────────────
+export interface WikiArticle {
+  id: string;
+  title: string;
+  category: string;
+  content: string;
+  tags: string[];
+  sources: Array<{ type: string; id: string; date?: string }>;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WikiStatus {
+  totalArticles: number;
+  categoryDistribution: Record<string, number>;
+  pendingQueueItems: number;
+  lastIngestAt: string | null;
+}
+
+export async function getWikiArticles(params?: { category?: string; limit?: number }) {
+  const q = new URLSearchParams();
+  if (params?.category) q.set('category', params.category);
+  if (params?.limit) q.set('limit', String(params.limit));
+  return apiFetch<{ articles: WikiArticle[]; total: number }>(`/api/wiki?${q}`);
+}
+
+export async function getWikiArticle(id: string) {
+  return apiFetch<WikiArticle>(`/api/wiki/${id}`);
+}
+
+export async function getWikiStatus() {
+  return apiFetch<WikiStatus>('/api/wiki/status');
+}
+
+export async function updateWikiArticle(id: string, data: { title?: string; category?: string; content?: string; tags?: string[] }) {
+  return apiFetch<WikiArticle>(`/api/wiki/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWikiArticle(id: string) {
+  return apiFetch<{ message: string; id: string }>(`/api/wiki/${id}`, { method: 'DELETE' });
+}
+
+export async function triggerWikiIngest() {
+  return apiFetch<{ message: string; enqueued: number; processed: number; updated: string[] }>('/api/wiki/ingest', { method: 'POST' });
+}
+
+export async function triggerWikiSynthesis() {
+  return apiFetch<{ message: string }>('/api/wiki/synthesis', { method: 'POST' });
+}
