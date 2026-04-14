@@ -286,6 +286,8 @@ model Lab {
   accounts        LabAccount[]
   acknowledgments Acknowledgment[]
   memberInfos     MemberInfo[]
+  wikiArticles    WikiArticle[]
+  wikiRawQueue    WikiRawQueue[]
 
   @@map("labs")
 }
@@ -639,6 +641,43 @@ model MemberInfo {
   @@unique([labId, name])
   @@index([labId])
   @@map("member_infos")
+}
+
+// ── Wiki 아티클 (Karpathy 스타일 지식 위키) ─────────────────
+model WikiArticle {
+  id          String   @id @default(cuid())
+  labId       String   @map("lab_id")
+  title       String
+  category    String   // person, project, research_trend, meeting_thread, experiment, collaboration, general
+  content     String   // markdown 본문, [[아티클명]] 크로스레퍼런스 포함
+  tags        String[]
+  sources     Json     @default("[]") // [{type, id, date}] 어떤 데이터에서 왔는지
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  lab         Lab      @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, title])
+  @@index([labId, category])
+  @@index([labId, updatedAt(sort: Desc)])
+  @@map("wiki_articles")
+}
+
+// ── Wiki 원시 데이터 큐 (처리 대기) ─────────────────────────
+model WikiRawQueue {
+  id          String    @id @default(cuid())
+  labId       String    @map("lab_id")
+  sourceType  String    @map("source_type") // meeting, brain_message, paper_alert, capture, email, slack (future)
+  sourceId    String    @map("source_id")
+  content     String    // 처리용 텍스트
+  processedAt DateTime? @map("processed_at") // null = 대기중
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  lab         Lab       @relation(fields: [labId], references: [id], onDelete: Cascade)
+
+  @@index([labId, processedAt])
+  @@map("wiki_raw_queue")
 }
 
 // ── GDrive 동기화 로그 ──────────────────────────────────────

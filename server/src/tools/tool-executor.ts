@@ -46,6 +46,8 @@ export async function executeToolCall(
       return executeSearchLabData(input, ctx);
     case 'search_knowledge':
       return executeSearchKnowledge(input, ctx);
+    case 'search_wiki':
+      return executeSearchWiki(input, ctx);
     case 'get_account_info':
       return executeGetAccountInfo(input, ctx);
     case 'get_email_briefing':
@@ -1747,5 +1749,38 @@ async function executeUpdateEmailProfile(
   } catch (err: any) {
     logError('brain', 'update_email_profile 실패', { userId: ctx.userId, err: err.message }, 'error');
     return `이메일 설정 저장에 실패했습니다: ${err.message}`;
+  }
+}
+
+// ── search_wiki ───────────────────────────────────────────
+
+async function executeSearchWiki(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  if (!ctx.labId) return '연구실이 설정되지 않았습니다.';
+
+  const query = (input.query || '') as string;
+  const category = input.category as string | undefined;
+
+  ctx.sendProgress(`위키에서 "${query.slice(0, 20)}" 검색 중...`);
+
+  try {
+    const { searchWiki } = await import('../services/wiki-engine.js');
+    let articles = await searchWiki(ctx.labId, query, 5);
+
+    // 카테고리 필터 적용
+    if (category) {
+      articles = articles.filter(a => a.category === category);
+    }
+
+    if (articles.length === 0) return '관련 위키 아티클을 찾지 못했습니다.';
+
+    return '[위키 검색 결과]\n' + articles.map(a =>
+      `## ${a.title} (${a.category})\n${a.content}\n태그: ${(a.tags as string[]).join(', ')}\n최종 업데이트: ${a.updatedAt?.toLocaleDateString?.('ko-KR') ?? '-'}`
+    ).join('\n\n---\n\n');
+  } catch (err: any) {
+    logError('brain', 'search_wiki 실패', { userId: ctx.userId, labId: ctx.labId })(err);
+    return `위키 검색에 실패했습니다: ${err.message}`;
   }
 }

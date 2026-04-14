@@ -9,6 +9,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 export type ToolName =
   | 'search_lab_data'
   | 'search_knowledge'
+  | 'search_wiki'
   | 'get_account_info'
   | 'get_email_briefing'
   | 'read_email'
@@ -57,6 +58,21 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         query: {
           type: 'string',
           description: '검색할 질문이나 키워드',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'search_wiki',
+    description: '연구실 지식 위키를 검색합니다. 연구동향, 과제 진행상황, 구성원 연구흐름, 미팅 주제 등 시간이 지나면서 쌓인 맥락 정보를 찾습니다. 단순 DB 조회보다 깊은 맥락이 필요할 때 사용하세요.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: '검색할 주제나 키워드' },
+        category: {
+          type: 'string',
+          description: '카테고리 필터 (선택): person, project, research_trend, meeting_thread, experiment, collaboration, general',
         },
       },
       required: ['query'],

@@ -25,9 +25,12 @@ import { labCaptureRoutes } from './routes/lab-captures.js';
 import { briefingRoutes } from './routes/briefing.js';
 import { calendarRoutes } from './routes/calendar.js';
 import { errorRoutes } from './routes/errors.js';
+import { wikiRoutes } from './routes/wiki.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
+import { enqueueNewData, ingestAndCompile, deepSynthesis } from './services/wiki-engine.js';
+import { prisma } from './config/prisma.js';
 
 async function buildApp() {
     const app = Fastify({
@@ -92,6 +95,7 @@ async function buildApp() {
     await app.register(briefingRoutes);
     await app.register(calendarRoutes);
     await app.register(errorRoutes);
+    await app.register(wikiRoutes);
 
   return app;
 }
@@ -131,6 +135,45 @@ async function start() {
         }, 24 * 60 * 60 * 1000);
 
         console.log('[gdrive-cron] GDrive 자동 동기화 예약됨 (24시간 주기)');
+      }
+
+      // ── Wiki 자동 합성 크론 ──────────────────────────────
+      if (env.LAB_ID && env.ANTHROPIC_API_KEY) {
+        // 서버 시작 30초 후 ingest 1회
+        setTimeout(async () => {
+          try {
+            const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID! } });
+            if (!lab) return;
+            const owner = await prisma.user.findUnique({ where: { id: lab.ownerId } });
+            if (!owner) return;
+            await enqueueNewData(env.LAB_ID!, owner.id);
+            await ingestAndCompile(env.LAB_ID!);
+            console.log('[wiki-cron] 시작 인제스트 완료');
+          } catch (e: any) { console.error('[wiki-cron] 시작 인제스트 실패:', e.message); }
+        }, 30000);
+
+        // 24시간마다 ingest
+        setInterval(async () => {
+          try {
+            const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID! } });
+            if (!lab) return;
+            const owner = await prisma.user.findUnique({ where: { id: lab.ownerId } });
+            if (!owner) return;
+            await enqueueNewData(env.LAB_ID!, owner.id);
+            await ingestAndCompile(env.LAB_ID!);
+            console.log('[wiki-cron] 정기 인제스트 완료');
+          } catch (e: any) { console.error('[wiki-cron] 인제스트 실패:', e.message); }
+        }, 24 * 60 * 60 * 1000);
+
+        // 7일마다 Opus deep synthesis
+        setInterval(async () => {
+          try {
+            await deepSynthesis(env.LAB_ID!);
+            console.log('[wiki-cron] Deep synthesis 완료');
+          } catch (e: any) { console.error('[wiki-cron] Deep synthesis 실패:', e.message); }
+        }, 7 * 24 * 60 * 60 * 1000);
+
+        console.log('[wiki-cron] Wiki 자동 합성 예약됨 (24h ingest / 7d synthesis)');
       }
 
       console.log(`
