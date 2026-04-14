@@ -256,6 +256,195 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] Capture enqueue 실패', { labId })(err);
   }
 
+  // ── LabMember (기초 데이터 — 미처리 항목만, 시간 제한 없음) ──
+  try {
+    const members = await prisma.labMember.findMany({
+      where: { labId, active: true },
+      select: { id: true, name: true, nameEn: true, role: true, email: true, team: true, metadata: true },
+    });
+
+    for (const m of members) {
+      const sourceId = `labmember_${m.id}`;
+      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+      if (existing) continue;
+
+      const parts: string[] = [`[연구원] ${m.name}${m.nameEn ? ` (${m.nameEn})` : ''}`];
+      if (m.role) parts.push(`역할: ${m.role}`);
+      if (m.team) parts.push(`팀: ${m.team}`);
+      if (m.email) parts.push(`이메일: ${m.email}`);
+      if (m.metadata && typeof m.metadata === 'object' && Object.keys(m.metadata as object).length > 0) {
+        parts.push(`추가정보: ${JSON.stringify(m.metadata)}`);
+      }
+
+      await prisma.wikiRawQueue.create({
+        data: {
+          id: generateId(),
+          labId,
+          sourceType: 'lab_member',
+          sourceId,
+          content: parts.join('\n'),
+        },
+      });
+      enqueued++;
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] LabMember enqueue 실패', { labId })(err);
+  }
+
+  // ── Project (기초 데이터 — 미처리 항목만, 시간 제한 없음) ────
+  try {
+    const projects = await prisma.project.findMany({
+      where: { labId, status: 'active' },
+      select: {
+        id: true, name: true, shortName: true, businessName: true,
+        funder: true, period: true, pi: true, pm: true,
+        ministry: true, responsibility: true,
+        acknowledgmentKo: true, acknowledgmentEn: true,
+      },
+    });
+
+    for (const p of projects) {
+      const sourceId = `project_${p.id}`;
+      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+      if (existing) continue;
+
+      const parts: string[] = [`[과제] ${p.name}`];
+      if (p.shortName) parts.push(`과제번호/약칭: ${p.shortName}`);
+      if (p.businessName) parts.push(`사업명: ${p.businessName}`);
+      if (p.funder) parts.push(`지원기관: ${p.funder}`);
+      if (p.ministry) parts.push(`주관부처: ${p.ministry}`);
+      if (p.period) parts.push(`기간: ${p.period}`);
+      if (p.pi) parts.push(`PI: ${p.pi}`);
+      if (p.pm) parts.push(`PM: ${p.pm}`);
+      if (p.responsibility) parts.push(`책임내용: ${p.responsibility}`);
+      if (p.acknowledgmentKo) parts.push(`사사문구(한): ${p.acknowledgmentKo.slice(0, 300)}`);
+      if (p.acknowledgmentEn) parts.push(`사사문구(영): ${p.acknowledgmentEn.slice(0, 300)}`);
+
+      await prisma.wikiRawQueue.create({
+        data: {
+          id: generateId(),
+          labId,
+          sourceType: 'project',
+          sourceId,
+          content: parts.join('\n'),
+        },
+      });
+      enqueued++;
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] Project enqueue 실패', { labId })(err);
+  }
+
+  // ── Publication (기초 데이터 — 미처리 항목만, 시간 제한 없음) ─
+  try {
+    const publications = await prisma.publication.findMany({
+      where: { labId },
+      select: { id: true, title: true, authors: true, journal: true, year: true, abstract: true, nickname: true },
+      orderBy: { year: 'desc' },
+    });
+
+    for (const pub of publications) {
+      const sourceId = `publication_${pub.id}`;
+      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+      if (existing) continue;
+
+      const parts: string[] = [`[논문] ${pub.title}`];
+      if (pub.nickname) parts.push(`별칭: ${pub.nickname}`);
+      if (pub.authors) parts.push(`저자: ${pub.authors.slice(0, 200)}`);
+      if (pub.journal) parts.push(`저널: ${pub.journal}`);
+      if (pub.year) parts.push(`연도: ${pub.year}`);
+      if (pub.abstract) parts.push(`초록: ${pub.abstract.slice(0, 500)}`);
+
+      await prisma.wikiRawQueue.create({
+        data: {
+          id: generateId(),
+          labId,
+          sourceType: 'publication',
+          sourceId,
+          content: parts.join('\n'),
+        },
+      });
+      enqueued++;
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] Publication enqueue 실패', { labId })(err);
+  }
+
+  // ── Acknowledgment (GDrive 사사 기록 — 미처리 항목만) ────────
+  try {
+    const acks = await prisma.acknowledgment.findMany({
+      where: { labId },
+      select: {
+        id: true, type: true, paperTitle: true, authors: true,
+        journal: true, publishedAt: true, acknowledgedProjects: true,
+      },
+    });
+
+    for (const a of acks) {
+      const sourceId = `acknowledgment_${a.id}`;
+      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+      if (existing) continue;
+
+      const parts: string[] = [`[사사기록] ${a.paperTitle}`];
+      if (a.type) parts.push(`유형: ${a.type}`);
+      if (a.authors) parts.push(`저자: ${a.authors.slice(0, 200)}`);
+      if (a.journal) parts.push(`저널/학회: ${a.journal}`);
+      if (a.publishedAt) parts.push(`발표일: ${a.publishedAt}`);
+      if (a.acknowledgedProjects) parts.push(`사사 과제: ${a.acknowledgedProjects.slice(0, 300)}`);
+
+      await prisma.wikiRawQueue.create({
+        data: {
+          id: generateId(),
+          labId,
+          sourceType: 'acknowledgment',
+          sourceId,
+          content: parts.join('\n'),
+        },
+      });
+      enqueued++;
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] Acknowledgment enqueue 실패', { labId })(err);
+  }
+
+  // ── MemberInfo (GDrive 인적사항 — 미처리 항목만, 민감정보 제외) ─
+  try {
+    const memberInfos = await prisma.memberInfo.findMany({
+      where: { labId },
+      select: {
+        id: true, name: true, degree: true, department: true,
+        joinYear: true, graduationYear: true, researcherId: true,
+        // bankName/accountNumber 제외 (민감 정보)
+      },
+    });
+
+    for (const mi of memberInfos) {
+      const sourceId = `memberinfo_${mi.id}`;
+      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+      if (existing) continue;
+
+      const parts: string[] = [`[인적사항] ${mi.name}`];
+      if (mi.degree) parts.push(`학위과정: ${mi.degree}`);
+      if (mi.department) parts.push(`학과: ${mi.department}`);
+      if (mi.joinYear) parts.push(`입학년도: ${mi.joinYear}`);
+      if (mi.graduationYear) parts.push(`졸업년도: ${mi.graduationYear}`);
+      if (mi.researcherId) parts.push(`연구자번호: ${mi.researcherId}`);
+
+      await prisma.wikiRawQueue.create({
+        data: {
+          id: generateId(),
+          labId,
+          sourceType: 'member_info',
+          sourceId,
+          content: parts.join('\n'),
+        },
+      });
+      enqueued++;
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] MemberInfo enqueue 실패', { labId })(err);
+  }
+
   // ── Slack (future) ────────────────────────────────────────
   // TODO: Slack 연동 시 여기에 추가
   // const slackMessages = await prisma.slackMessage.findMany(...)
