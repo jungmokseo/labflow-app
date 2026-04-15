@@ -164,57 +164,90 @@ export default function WikiPage() {
     setIngestLoading(true);
     showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
 
-    // Railway 배치 1회 트리거 후 pending이 줄어들기를 기다림
-    // pending이 이전과 같으면(Railway 배치 완료) 새 배치 재트리거
-    // pending === 0이 될 때까지 무제한 반복, 폴링 횟수 제한 없음
+    // 동작 원리:
+    // - pending 또는 lastIngestAt이 변하면 Railway가 작업 중 (대기)
+    // - 둘 다 IDLE_MS 동안 변화 없으면 Railway 배치가 멈춤 → 재트리거
+    // - pending === 0이면 완료
+    // - 전체 HARD_TIMEOUT_MS 초과 시 안전 종료
+    const POLL_MS = 3000;
+    const IDLE_MS = 120_000;       // 2분 — Sonnet 호출 1회(30-60초) 넉넉히 포용
+    const HARD_TIMEOUT_MS = 60 * 60 * 1000; // 1시간 안전 차단
+
     let lastPending = -1;
-    let staleTicks = 0;      // pending이 변하지 않은 연속 횟수
-    const STALE_LIMIT = 20;  // 1분(3s×20) 동안 변화 없으면 새 배치 트리거
+    let lastIngestAtStr: string | null | undefined = undefined;
+    let lastActivityAt = Date.now();
+    let isTriggering = false;
+    let retriggerCount = 0;
+    const startedAt = Date.now();
+
+    const triggerSafely = async (): Promise<boolean> => {
+      if (isTriggering) return false;
+      isTriggering = true;
+      try {
+        await triggerWikiIngest();
+        return true;
+      } catch {
+        return false;
+      } finally {
+        isTriggering = false;
+      }
+    };
+
+    // 첫 트리거
+    const firstOk = await triggerSafely();
+    if (!firstOk) {
+      setIngestLoading(false);
+      showToast('Ingest 요청 실패', 'err');
+      return;
+    }
 
     const interval = setInterval(async () => {
       try {
-        const s = await getWikiStatus();
-        setStatus(s as WikiStatus);
-        const pending = (s as WikiStatus).pendingQueueItems;
+        const s = (await getWikiStatus()) as WikiStatus;
+        setStatus(s);
+        const pending = s.pendingQueueItems;
+        const lastIngestAt = s.lastIngestAt;
 
+        // 완료
         if (pending === 0) {
           clearInterval(interval);
-          setIngestLoading(false);
           await loadArticles();
-          showToast('Ingest 완료');
+          setIngestLoading(false);
+          showToast(retriggerCount > 0 ? `Ingest 완료 (배치 ${retriggerCount + 1}회)` : 'Ingest 완료');
           return;
         }
 
-        if (pending === lastPending) {
-          staleTicks++;
-          if (staleTicks >= STALE_LIMIT) {
-            // Railway 배치가 끝난 것 — 새 배치 트리거
-            staleTicks = 0;
-            try {
-              await triggerWikiIngest();
-              showToast(`다음 배치 시작 — 대기 ${pending}건 남음`);
-            } catch {
-              // 트리거 실패해도 계속 폴링
-            }
-          }
-        } else {
-          staleTicks = 0; // pending이 줄고 있으면 리셋
+        // 안전 타임아웃
+        if (Date.now() - startedAt > HARD_TIMEOUT_MS) {
+          clearInterval(interval);
+          await loadArticles();
+          setIngestLoading(false);
+          showToast(`Ingest 1시간 초과 — 중단 (대기 ${pending}건). 다시 눌러주세요.`, 'err');
+          return;
         }
 
-        lastPending = pending;
-      } catch {
-        // 폴링 실패는 무시하고 계속
-      }
-    }, 3000);
+        // 활동 감지: pending 또는 lastIngestAt 변화
+        const activityDetected =
+          pending !== lastPending ||
+          (lastIngestAtStr !== undefined && lastIngestAt !== lastIngestAtStr);
 
-    // 첫 배치 트리거
-    try {
-      await triggerWikiIngest();
-    } catch {
-      clearInterval(interval);
-      setIngestLoading(false);
-      showToast('Ingest 요청 실패', 'err');
-    }
+        if (activityDetected) {
+          lastActivityAt = Date.now();
+        }
+        lastPending = pending;
+        lastIngestAtStr = lastIngestAt;
+
+        // 2분간 활동 없음 → Railway 배치 종료로 판단, 재트리거
+        if (Date.now() - lastActivityAt >= IDLE_MS) {
+          lastActivityAt = Date.now(); // 다음 IDLE 체크까지 2분 확보
+          retriggerCount++;
+          showToast(`배치 재시작 ${retriggerCount}회 — 대기 ${pending}건`);
+          void triggerSafely(); // 폴링은 계속 진행
+        }
+      } catch {
+        // 폴링 실패는 무시하고 계속 (네트워크 일시 오류 등)
+      }
+    }, POLL_MS);
   }
 
   async function handleSynthesis() {

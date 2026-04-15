@@ -19,6 +19,10 @@ import { authMiddleware } from '../middleware/auth.js';
 import { logError } from '../services/error-logger.js';
 import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus } from '../services/wiki-engine.js';
 
+// labId별 ingest 실행 락 — 동일 lab 중복 실행 방지
+// (Railway는 단일 컨테이너 기준. 멀티 인스턴스면 DB 락 필요)
+const ingestLocks = new Set<string>();
+
 /** userId로 lab을 조회 (owner 우선, 그 다음 member) */
 async function resolveLabId(userId: string): Promise<string | null> {
   const owned = await prisma.lab.findFirst({ where: { ownerId: userId }, select: { id: true } });
@@ -123,7 +127,13 @@ export async function wikiRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
     }
 
-    // 즉시 응답 — 백그라운드에서 실제 처리
+    // 이미 실행 중이면 노옵 — 기존 작업이 계속 진행됨
+    if (ingestLocks.has(labId)) {
+      return reply.code(202).send({ message: '이미 Ingest 진행 중', status: 'already_running' });
+    }
+
+    // 락 획득 + 즉시 응답 — 백그라운드에서 실제 처리
+    ingestLocks.add(labId);
     reply.code(202).send({ message: 'Ingest 시작됨', status: 'processing' });
 
     // 백그라운드 처리 (응답과 무관하게 실행)
@@ -143,6 +153,8 @@ export async function wikiRoutes(app: FastifyInstance) {
         console.log(`[wiki] ingest complete after ${rounds} rounds`);
       } catch (err) {
         logError('background', '[wiki] background ingest 실패', { labId })(err);
+      } finally {
+        ingestLocks.delete(labId);
       }
     });
   });
