@@ -159,10 +159,17 @@ async function enqueueNotionData(labId: string): Promise<number> {
         const parentPageId = ((page.parent as any)?.page_id ?? '').replace(/-/g, '');
         if (NOTION_EXCLUDED_IDS.has(parentDbId) || NOTION_EXCLUDED_IDS.has(parentPageId)) continue;
 
-        // 이미 큐에 있으면 스킵
         const sourceId = `notion_${pageId}`;
+        const lastEditedTime = new Date((page as any).last_edited_time);
+
+        // 큐 항목 확인 — last_edited_time 기준으로 변경 시만 재큐
         const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-        if (existing) continue;
+        if (existing) {
+          // 대기 중이거나 처리 후 변경 없으면 skip
+          if (existing.processedAt === null || lastEditedTime <= existing.processedAt) continue;
+          // 처리 후 Notion에서 수정된 경우 → 기존 항목 삭제 후 재큐
+          await prisma.wikiRawQueue.delete({ where: { id: existing.id } });
+        }
 
         // 페이지 제목 + DB 속성
         const title = getPageTitle(page);
