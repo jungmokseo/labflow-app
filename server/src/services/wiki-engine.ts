@@ -276,14 +276,28 @@ async function enqueueNotionData(labId: string): Promise<number> {
 /** Notion 연결 진단 — API 키 존재/유효성 및 접근 가능 페이지 수 확인 */
 export async function diagnoseNotion(): Promise<{
   apiKeySet: boolean;
+  rawProcessEnvSet: boolean;
+  rawKeyLength: number;
   keyPreview?: string;
   integrationName?: string;
   accessiblePageCount?: number;
   error?: string;
   sampleTitles?: string[];
+  notionRelatedEnvVars: string[];
 }> {
+  // process.env 직접 확인 (zod 검증 우회)
+  const rawKey = process.env.NOTION_API_KEY ?? '';
+  const rawProcessEnvSet = rawKey.length > 0;
+  // Railway가 주입한 NOTION_* 변수명 전체 조회 (값 노출 X)
+  const notionRelatedEnvVars = Object.keys(process.env).filter(k => k.toUpperCase().includes('NOTION'));
+
   if (!env.NOTION_API_KEY) {
-    return { apiKeySet: false };
+    return {
+      apiKeySet: false,
+      rawProcessEnvSet,
+      rawKeyLength: rawKey.length,
+      notionRelatedEnvVars,
+    };
   }
 
   // 키 앞 6자만 노출 (예: "ntn_ab...", "secret...")
@@ -314,16 +328,22 @@ export async function diagnoseNotion(): Promise<{
 
     return {
       apiKeySet: true,
+      rawProcessEnvSet,
+      rawKeyLength: rawKey.length,
       keyPreview,
       integrationName,
       accessiblePageCount: searchRes.results.length,
       sampleTitles,
+      notionRelatedEnvVars,
     };
   } catch (err: any) {
     return {
       apiKeySet: true,
+      rawProcessEnvSet,
+      rawKeyLength: rawKey.length,
       keyPreview,
       error: err?.message ?? String(err),
+      notionRelatedEnvVars,
     };
   }
 }

@@ -254,9 +254,22 @@ export default function WikiPage() {
     try {
       const res = await diagnoseNotion();
       const lines: string[] = [];
+
+      // 항상 표시하는 raw env 정보
+      lines.push(`process.env.NOTION_API_KEY: ${res.rawProcessEnvSet ? `설정됨 (길이 ${res.rawKeyLength})` : '미설정'}`);
+      lines.push(`NOTION 관련 env 변수명: [${res.notionRelatedEnvVars.join(', ') || '없음'}]`);
+      lines.push('');
+
       if (!res.apiKeySet) {
-        lines.push('❌ NOTION_API_KEY가 Railway에 설정되지 않음');
-        lines.push('Railway 대시보드에서 환경변수 추가 후 재배포 필요');
+        lines.push('❌ env.NOTION_API_KEY (zod 검증 후) 미설정');
+        if (res.rawProcessEnvSet) {
+          lines.push('→ process.env에는 있지만 zod가 걸러냄. 서버 재시작 필요할 수도.');
+        } else {
+          lines.push('→ Railway 환경변수가 서버 컨테이너에 주입되지 않음');
+          lines.push('  1. Railway Variables 탭에서 정확히 "NOTION_API_KEY"로 저장됐는지 확인');
+          lines.push('  2. Deployments 탭에서 최신 배포가 성공했는지 확인');
+          lines.push('  3. 수동 Redeploy 시도');
+        }
       } else if (res.error) {
         lines.push('❌ Notion API 호출 실패');
         if (res.keyPreview) lines.push(`키: ${res.keyPreview}`);
