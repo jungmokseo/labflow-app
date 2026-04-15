@@ -181,11 +181,15 @@ const NOTION_EXCLUDED_IDS = new Set([
 ]);
 
 async function enqueueNotionData(labId: string): Promise<number> {
-  if (!env.NOTION_API_KEY) return 0;
+  if (!env.NOTION_API_KEY) {
+    console.warn('[wiki-engine] NOTION_API_KEY 미설정 — Notion 수집 건너뜀');
+    return 0;
+  }
 
   const notion = new NotionClient({ auth: env.NOTION_API_KEY });
   let enqueued = 0;
   let searchCursor: string | undefined = undefined;
+  let totalPagesFound = 0;
 
   do {
     let res: any;
@@ -195,7 +199,9 @@ async function enqueueNotionData(labId: string): Promise<number> {
         page_size: 100,
         ...(searchCursor ? { start_cursor: searchCursor } : {}),
       });
+      totalPagesFound += res.results.length;
     } catch (err) {
+      console.error('[wiki-engine] Notion search 실패:', err);
       logError('background', '[wiki-engine] Notion search 실패', { labId })(err);
       break;
     }
@@ -263,8 +269,57 @@ async function enqueueNotionData(labId: string): Promise<number> {
     searchCursor = res.has_more ? res.next_cursor : undefined;
   } while (searchCursor);
 
-  console.log(`[wiki-engine] enqueueNotionData 완료: ${enqueued}개 Notion 페이지 추가 (labId: ${labId})`);
+  console.log(`[wiki-engine] enqueueNotionData 완료: 검색된 ${totalPagesFound}개 / 큐 추가 ${enqueued}개 (labId: ${labId})`);
   return enqueued;
+}
+
+/** Notion 연결 진단 — API 키 존재/유효성 및 접근 가능 페이지 수 확인 */
+export async function diagnoseNotion(): Promise<{
+  apiKeySet: boolean;
+  integrationName?: string;
+  accessiblePageCount?: number;
+  error?: string;
+  sampleTitles?: string[];
+}> {
+  if (!env.NOTION_API_KEY) {
+    return { apiKeySet: false };
+  }
+
+  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+
+  try {
+    // 1. 봇 본인 정보 — API 키 유효성 확인
+    const me: any = await notion.users.me({});
+    const integrationName = me?.name ?? me?.bot?.owner?.type ?? 'unknown';
+
+    // 2. 검색으로 접근 가능한 페이지 수 확인 (첫 페이지만)
+    const searchRes: any = await notion.search({
+      filter: { property: 'object', value: 'page' },
+      page_size: 10,
+    });
+
+    const sampleTitles = (searchRes.results as any[]).slice(0, 5).map((p: any) => {
+      for (const key of Object.keys(p.properties ?? {})) {
+        const prop = p.properties[key];
+        if (prop.type === 'title' && Array.isArray(prop.title)) {
+          return prop.title.map((t: any) => t.plain_text ?? '').join('') || '(제목 없음)';
+        }
+      }
+      return '(제목 없음)';
+    });
+
+    return {
+      apiKeySet: true,
+      integrationName,
+      accessiblePageCount: searchRes.results.length,
+      sampleTitles,
+    };
+  } catch (err: any) {
+    return {
+      apiKeySet: true,
+      error: err?.message ?? String(err),
+    };
+  }
 }
 
 // ── enqueueNewData ────────────────────────────────────────

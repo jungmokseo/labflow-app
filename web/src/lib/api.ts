@@ -1102,3 +1102,13 @@ export async function triggerWikiSynthesis() {
 export async function resetWikiNotionQueue() {
   return apiFetch<{ message: string; deleted: number }>('/api/wiki/reset-notion', { method: 'POST' }, 0, 30000);
 }
+
+export async function diagnoseNotion() {
+  return apiFetch<{
+    apiKeySet: boolean;
+    integrationName?: string;
+    accessiblePageCount?: number;
+    error?: string;
+    sampleTitles?: string[];
+  }>('/api/wiki/notion-diagnosis', { method: 'GET' }, 0, 15000);
+}

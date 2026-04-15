@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   getWikiArticles, getWikiArticle, getWikiStatus, updateWikiArticle,
-  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue,
+  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue, diagnoseNotion,
   type WikiArticle, type WikiStatus,
 } from '@/lib/api';
 import {
@@ -250,6 +250,35 @@ export default function WikiPage() {
     }, POLL_MS);
   }
 
+  async function handleDiagnoseNotion() {
+    try {
+      const res = await diagnoseNotion();
+      const lines: string[] = [];
+      if (!res.apiKeySet) {
+        lines.push('❌ NOTION_API_KEY가 Railway에 설정되지 않음');
+        lines.push('Railway 대시보드에서 환경변수 추가 후 재배포 필요');
+      } else if (res.error) {
+        lines.push('❌ Notion API 호출 실패');
+        lines.push(`에러: ${res.error}`);
+      } else {
+        lines.push('✓ API 키 정상');
+        if (res.integrationName) lines.push(`통합: ${res.integrationName}`);
+        lines.push(`접근 가능 페이지: ${res.accessiblePageCount ?? 0}개 (샘플)`);
+        if (res.sampleTitles && res.sampleTitles.length > 0) {
+          lines.push('\n샘플 제목:');
+          res.sampleTitles.forEach(t => lines.push(`  - ${t}`));
+        }
+        if ((res.accessiblePageCount ?? 0) === 0) {
+          lines.push('\n⚠️ 페이지가 0개입니다. Notion 통합에 페이지가 연결되어 있지 않습니다.');
+          lines.push('Notion 워크스페이스에서 통합에 페이지 접근 권한을 부여하세요.');
+        }
+      }
+      alert(lines.join('\n'));
+    } catch (err: any) {
+      alert('진단 실패: ' + (err?.message ?? '알 수 없는 오류'));
+    }
+  }
+
   async function handleResetNotion() {
     if (!confirm('Notion 페이지 큐를 초기화합니다.\n처리 완료된 모든 Notion 항목이 삭제되고, 다음 Ingest에서 개선된 추출 로직으로 전체 재처리됩니다.\n\n진행할까요?')) return;
     try {
@@ -321,6 +350,13 @@ export default function WikiPage() {
           >
             {synthLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             딥 리뷰
+          </button>
+          <button
+            onClick={handleDiagnoseNotion}
+            title="Notion 연결 상태 진단"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading transition-colors"
+          >
+            🔍 Notion 진단
           </button>
           <button
             onClick={handleResetNotion}
