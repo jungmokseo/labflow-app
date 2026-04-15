@@ -1103,6 +1103,18 @@ export async function resetWikiNotionQueue() {
   return apiFetch<{ message: string; deleted: number }>('/api/wiki/reset-notion', { method: 'POST' }, 0, 30000);
 }
 
+export interface IngestLogEvent {
+  ts: number;
+  level: 'info' | 'warn' | 'error' | 'progress';
+  message: string;
+  labId: string;
+}
+
+export async function getIngestLog(sinceTs?: number) {
+  const q = sinceTs ? `?since=${sinceTs}` : '';
+  return apiFetch<{ events: IngestLogEvent[]; isRunning: boolean }>(`/api/wiki/ingest-log${q}`, { method: 'GET' }, 0, 15000);
+}
+
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;

@@ -17,7 +17,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { logError } from '../services/error-logger.js';
-import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus, diagnoseNotion } from '../services/wiki-engine.js';
+import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus, diagnoseNotion, logIngestEvent, getIngestLogs, clearIngestLogs } from '../services/wiki-engine.js';
 
 // labId별 ingest 실행 락 — 동일 lab 중복 실행 방지
 // (Railway는 단일 컨테이너 기준. 멀티 인스턴스면 DB 락 필요)
@@ -149,34 +149,53 @@ export async function wikiRoutes(app: FastifyInstance) {
 
     // 이미 실행 중이면 노옵 — 기존 작업이 계속 진행됨
     if (ingestLocks.has(labId)) {
+      logIngestEvent(labId, 'info', 'Ingest 요청됨 — 이미 진행 중이라 스킵');
       return reply.code(202).send({ message: '이미 Ingest 진행 중', status: 'already_running' });
     }
 
     // 락 획득 + 즉시 응답 — 백그라운드에서 실제 처리
     ingestLocks.add(labId);
+    clearIngestLogs(labId); // 새 Ingest 시작 시 이전 로그 초기화
+    logIngestEvent(labId, 'info', 'Ingest 시작');
     reply.code(202).send({ message: 'Ingest 시작됨', status: 'processing' });
 
     // 백그라운드 처리 (응답과 무관하게 실행)
     setImmediate(async () => {
       try {
         const enqueued = await enqueueNewData(labId, userId);
-        console.log(`[wiki] enqueued ${enqueued} items for labId ${labId}`);
+        logIngestEvent(labId, 'info', `큐 추가 완료: 총 ${enqueued}건 신규`);
 
         let rounds = 0;
         const maxRounds = 10;
         while (rounds < maxRounds) {
-          const result = await ingestAndCompile(labId, userId);
-          console.log(`[wiki] round ${rounds + 1}: processed ${result.processed}, updated ${result.updated.length}`);
           rounds++;
+          logIngestEvent(labId, 'info', `라운드 ${rounds}/${maxRounds} 시작`);
+          const result = await ingestAndCompile(labId, userId);
+          logIngestEvent(labId, 'info', `라운드 ${rounds} 종료: 큐 ${result.processed}개, 아티클 ${result.updated.length}개`);
           if (result.processed === 0) break;
         }
-        console.log(`[wiki] ingest complete after ${rounds} rounds`);
+        logIngestEvent(labId, 'info', `배치 완료 (${rounds} 라운드 수행)`);
       } catch (err) {
+        logIngestEvent(labId, 'error', `배치 실패: ${(err as any)?.message ?? err}`);
         logError('background', '[wiki] background ingest 실패', { labId })(err);
       } finally {
         ingestLocks.delete(labId);
       }
     });
+  });
+
+  // ── GET /api/wiki/ingest-log — Ingest 이벤트 로그 조회 ────
+  app.get('/api/wiki/ingest-log', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+
+    const query = request.query as Record<string, string>;
+    const sinceTs = query.since ? parseInt(query.since, 10) : undefined;
+
+    const events = getIngestLogs(labId, sinceTs);
+    const isRunning = ingestLocks.has(labId);
+    return reply.send({ events, isRunning });
   });
 
   // ── POST /api/wiki/reset-notion — Notion 큐 재처리 초기화 (OWNER만) ─

@@ -24,6 +24,40 @@ function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 }
 
+// ── Ingest 이벤트 로그 (라이브 모니터링용 인메모리 링버퍼) ─
+export type IngestLogEvent = {
+  ts: number;           // unix ms
+  level: 'info' | 'warn' | 'error' | 'progress';
+  message: string;
+  labId: string;
+};
+
+const INGEST_LOG_MAX = 200;
+const ingestLogs = new Map<string, IngestLogEvent[]>();
+
+export function logIngestEvent(labId: string, level: IngestLogEvent['level'], message: string): void {
+  const ev: IngestLogEvent = { ts: Date.now(), level, message, labId };
+  const arr = ingestLogs.get(labId) ?? [];
+  arr.push(ev);
+  if (arr.length > INGEST_LOG_MAX) arr.splice(0, arr.length - INGEST_LOG_MAX);
+  ingestLogs.set(labId, arr);
+  // 서버 콘솔에도 남김
+  const prefix = `[wiki:${labId.slice(0, 6)}]`;
+  if (level === 'error') console.error(prefix, message);
+  else if (level === 'warn') console.warn(prefix, message);
+  else console.log(prefix, message);
+}
+
+export function getIngestLogs(labId: string, sinceTs?: number): IngestLogEvent[] {
+  const arr = ingestLogs.get(labId) ?? [];
+  if (sinceTs) return arr.filter(e => e.ts > sinceTs);
+  return arr.slice();
+}
+
+export function clearIngestLogs(labId: string): void {
+  ingestLogs.set(labId, []);
+}
+
 // ── JSON 파싱 헬퍼 ────────────────────────────────────────
 function extractJsonArray(text: string): any[] {
   // 코드 블록 안 JSON 추출
@@ -182,10 +216,11 @@ const NOTION_EXCLUDED_IDS = new Set([
 
 async function enqueueNotionData(labId: string): Promise<number> {
   if (!env.NOTION_API_KEY) {
-    console.warn('[wiki-engine] NOTION_API_KEY 미설정 — Notion 수집 건너뜀');
+    logIngestEvent(labId, 'warn', 'NOTION_API_KEY 미설정 — Notion 수집 건너뜀');
     return 0;
   }
 
+  logIngestEvent(labId, 'info', 'Notion 워크스페이스 스캔 시작');
   const notion = new NotionClient({ auth: env.NOTION_API_KEY });
   let enqueued = 0;
   let searchCursor: string | undefined = undefined;
@@ -263,13 +298,14 @@ async function enqueueNotionData(labId: string): Promise<number> {
           data: { id: generateId(), labId, sourceType: 'notion_page', sourceId, content },
         });
         enqueued++;
+        logIngestEvent(labId, 'progress', `Notion 페이지 큐 추가: ${title.slice(0, 60)} (${content.length}자)`);
       } catch { /* 개별 페이지 실패 무시 */ }
     }
 
     searchCursor = res.has_more ? res.next_cursor : undefined;
   } while (searchCursor);
 
-  console.log(`[wiki-engine] enqueueNotionData 완료: 검색된 ${totalPagesFound}개 / 큐 추가 ${enqueued}개 (labId: ${labId})`);
+  logIngestEvent(labId, 'info', `Notion 스캔 완료: ${totalPagesFound}개 검색, ${enqueued}개 신규 큐 추가`);
   return enqueued;
 }
 
@@ -760,9 +796,16 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
   });
 
   if (queue.length === 0) {
-    console.log('[wiki-engine] ingestAndCompile: 처리할 큐 항목 없음');
+    logIngestEvent(labId, 'info', '처리할 큐 항목 없음 — 대기');
     return { processed: 0, updated: [] };
   }
+
+  // 처리 예정 항목 로그
+  const itemsPreview = queue.map(q => {
+    const firstLine = q.content.split('\n')[0].slice(0, 60);
+    return `${q.sourceType}: ${firstLine}`;
+  }).join(' | ');
+  logIngestEvent(labId, 'info', `Sonnet 처리 시작 (${queue.length}개): ${itemsPreview}`);
 
   // 2. 기존 위키 아티클 인덱스 (제목/카테고리/태그만)
   const existingArticles = await prisma.wikiArticle.findMany({
@@ -844,10 +887,14 @@ ${queueText}`;
 
     const usage = response.usage as any;
     const inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
-    logApiCost(userId ?? 'system', 'claude-sonnet-4-6', inputTokens, usage.output_tokens ?? 0, 'wiki_ingest').catch(() => {});
+    const outputTokens = usage.output_tokens ?? 0;
+    logApiCost(userId ?? 'system', 'claude-sonnet-4-6', inputTokens, outputTokens, 'wiki_ingest').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     articles = extractJsonArray(text);
+    const cacheRead = usage.cache_read_input_tokens ?? 0;
+    logIngestEvent(labId, 'info', `Sonnet 응답 (입력 ${inputTokens}토큰, 캐시히트 ${cacheRead}, 출력 ${outputTokens}, 아티클 ${articles.length}개)`);
   } catch (err) {
+    logIngestEvent(labId, 'error', `Sonnet 호출 실패: ${(err as any)?.message ?? err}`);
     logError('background', '[wiki-engine] Sonnet ingest 호출 실패', { labId })(err);
     return { processed: 0, updated: [] };
   }
@@ -880,7 +927,9 @@ ${queueText}`;
         now,
       );
       updatedTitles.push(article.title);
+      logIngestEvent(labId, 'progress', `아티클 저장: ${article.title} (${article.category})`);
     } catch (err) {
+      logIngestEvent(labId, 'error', `아티클 저장 실패: ${article.title}`);
       logError('background', `[wiki-engine] 아티클 upsert 실패: ${article.title}`, { labId })(err);
     }
   }

@@ -5,12 +5,12 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   getWikiArticles, getWikiArticle, getWikiStatus, updateWikiArticle,
-  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue, diagnoseNotion,
-  type WikiArticle, type WikiStatus,
+  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue, diagnoseNotion, getIngestLog,
+  type WikiArticle, type WikiStatus, type IngestLogEvent,
 } from '@/lib/api';
 import {
   BookOpen, RefreshCw, Pencil, Trash2, Save, X, ChevronRight,
-  Tag, Clock, Hash, Loader2, Sparkles, Zap, Filter,
+  Tag, Clock, Hash, Loader2, Sparkles, Zap, Filter, Terminal, ChevronLeft,
 } from 'lucide-react';
 
 const CATEGORIES = [
@@ -77,6 +77,14 @@ export default function WikiPage() {
 
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
 
+  // Ingest 모니터링 로그
+  const [logs, setLogs] = useState<IngestLogEvent[]>([]);
+  const [logOpen, setLogOpen] = useState(false);
+  const [isIngestRunning, setIsIngestRunning] = useState(false);
+
+  // 모바일 사이드바 토글
+  const [mobileListOpen, setMobileListOpen] = useState(true);
+
   function showToast(msg: string, type: 'ok' | 'err' = 'ok') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
@@ -102,6 +110,22 @@ export default function WikiPage() {
   }, [categoryFilter]);
 
   useEffect(() => { loadArticles(); }, [loadArticles]);
+
+  // Ingest 로그 주기 폴링 (로그 창이 열려있거나 실행 중이면)
+  useEffect(() => {
+    if (!logOpen && !isIngestRunning) return;
+    const interval = setInterval(async () => {
+      try {
+        const sinceTs = logs.length > 0 ? logs[logs.length - 1].ts : undefined;
+        const res = await getIngestLog(sinceTs);
+        setIsIngestRunning(res.isRunning);
+        if (res.events.length > 0) {
+          setLogs(prev => [...prev, ...res.events].slice(-200));
+        }
+      } catch { /* 로그 폴링 실패 무시 */ }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [logOpen, isIngestRunning, logs]);
 
   async function loadDetail(id: string) {
     setSelectedId(id);
@@ -162,6 +186,9 @@ export default function WikiPage() {
 
   async function handleIngest() {
     setIngestLoading(true);
+    setLogs([]); // 이전 로그 초기화
+    setLogOpen(true); // 로그 창 자동 오픈
+    setIsIngestRunning(true);
     showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
 
     // 동작 원리:
@@ -333,7 +360,7 @@ export default function WikiPage() {
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-1.5rem)] overflow-hidden">
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all ${
@@ -343,23 +370,36 @@ export default function WikiPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border flex items-center gap-3 flex-shrink-0">
-        <BookOpen className="w-5 h-5 text-primary" />
-        <div>
-          <h1 className="text-lg font-bold text-text-heading">지식 위키</h1>
-          {status && (
-            <p className="text-xs text-text-muted">
-              {status.totalArticles}개 아티클 · 처리 대기 {status.pendingQueueItems}건
-              {status.lastIngestAt && ` · 마지막 갱신 ${timeAgo(status.lastIngestAt)}`}
-            </p>
-          )}
+      {/* Header — 모바일: 세로 쌓기, 데스크탑: 가로 */}
+      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <BookOpen className="w-5 h-5 text-primary flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base md:text-lg font-bold text-text-heading">지식 위키</h1>
+            {status && (
+              <p className="text-[11px] md:text-xs text-text-muted truncate">
+                {status.totalArticles}개 · 대기 {status.pendingQueueItems}건
+                {status.lastIngestAt && ` · ${timeAgo(status.lastIngestAt)}`}
+              </p>
+            )}
+          </div>
+          {/* 모바일: 로그 토글 + 목록/상세 토글 */}
+          <div className="flex items-center gap-1 md:hidden">
+            <button
+              onClick={() => setLogOpen(!logOpen)}
+              className={`p-2 rounded-lg ${logOpen ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}
+              aria-label="로그"
+            >
+              <Terminal className="w-4 h-4" />
+            </button>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        {/* 액션 버튼 묶음 — 모바일에서 가로 스크롤 */}
+        <div className="flex items-center gap-2 mt-2 md:mt-3 overflow-x-auto -mx-1 px-1 pb-1 md:flex-wrap md:overflow-visible">
           <button
             onClick={handleIngest}
             disabled={ingestLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
           >
             {ingestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             Ingest
@@ -367,28 +407,39 @@ export default function WikiPage() {
           <button
             onClick={handleSynthesis}
             disabled={synthLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-heading rounded-lg hover:bg-bg-hover disabled:opacity-50 transition-colors"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-heading rounded-lg hover:bg-bg-hover disabled:opacity-50"
           >
             {synthLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             딥 리뷰
           </button>
           <button
+            onClick={() => setLogOpen(!logOpen)}
+            title="실시간 로그"
+            className={`flex-shrink-0 hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border ${
+              logOpen ? 'bg-primary text-white' : 'bg-bg-input text-text-muted hover:bg-bg-hover hover:text-text-heading'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            로그
+            {isIngestRunning && <Loader2 className="w-3 h-3 animate-spin" />}
+          </button>
+          <button
             onClick={handleDiagnoseNotion}
             title="Notion 연결 상태 진단"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading transition-colors"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover"
           >
-            🔍 Notion 진단
+            Notion 진단
           </button>
           <button
             onClick={handleResetNotion}
             disabled={ingestLoading}
-            title="Notion 페이지 큐 초기화 (개선된 추출 로직으로 재처리)"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading disabled:opacity-50 transition-colors"
+            title="Notion 페이지 큐 초기화"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover disabled:opacity-50"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            Notion 재처리
+            재처리
           </button>
-          <button onClick={loadArticles} className="p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg transition-colors">
+          <button onClick={loadArticles} className="flex-shrink-0 p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -396,7 +447,8 @@ export default function WikiPage() {
 
       <div className="flex flex-1 min-h-0">
         {/* Left panel — article list */}
-        <div className="w-72 flex-shrink-0 border-r border-border flex flex-col min-h-0">
+        {/* 모바일: 아티클 선택 시 숨김, 데스크탑: 항상 표시 */}
+        <div className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-72 flex-shrink-0 border-r border-border flex-col min-h-0`}>
           {/* Search + filter */}
           <div className="p-3 space-y-2 border-b border-border">
             <input
@@ -477,7 +529,8 @@ export default function WikiPage() {
         </div>
 
         {/* Right panel — article detail / editor */}
-        <div className="flex-1 min-w-0 flex flex-col min-h-0">
+        {/* 모바일: 아티클 미선택 시 숨김 */}
+        <div className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col min-h-0`}>
           {!selectedId ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
               <BookOpen className="w-12 h-12 text-text-muted mb-3" />
@@ -496,7 +549,15 @@ export default function WikiPage() {
           ) : detail ? (
             <>
               {/* Article toolbar */}
-              <div className="px-6 py-3 border-b border-border flex items-center gap-3 flex-shrink-0">
+              <div className="px-4 md:px-6 py-3 border-b border-border flex items-center gap-2 md:gap-3 flex-shrink-0">
+                {/* 모바일 전용: 목록으로 돌아가기 */}
+                <button
+                  onClick={() => { setSelectedId(null); setDetail(null); }}
+                  className="md:hidden p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg"
+                  aria-label="목록"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
                 {editing ? (
                   <>
                     <input
@@ -587,11 +648,11 @@ export default function WikiPage() {
                   <textarea
                     value={editContent}
                     onChange={e => setEditContent(e.target.value)}
-                    className="w-full h-full px-6 py-4 bg-transparent text-text-heading text-sm font-mono resize-none focus:outline-none leading-relaxed"
+                    className="w-full h-full px-4 md:px-6 py-4 bg-transparent text-text-heading text-sm font-mono resize-none focus:outline-none leading-relaxed"
                     placeholder="마크다운 내용을 입력하세요..."
                   />
                 ) : (
-                  <div className="px-6 py-4 prose prose-sm max-w-none dark:prose-invert">
+                  <div className="px-4 md:px-6 py-4 prose prose-sm max-w-none dark:prose-invert">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
@@ -642,6 +703,52 @@ export default function WikiPage() {
           ) : null}
         </div>
       </div>
+
+      {/* 하단 로그 패널 — 열려있을 때만 표시 */}
+      {logOpen && (
+        <div className="h-56 md:h-64 border-t border-border bg-black/95 flex flex-col flex-shrink-0">
+          <div className="px-3 py-2 flex items-center justify-between border-b border-white/10 flex-shrink-0">
+            <div className="flex items-center gap-2 text-xs text-white">
+              <Terminal className="w-3.5 h-3.5" />
+              <span className="font-semibold">Ingest 실시간 로그</span>
+              {isIngestRunning && (
+                <span className="flex items-center gap-1 text-green-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  실행 중
+                </span>
+              )}
+              <span className="text-white/40">({logs.length}개)</span>
+            </div>
+            <button
+              onClick={() => setLogOpen(false)}
+              className="p-1 text-white/60 hover:text-white hover:bg-white/10 rounded"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
+            {logs.length === 0 ? (
+              <p className="text-white/40">Ingest를 시작하면 로그가 표시됩니다</p>
+            ) : (
+              logs.map((ev, i) => {
+                const time = new Date(ev.ts).toLocaleTimeString('ko-KR', { hour12: false });
+                const color =
+                  ev.level === 'error' ? 'text-red-400' :
+                  ev.level === 'warn' ? 'text-yellow-400' :
+                  ev.level === 'progress' ? 'text-cyan-300' :
+                  'text-green-300';
+                return (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-white/40 flex-shrink-0">{time}</span>
+                    <span className={`${color} flex-shrink-0 w-14`}>[{ev.level}]</span>
+                    <span className="text-white/90 break-all">{ev.message}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
