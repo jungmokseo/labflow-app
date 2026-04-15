@@ -6,6 +6,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { generateEmbedding } from './embedding-service.js';
 import { createHash } from 'crypto';
+import { logApiCost } from './cost-logger.js';
 
 /**
  * 일정 메시지 수 이상이면 자동 요약 생성
@@ -40,6 +41,8 @@ export async function maybeGenerateSummary(channelId: string, minNewMessages: nu
     );
 
     const channel = await prisma.channel.findUnique({ where: { id: channelId }, select: { userId: true } });
+    const summaryUsage = result.response.usageMetadata;
+    if (summaryUsage && channel?.userId) logApiCost(channel.userId, 'gemini-2.5-flash', summaryUsage.promptTokenCount ?? 0, summaryUsage.candidatesTokenCount ?? 0, 'session_summary').catch(() => {});
     const summaryText = result.response.text();
     const summaryUserId = channel?.userId || '';
     const summary = await prisma.channelSummary.create({
@@ -88,6 +91,8 @@ AI: ${response}
 JSON 배열: [{"type": "dict"|"memo", "data": {...}}]`;
 
     const result = await model.generateContent(prompt);
+    const autoExtractUsage = result.response.usageMetadata;
+    if (autoExtractUsage) logApiCost('system', 'gemini-2.5-flash', autoExtractUsage.promptTokenCount ?? 0, autoExtractUsage.candidatesTokenCount ?? 0, 'auto_extract_info').catch(() => {});
     const text = result.response.text().trim();
     const match = text.match(/\[.*\]/s);
     if (match) {
@@ -120,6 +125,8 @@ export async function generateSessionTitle(messages: Array<{ role: string; conte
     const result = await model.generateContent(
       `다음 대화의 주제를 한국어 10자 이내로 요약하세요. 제목만 출력:\n\n${context}\nuser: ${latestMessage.slice(0, 100)}`
     );
+    const titleUsage = result.response.usageMetadata;
+    if (titleUsage) logApiCost('system', 'gemini-2.5-flash', titleUsage.promptTokenCount ?? 0, titleUsage.candidatesTokenCount ?? 0, 'session_title').catch(() => {});
     const title = result.response.text().trim().replace(/["']/g, '').slice(0, 30);
     return title || null;
   } catch {

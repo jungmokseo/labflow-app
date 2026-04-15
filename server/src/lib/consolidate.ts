@@ -9,6 +9,7 @@
  *   - deduplicateKeywords: 대소문자/공백 정규화 후 중복 제거
  */
 import Anthropic from '@anthropic-ai/sdk';
+import { logApiCost } from '../services/cost-logger.js';
 
 const client = new Anthropic();
 
@@ -43,6 +44,7 @@ ${existing.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     });
+    logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'consolidate_instructions').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
     const match = text.match(/\[[\s\S]*\]/);
     if (match) {
@@ -93,6 +95,7 @@ ${existing.map((r, i) => `${i + 1}. 조건: "${r.condition}" → 액션: "${r.ac
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     });
+    logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'consolidate_rules').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
     const match = text.match(/\[[\s\S]*\]/);
     if (match) {

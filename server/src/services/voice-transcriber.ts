@@ -8,6 +8,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
 import { ClassificationResult, classifyLocal } from './gemini-classifier.js';
+import { logApiCost } from './cost-logger.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -68,6 +69,8 @@ export async function transcribeAndClassify(
     },
   });
 
+  const voiceUsage = result.response.usageMetadata;
+  if (voiceUsage) logApiCost('system', 'gemini-2.5-flash', voiceUsage.promptTokenCount ?? 0, voiceUsage.candidatesTokenCount ?? 0, 'voice_classify').catch(() => {});
   const response = result.response.text().trim();
   const jsonMatch = response.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in Gemini voice response');
@@ -116,5 +119,7 @@ export async function transcribeOnly(
     },
   });
 
+  const transcribeUsage = result.response.usageMetadata;
+  if (transcribeUsage) logApiCost('system', 'gemini-2.5-flash', transcribeUsage.promptTokenCount ?? 0, transcribeUsage.candidatesTokenCount ?? 0, 'voice_transcribe').catch(() => {});
   return result.response.text().trim();
 }

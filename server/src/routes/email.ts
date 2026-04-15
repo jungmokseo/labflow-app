@@ -28,6 +28,7 @@ import { prisma, basePrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
+import { logApiCost } from '../services/cost-logger.js';
 import { buildGraphFromText, crossLinkSources } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { classifyEmailBatchStage1, type Stage1Input, type Stage1Result, type UserProfileForClassification } from '../services/email-classifier.js';
@@ -464,6 +465,8 @@ async function classifyEmailsWithSonnet(
         contents: [{ role: 'user', parts: [{ text: `다음 이메일들을 분류하세요. JSON 배열만 응답:\n${emailTexts}\n\n형식: [{"index":0,"category":"urgent"|"action-needed"|"schedule"|"info"|"ads","confidence":0.0~1.0,"summary":"요약","needsBody":true/false}]` }] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048, responseMimeType: 'application/json' },
       });
+      const geminiUsage = geminiResp.response.usageMetadata;
+      if (geminiUsage && userId) logApiCost(userId, 'gemini-2.5-flash', geminiUsage.promptTokenCount ?? 0, geminiUsage.candidatesTokenCount ?? 0, 'email_classify_gemini').catch(() => {});
       const parsed: Array<any> = JSON.parse(geminiResp.response.text().trim());
       for (const item of parsed) {
         results.set(String(item.index), {
@@ -515,6 +518,7 @@ async function classifyEmailsWithSonnet(
     // 실제 토큰 기반 비용 추적
     if (userId) {
       trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage), 'email_classify');
+      logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'email_classify').catch(() => {});
     }
 
     const textBlock = response.content.find(b => b.type === 'text');
@@ -1764,6 +1768,7 @@ ${emailDataForPrompt.join('\n\n')}`,
           });
 
           trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage), 'email_briefing');
+          logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'email_briefing').catch(() => {});
           const textBlock = response.content.find(b => b.type === 'text');
           markdown = textBlock && textBlock.type === 'text' ? textBlock.text : '브리핑 생성에 실패했습니다.';
         } catch (err: any) {
@@ -2015,6 +2020,8 @@ ${emailDataForPrompt.join('\n\n')}`,
         `다음 이메일 본문을 ${targetLang === 'ko' ? '한국어' : targetLang}로 자연스럽게 번역하세요. 번역문만 출력하세요.\n\n${text}`
       );
       trackAICost(request.userId!, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+      const translateUsage = result.response.usageMetadata;
+      if (translateUsage) logApiCost(request.userId!, 'gemini-2.5-flash', translateUsage.promptTokenCount ?? 0, translateUsage.candidatesTokenCount ?? 0, 'email_translate').catch(() => {});
 
       return reply.send({
         success: true,
@@ -2055,6 +2062,8 @@ ${emailDataForPrompt.join('\n\n')}`,
 
 없으면 빈 배열로.`);
       trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+      const extractUsage = result.response.usageMetadata;
+      if (extractUsage) logApiCost(userId, 'gemini-2.5-flash', extractUsage.promptTokenCount ?? 0, extractUsage.candidatesTokenCount ?? 0, 'email_extract_actions').catch(() => {});
 
       const text = result.response.text().trim();
       const match = text.match(/\{[\s\S]*\}/);

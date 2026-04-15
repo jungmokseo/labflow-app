@@ -8,6 +8,7 @@ import { env } from '../config/env.js';
 import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
 import { logError } from '../services/error-logger.js';
+import { logApiCost } from '../services/cost-logger.js';
 
 /**
  * 이메일 후속 질문 — 기존 메모 데이터 기반
@@ -231,6 +232,8 @@ export async function handleEmailReplyDraft(
       contents: [{ role: 'user', parts: [{ text: draftPrompt }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
     });
+    const emailDraftUsage = draftResult.response.usageMetadata;
+    if (emailDraftUsage) logApiCost(userId, 'gemini-2.5-flash', emailDraftUsage.promptTokenCount ?? 0, emailDraftUsage.candidatesTokenCount ?? 0, 'email_draft_reply').catch(() => {});
 
     const draftText = draftResult.response.text().trim();
     const jsonMatch = draftText.match(/\{[\s\S]*\}/);
@@ -325,6 +328,8 @@ ${currentRules}
 }` }] }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 512, responseMimeType: 'application/json' },
     });
+    const prefUsage = result.response.usageMetadata;
+    if (prefUsage) logApiCost(userId, 'gemini-2.5-flash', prefUsage.promptTokenCount ?? 0, prefUsage.candidatesTokenCount ?? 0, 'email_preference').catch(() => {});
 
     const parsed = JSON.parse(result.response.text().trim());
 

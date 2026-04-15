@@ -16,6 +16,7 @@ import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shado
 import { consolidateInstructions, consolidateImportanceRules, deduplicateKeywords } from '../lib/consolidate.js';
 import type { ToolName } from './tool-definitions.js';
 import { logError } from '../services/error-logger.js';
+import { logApiCost } from '../services/cost-logger.js';
 
 export interface PendingAction {
   type: 'send_draft' | 'send_email';
@@ -693,6 +694,8 @@ async function executeDraftEmailReply(
       contents: [{ role: 'user', parts: [{ text: draftPrompt }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
     });
+    const draftUsage = draftResult.response.usageMetadata;
+    if (draftUsage) logApiCost(ctx.userId, 'gemini-2.5-flash', draftUsage.promptTokenCount ?? 0, draftUsage.candidatesTokenCount ?? 0, 'email_draft').catch(() => {});
 
     const draftText = draftResult.response.text().trim();
     const jsonMatch = draftText.match(/\{[\s\S]*\}/);
@@ -1385,6 +1388,8 @@ async function executeRegisterUploadedPapers(
         ] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
       });
+      const metaUsage = metaResult.response.usageMetadata;
+      if (metaUsage) logApiCost(ctx.userId, 'gemini-2.5-flash', metaUsage.promptTokenCount ?? 0, metaUsage.candidatesTokenCount ?? 0, 'paper_meta_extract').catch(() => {});
       const metaText = metaResult.response.text().trim();
       const metaMatch = metaText.match(/\{[\s\S]*\}/);
       const meta = metaMatch ? JSON.parse(metaMatch[0]) : {};

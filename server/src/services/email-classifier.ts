@@ -18,6 +18,7 @@ import {
   type EmailPreferenceRules,
   buildPreferencePromptSection,
 } from './preference-learning.js';
+import { logApiCost } from './cost-logger.js';
 
 // ── 타입 정의 ────────────────────────────────────────
 
@@ -133,6 +134,7 @@ export async function classifyEmailBatchStage1(
   emails: Stage1Input[],
   profile: UserProfileForClassification | null,
   preferenceRules: EmailPreferenceRules | null,
+  userId?: string,
 ): Promise<Stage1Result[]> {
   if (emails.length === 0) return [];
 
@@ -154,6 +156,8 @@ export async function classifyEmailBatchStage1(
       },
     });
 
+    const s1Usage = result.response.usageMetadata;
+    if (s1Usage && userId) logApiCost(userId, 'gemini-2.5-flash', s1Usage.promptTokenCount ?? 0, s1Usage.candidatesTokenCount ?? 0, 'email_classify_stage1').catch(() => {});
     const responseText = result.response.text().trim();
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('No JSON array found in Gemini response');
@@ -218,6 +222,7 @@ Respond with ONLY a JSON array:
 export async function classifyEmailDetailStage2(
   emails: Stage2Input[],
   profile: UserProfileForClassification | null,
+  userId?: string,
 ): Promise<Stage2Result[]> {
   if (emails.length === 0) return [];
 
@@ -256,6 +261,7 @@ export async function classifyEmailDetailStage2(
       }],
     });
 
+    if (userId) logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'email_classify_stage2').catch(() => {});
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in Sonnet response');
 

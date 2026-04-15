@@ -9,6 +9,7 @@ import { google } from 'googleapis';
 import { basePrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+import { logApiCost } from './cost-logger.js';
 
 function safeDecrypt(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
@@ -350,6 +351,8 @@ JSON 배열로만 응답. 일정이 없으면 빈 배열 [].
 ]`
     );
 
+    const calEventUsage = result.response.usageMetadata;
+    if (calEventUsage) logApiCost('system', 'gemini-2.5-flash', calEventUsage.promptTokenCount ?? 0, calEventUsage.candidatesTokenCount ?? 0, 'detect_events').catch(() => {});
     const match = result.response.text().trim().match(/\[[\s\S]*\]/);
     if (!match) return [];
 

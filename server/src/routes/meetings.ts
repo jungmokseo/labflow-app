@@ -25,6 +25,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { trackAICost, COST_PER_CALL, calculateAnthropicCost } from '../middleware/rate-limiter.js';
+import { logApiCost } from '../services/cost-logger.js';
 import { buildGraphFromText, crossLinkSources } from '../services/knowledge-graph.js';
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
@@ -240,6 +241,8 @@ JSON: [{"wrong": "...", "correct": "..."}]`;
     });
 
     trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+    const ttsUsage = result.response.usageMetadata;
+    if (ttsUsage) logApiCost(userId, 'gemini-2.5-flash', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'meeting_tts_learn').catch(() => {});
 
     let parsed: Array<{ wrong: string; correct: string }>;
     try { parsed = JSON.parse(result.response.text().trim()); } catch { return; }
@@ -465,7 +468,10 @@ ${correctionDict}
       ],
     });
 
-    if (userId) trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage));
+    if (userId) {
+      trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage));
+      logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'meeting_summary').catch(() => {});
+    }
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in Sonnet response');
 
@@ -517,6 +523,8 @@ ${transcription}`;
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
     });
+    const fallbackUsage = result.response.usageMetadata;
+    if (fallbackUsage) logApiCost('system', 'gemini-2.5-flash', fallbackUsage.promptTokenCount ?? 0, fallbackUsage.candidatesTokenCount ?? 0, 'meeting_summary_fallback').catch(() => {});
 
     const response = result.response.text().trim();
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -572,7 +580,11 @@ async function processMeetingAudio(
 ): Promise<MeetingPipelineResult> {
   // Step 1: Gemini STT
   const rawTranscription = await transcribeAudio(audioBuffer, mimeType);
-  if (userId) trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+  if (userId) {
+    trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+    // Note: Gemini STT doesn't return usageMetadata for audio; log flat estimate
+    logApiCost(userId, 'gemini-2.5-flash', 0, 0, 'meeting_stt').catch(() => {});
+  }
 
   if (!rawTranscription || rawTranscription.length < 10) {
     throw new Error('음성을 인식할 수 없습니다. 다시 시도해주세요.');

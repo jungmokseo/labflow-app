@@ -16,6 +16,7 @@ import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { logError } from './error-logger.js';
 import { buildGraphFromText } from './knowledge-graph.js';
+import { logApiCost } from './cost-logger.js';
 
 // ── Anthropic 클라이언트 ──────────────────────────────────
 function getAnthropicClient(): Anthropic {
@@ -686,6 +687,7 @@ JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
       messages: [{ role: 'user', content: prompt }],
     });
 
+    logApiCost(userId ?? 'system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'wiki_ingest').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     articles = extractJsonArray(text);
   } catch (err) {
@@ -749,7 +751,7 @@ JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
  * Claude Opus로 전체 위키 딥 리뷰.
  * 아티클 간 연결고리 발견, 패턴 분석, 모순 수정, 인사이트 아티클 생성.
  */
-export async function deepSynthesis(labId: string): Promise<void> {
+export async function deepSynthesis(labId: string, userId?: string): Promise<void> {
   // 1. 전체 위키 아티클 가져오기 (최대 30개, content 포함)
   const articles = await prisma.wikiArticle.findMany({
     where: { labId },
@@ -793,6 +795,7 @@ ${articlesText}
       messages: [{ role: 'user', content: prompt }],
     });
 
+    logApiCost(userId ?? 'system', 'claude-opus-4-6', response.usage.input_tokens, response.usage.output_tokens, 'wiki_deep_synthesis').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     updatedArticles = extractJsonArray(text);
   } catch (err) {

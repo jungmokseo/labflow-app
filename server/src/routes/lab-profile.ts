@@ -35,6 +35,7 @@ import { syncLabProfileToAllFeatures } from '../services/lab-sync.js';
 import { logError } from '../services/error-logger.js';
 import { deduplicateKeywords } from '../lib/consolidate.js';
 import { syncAllGdriveData, syncLabAccounts, resetAuthCache } from '../services/gdrive-sync.js';
+import { logApiCost } from '../services/cost-logger.js';
 
 // ── Zod Schemas ─────────────────────────────────────
 const createLabSchema = z.object({
@@ -221,6 +222,8 @@ ${lab.institution ? `소속: ${lab.institution}` : ''}
 themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
 
         const result = await model.generateContent(prompt);
+        const onboardingUsage = result.response.usageMetadata;
+        if (onboardingUsage) logApiCost(request.userId!, 'gemini-2.5-flash', onboardingUsage.promptTokenCount ?? 0, onboardingUsage.candidatesTokenCount ?? 0, 'lab_onboarding').catch(() => {});
         const text = result.response.text().trim();
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -596,6 +599,8 @@ ${combinedText.slice(0, 50000)}
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
       });
+      const homepageUsage = result.response.usageMetadata;
+      if (homepageUsage) logApiCost(request.userId!, 'gemini-2.5-flash', homepageUsage.promptTokenCount ?? 0, homepageUsage.candidatesTokenCount ?? 0, 'lab_homepage_extract').catch(() => {});
       const text = result.response.text().trim();
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) return reply.code(500).send({ error: '정보 추출 실패' });

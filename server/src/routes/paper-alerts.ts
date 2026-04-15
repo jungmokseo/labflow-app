@@ -17,6 +17,7 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { logError } from '../services/error-logger.js';
+import { logApiCost } from '../services/cost-logger.js';
 
 const MAX_JOURNALS = 15;
 
@@ -361,6 +362,7 @@ stars 기준:
           temperature: 0.1,
           messages: [{ role: 'user', content: prompt }],
         });
+        logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_relevance_score').catch(() => {});
         const text = response.content.find(b => b.type === 'text');
         if (text && text.type === 'text') {
           const match = text.text.match(/\[[\s\S]*\]/);
@@ -426,6 +428,7 @@ ${ctx}제목: ${title}
         temperature: 0.2,
         messages: [{ role: 'user', content: prompt }],
       });
+      logApiCost('system', 'claude-opus-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') return text.text.trim();
     } catch (err) {
@@ -440,6 +443,7 @@ ${ctx}제목: ${title}
           temperature: 0.2,
           messages: [{ role: 'user', content: prompt }],
         });
+        logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary_fallback').catch(() => {});
         const text = response.content.find(b => b.type === 'text');
         if (text && text.type === 'text') return text.text.trim();
       } catch { /* fall through to Gemini */ }
@@ -508,6 +512,7 @@ ${paperList}
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }],
       });
+      logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'weekly_insight').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') return text.text.trim();
     } catch (err) {
@@ -521,6 +526,8 @@ ${paperList}
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
+    const usage = result.response.usageMetadata;
+    if (usage) logApiCost('system', 'gemini-2.5-flash', usage.promptTokenCount ?? 0, usage.candidatesTokenCount ?? 0, 'weekly_insight_fallback').catch(() => {});
     return result.response.text().trim();
   } catch { return ''; }
 }

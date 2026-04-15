@@ -8,6 +8,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
+import { logApiCost } from './cost-logger.js';
 
 // ── 타입 ──────────────────────────────────────────
 export interface ClassificationResult {
@@ -62,6 +63,8 @@ export async function classifyWithGemini(text: string): Promise<ClassificationRe
     },
   });
 
+  const geminiClassUsage = result.response.usageMetadata;
+  if (geminiClassUsage) logApiCost('system', 'gemini-2.5-flash', geminiClassUsage.promptTokenCount ?? 0, geminiClassUsage.candidatesTokenCount ?? 0, 'gemini_classify').catch(() => {});
   const response = result.response.text().trim();
   // Extract JSON from response (may contain thinking text before/after)
   const jsonMatch = response.match(/\{[\s\S]*\}/);

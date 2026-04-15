@@ -10,6 +10,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '../config/env.js';
+import { logApiCost } from './cost-logger.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -93,6 +94,8 @@ export async function classifyCapture(text: string): Promise<CaptureClassificati
       },
     });
 
+    const captureUsage = result.response.usageMetadata;
+    if (captureUsage) logApiCost('system', 'gemini-2.5-flash', captureUsage.promptTokenCount ?? 0, captureUsage.candidatesTokenCount ?? 0, 'capture_classify').catch(() => {});
     const response = result.response.text().trim();
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('No JSON found in Gemini response');

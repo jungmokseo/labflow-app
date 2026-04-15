@@ -5,6 +5,7 @@
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { maybeGenerateSummary } from '../services/session-manager.js';
+import { logApiCost } from '../services/cost-logger.js';
 
 export type ShadowType = 'email' | 'calendar' | 'knowledge';
 
@@ -86,6 +87,8 @@ export async function compressForShadow(fullResponse: string, type: ShadowType):
       generationConfig: { temperature: 0, maxOutputTokens: 1024 },
     });
 
+    const shadowUsage = result.response.usageMetadata;
+    if (shadowUsage) logApiCost('system', 'gemini-2.5-flash', shadowUsage.promptTokenCount ?? 0, shadowUsage.candidatesTokenCount ?? 0, 'shadow_compress').catch(() => {});
     return result.response.text().trim();
   } catch {
     return fullResponse.slice(0, 1000);
