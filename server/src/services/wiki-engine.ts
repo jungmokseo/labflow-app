@@ -746,12 +746,17 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
  *
  * @returns { processed: number, updated: string[] }
  */
+// Sonnet에 보낼 때 페이지당 최대 문자 수 (DB 저장은 30k 그대로, 입력만 축소)
+const SONNET_PER_ITEM_CHAR_CAP = 5000;
+// 한 번에 Sonnet으로 보낼 큐 항목 수
+const SONNET_BATCH_SIZE = 5;
+
 export async function ingestAndCompile(labId: string, userId?: string): Promise<{ processed: number; updated: string[] }> {
-  // 1. 미처리 큐 항목 가져오기 (페이지당 컨텐츠가 최대 30k이므로 10개씩)
+  // 1. 미처리 큐 항목 (5개씩 — 과도한 prompt 방지)
   const queue = await prisma.wikiRawQueue.findMany({
     where: { labId, processedAt: null },
     orderBy: { createdAt: 'asc' },
-    take: 10,
+    take: SONNET_BATCH_SIZE,
   });
 
   if (queue.length === 0) {
@@ -759,14 +764,13 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
     return { processed: 0, updated: [] };
   }
 
-  // 2. 기존 위키 아티클 인덱스
+  // 2. 기존 위키 아티클 인덱스 (제목/카테고리/태그만)
   const existingArticles = await prisma.wikiArticle.findMany({
     where: { labId },
     select: { title: true, category: true, tags: true },
   });
 
-  // 2-1. 논문 알림이 큐에 있으면 연구 관련 아티클(project, publication, research_trend, experiment)의
-  //      본문을 추가로 제공해서 LLM이 실제로 크로스 레퍼런스할 수 있도록 한다.
+  // 2-1. paper_alert 있을 때만 관련 연구 아티클 본문 공급 (10개 × 300자로 축소)
   const hasPaperAlert = queue.some(q => q.sourceType === 'paper_alert');
   let researchContext = '';
   if (hasPaperAlert) {
@@ -777,22 +781,25 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
       },
       select: { title: true, category: true, content: true },
       orderBy: { updatedAt: 'desc' },
-      take: 30, // 최신 30개
+      take: 10,
     });
     if (researchArticles.length > 0) {
-      researchContext = '\n\n[기존 연구 아티클 본문 — 논문 알림과 연계 판단용]\n' +
+      researchContext = '\n\n[기존 연구 아티클 요약 — 논문 알림과 연계 판단용]\n' +
         researchArticles.map(a =>
-          `### ${a.title} (${a.category})\n${a.content.slice(0, 800)}`
-        ).join('\n\n---\n\n');
+          `### ${a.title} (${a.category})\n${a.content.slice(0, 300)}`
+        ).join('\n\n');
     }
   }
 
   const anthropic = getAnthropicClient();
 
-  // 3. Claude Sonnet 호출
-  const queueText = queue.map((q, i) =>
-    `[${i + 1}] (${q.sourceType})\n${q.content}`
-  ).join('\n\n---\n\n');
+  // 3. Sonnet에 보낼 queueText — 페이지당 5k로 제한 (DB는 30k 유지)
+  const queueText = queue.map((q, i) => {
+    const trimmed = q.content.length > SONNET_PER_ITEM_CHAR_CAP
+      ? q.content.slice(0, SONNET_PER_ITEM_CHAR_CAP) + `\n[... ${q.content.length - SONNET_PER_ITEM_CHAR_CAP}자 생략]`
+      : q.content;
+    return `[${i + 1}] (${q.sourceType})\n${trimmed}`;
+  }).join('\n\n---\n\n');
 
   const existingText = existingArticles.length > 0
     ? existingArticles.map(a =>
@@ -800,57 +807,44 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
       ).join('\n')
     : '(아직 아티클 없음)';
 
-  const prompt = `당신은 BLISS Lab(연세대 바이오센서/유연전자소자 연구실) 지식 위키의 관리자입니다.
+  // 4. 프롬프트 분리: 시스템(캐시) + 사용자(동적). Anthropic 프롬프트 캐싱으로 비용 절감.
+  const systemPrompt = `당신은 BLISS Lab(연세대 바이오센서/유연전자소자 연구실) 지식 위키의 관리자입니다.
 
-[소스 우선순위 — 중요]
-아래 순서로 신뢰도가 높습니다. 동일 주제에 대해 내용이 충돌하면 우선순위가 높은 소스를 따르세요.
-1순위 (GDrive DB, 항상 최신 정확): project, lab_member, member_info, acknowledgment
+[소스 우선순위]
+1순위 (GDrive DB, 정확): project, lab_member, member_info, acknowledgment
 2순위 (직접 기록): meeting, brain_message, capture
 3순위 (참고): notion_page, paper_alert, publication
 
-[새로 들어온 데이터]
-${queueText}
+[지시사항]
+1. 새 데이터를 기존 아티클 업데이트 또는 신규 아티클 생성으로 반영
+2. 1순위 소스 내용은 3순위와 충돌 시 우선
+3. 아티클 간 [[제목]] 형식의 크로스 레퍼런스 포함
+4. 카테고리: person, project, research_trend, meeting_thread, experiment, collaboration, general
+5. 마크다운 형식, 간결하고 정보 밀도 높게, 날짜 포함, 이모지 금지
+6. paper_alert 처리 시 "관련 내부 연구" 섹션에 기존 프로젝트/논문을 [[제목]]으로 참조
 
-[기존 위키 아티클 목록]
+JSON 배열만 출력:
+[{"title": "...", "category": "...", "content": "...", "tags": [...], "sources": [{"type":"...","id":"...","date":"..."}]}]`;
+
+  const userMessage = `[기존 위키 아티클 목록]
 ${existingText}${researchContext}
 
-지시사항:
-1. 새 데이터를 분석해서 관련 있는 기존 아티클을 업데이트하거나, 없으면 새 아티클 생성
-2. 1순위 소스(GDrive)의 내용은 기존 아티클 내용을 덮어씀 — notion_page 등 3순위 소스의 내용과 충돌하면 GDrive 값을 우선
-3. 각 아티클은 [[다른아티클제목]] 형식으로 크로스레퍼런스 포함
-4. 카테고리: person(연구자), project(과제), research_trend(연구동향), meeting_thread(미팅주제), experiment(실험), collaboration(협업), general
-5. 마크다운 형식, 간결하고 정보 밀도 높게
-6. 날짜 정보는 반드시 포함
-7. 이모지 사용 금지
-
-[논문 알림(paper_alert) 처리 규칙 — 매우 중요]
-연구동향 아티클은 BLISS Lab의 기존 연구(과제·논문·실험)와 반드시 연계되어야 가치가 있습니다.
-paper_alert 데이터를 처리할 때는 다음을 준수하세요:
-- 위에 제공된 [기존 연구 아티클 본문]을 읽고, 논문과 관련 있는 내부 과제/논문/실험을 찾아내세요
-- 새로 만드는 연구동향 아티클의 내용에 "관련 내부 연구" 섹션을 포함하고, 어떤 기존 연구와 어떻게 연결되는지(유사 접근법/보완/경쟁 등) 구체적으로 서술하세요
-- 해당 기존 연구 아티클들을 [[아티클제목]] 형식으로 명시적으로 참조하세요
-- 관련 내부 연구가 없으면 "관련 내부 연구 없음 — 신규 탐색 영역"으로 명시하세요
-
-JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
-[
-  {
-    "title": "아티클 제목",
-    "category": "카테고리",
-    "content": "마크다운 내용",
-    "tags": ["태그1", "태그2"],
-    "sources": [{"type": "meeting", "id": "...", "date": "..."}]
-  }
-]`;
+[새로 들어온 데이터]
+${queueText}`;
 
   let articles: any[] = [];
   try {
+    // Prompt caching: system은 1회 전송 후 이후 호출에서 10% 비용으로 재사용
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2048,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      messages: [{ role: 'user', content: userMessage }],
     });
 
-    logApiCost(userId ?? 'system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'wiki_ingest').catch(() => {});
+    const usage = response.usage as any;
+    const inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+    logApiCost(userId ?? 'system', 'claude-sonnet-4-6', inputTokens, usage.output_tokens ?? 0, 'wiki_ingest').catch(() => {});
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
     articles = extractJsonArray(text);
   } catch (err) {
@@ -858,7 +852,7 @@ JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
     return { processed: 0, updated: [] };
   }
 
-  // 4. 파싱된 아티클 upsert
+  // 5. 아티클 upsert
   const updatedTitles: string[] = [];
   const now = new Date();
 
@@ -886,25 +880,31 @@ JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
         now,
       );
       updatedTitles.push(article.title);
-
-      // 지식 그래프 연계 — 아티클 내용에서 엔티티/관계 비동기 추출
-      if (userId) {
-        setImmediate(() => {
-          buildGraphFromText(userId, `${article.title}\n${article.content}`, 'wiki').catch(() => {});
-        });
-      }
     } catch (err) {
       logError('background', `[wiki-engine] 아티클 upsert 실패: ${article.title}`, { labId })(err);
     }
   }
 
-  // 5. 처리된 큐 항목 processedAt 업데이트
+  // 6. 지식 그래프: 아티클별 호출 → 배치 1회 호출로 변경 (Gemini 비용 20배 절감)
+  if (userId && articles.length > 0) {
+    const combinedText = articles
+      .filter(a => a.title && a.content)
+      .map(a => `## ${a.title}\n${(a.content as string).slice(0, 1000)}`)
+      .join('\n\n');
+    if (combinedText) {
+      setImmediate(() => {
+        buildGraphFromText(userId, combinedText, 'wiki').catch(() => {});
+      });
+    }
+  }
+
+  // 7. 처리된 큐 마킹
   await prisma.wikiRawQueue.updateMany({
     where: { id: { in: queue.map(q => q.id) } },
     data: { processedAt: now },
   });
 
-  console.log(`[wiki-engine] ingestAndCompile 완료: ${queue.length}개 처리, ${updatedTitles.length}개 아티클 업데이트`);
+  console.log(`[wiki-engine] ingestAndCompile 완료: ${queue.length}개 처리, ${updatedTitles.length}개 아티클 업데이트, 제목: ${updatedTitles.join(', ') || '(없음)'}`);
   return { processed: queue.length, updated: updatedTitles };
 }
 
