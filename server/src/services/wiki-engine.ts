@@ -418,7 +418,18 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] Capture enqueue 실패', { labId })(err);
   }
 
-  // ── LabMember (기초 데이터 — 미처리 항목만, 시간 제한 없음) ──
+  // ── GDrive 기반 소스 재큐 헬퍼 ─────────────────────────────
+  // project / lab_member / member_info / acknowledgment 는 GDrive가 진실의 원천.
+  // 이미 큐에 있어도 삭제 후 재생성해서 항상 최신 DB 값을 반영한다.
+  async function requeue(sourceType: string, sourceId: string, content: string): Promise<void> {
+    await prisma.wikiRawQueue.deleteMany({ where: { labId, sourceId } });
+    await prisma.wikiRawQueue.create({
+      data: { id: generateId(), labId, sourceType, sourceId, content },
+    });
+    enqueued++;
+  }
+
+  // ── LabMember (GDrive 연동 — 항상 최신값으로 재큐) ──────────
   try {
     const members = await prisma.labMember.findMany({
       where: { labId, active: true },
@@ -426,10 +437,6 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     });
 
     for (const m of members) {
-      const sourceId = `labmember_${m.id}`;
-      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-      if (existing) continue;
-
       const parts: string[] = [`[연구원] ${m.name}${m.nameEn ? ` (${m.nameEn})` : ''}`];
       if (m.role) parts.push(`역할: ${m.role}`);
       if (m.team) parts.push(`팀: ${m.team}`);
@@ -437,23 +444,13 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (m.metadata && typeof m.metadata === 'object' && Object.keys(m.metadata as object).length > 0) {
         parts.push(`추가정보: ${JSON.stringify(m.metadata)}`);
       }
-
-      await prisma.wikiRawQueue.create({
-        data: {
-          id: generateId(),
-          labId,
-          sourceType: 'lab_member',
-          sourceId,
-          content: parts.join('\n'),
-        },
-      });
-      enqueued++;
+      await requeue('lab_member', `labmember_${m.id}`, parts.join('\n'));
     }
   } catch (err) {
     logError('background', '[wiki-engine] LabMember enqueue 실패', { labId })(err);
   }
 
-  // ── Project (기초 데이터 — 미처리 항목만, 시간 제한 없음) ────
+  // ── Project (GDrive 연동 — 항상 최신값으로 재큐) ─────────────
   try {
     const projects = await prisma.project.findMany({
       where: { labId, status: 'active' },
@@ -466,10 +463,6 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     });
 
     for (const p of projects) {
-      const sourceId = `project_${p.id}`;
-      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-      if (existing) continue;
-
       const parts: string[] = [`[과제] ${p.name}`];
       if (p.shortName) parts.push(`과제번호/약칭: ${p.shortName}`);
       if (p.businessName) parts.push(`사업명: ${p.businessName}`);
@@ -481,17 +474,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (p.responsibility) parts.push(`책임내용: ${p.responsibility}`);
       if (p.acknowledgmentKo) parts.push(`사사문구(한): ${p.acknowledgmentKo.slice(0, 300)}`);
       if (p.acknowledgmentEn) parts.push(`사사문구(영): ${p.acknowledgmentEn.slice(0, 300)}`);
-
-      await prisma.wikiRawQueue.create({
-        data: {
-          id: generateId(),
-          labId,
-          sourceType: 'project',
-          sourceId,
-          content: parts.join('\n'),
-        },
-      });
-      enqueued++;
+      await requeue('project', `project_${p.id}`, parts.join('\n'));
     }
   } catch (err) {
     logError('background', '[wiki-engine] Project enqueue 실패', { labId })(err);
@@ -532,7 +515,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] Publication enqueue 실패', { labId })(err);
   }
 
-  // ── Acknowledgment (GDrive 사사 기록 — 미처리 항목만) ────────
+  // ── Acknowledgment (GDrive 연동 — 항상 최신값으로 재큐) ──────
   try {
     const acks = await prisma.acknowledgment.findMany({
       where: { labId },
@@ -543,33 +526,19 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     });
 
     for (const a of acks) {
-      const sourceId = `acknowledgment_${a.id}`;
-      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-      if (existing) continue;
-
       const parts: string[] = [`[사사기록] ${a.paperTitle}`];
       if (a.type) parts.push(`유형: ${a.type}`);
       if (a.authors) parts.push(`저자: ${a.authors.slice(0, 200)}`);
       if (a.journal) parts.push(`저널/학회: ${a.journal}`);
       if (a.publishedAt) parts.push(`발표일: ${a.publishedAt}`);
       if (a.acknowledgedProjects) parts.push(`사사 과제: ${a.acknowledgedProjects.slice(0, 300)}`);
-
-      await prisma.wikiRawQueue.create({
-        data: {
-          id: generateId(),
-          labId,
-          sourceType: 'acknowledgment',
-          sourceId,
-          content: parts.join('\n'),
-        },
-      });
-      enqueued++;
+      await requeue('acknowledgment', `acknowledgment_${a.id}`, parts.join('\n'));
     }
   } catch (err) {
     logError('background', '[wiki-engine] Acknowledgment enqueue 실패', { labId })(err);
   }
 
-  // ── MemberInfo (GDrive 인적사항 — 미처리 항목만, 민감정보 제외) ─
+  // ── MemberInfo (GDrive 연동 — 항상 최신값으로 재큐, 민감정보 제외) ─
   try {
     const memberInfos = await prisma.memberInfo.findMany({
       where: { labId },
@@ -581,27 +550,13 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     });
 
     for (const mi of memberInfos) {
-      const sourceId = `memberinfo_${mi.id}`;
-      const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-      if (existing) continue;
-
       const parts: string[] = [`[인적사항] ${mi.name}`];
       if (mi.degree) parts.push(`학위과정: ${mi.degree}`);
       if (mi.department) parts.push(`학과: ${mi.department}`);
       if (mi.joinYear) parts.push(`입학년도: ${mi.joinYear}`);
       if (mi.graduationYear) parts.push(`졸업년도: ${mi.graduationYear}`);
       if (mi.researcherId) parts.push(`연구자번호: ${mi.researcherId}`);
-
-      await prisma.wikiRawQueue.create({
-        data: {
-          id: generateId(),
-          labId,
-          sourceType: 'member_info',
-          sourceId,
-          content: parts.join('\n'),
-        },
-      });
-      enqueued++;
+      await requeue('member_info', `memberinfo_${mi.id}`, parts.join('\n'));
     }
   } catch (err) {
     logError('background', '[wiki-engine] MemberInfo enqueue 실패', { labId })(err);
@@ -663,6 +618,12 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
 
   const prompt = `당신은 BLISS Lab(연세대 바이오센서/유연전자소자 연구실) 지식 위키의 관리자입니다.
 
+[소스 우선순위 — 중요]
+아래 순서로 신뢰도가 높습니다. 동일 주제에 대해 내용이 충돌하면 우선순위가 높은 소스를 따르세요.
+1순위 (GDrive DB, 항상 최신 정확): project, lab_member, member_info, acknowledgment
+2순위 (직접 기록): meeting, brain_message, capture
+3순위 (참고): notion_page, paper_alert, publication
+
 [새로 들어온 데이터]
 ${queueText}
 
@@ -671,11 +632,12 @@ ${existingText}
 
 지시사항:
 1. 새 데이터를 분석해서 관련 있는 기존 아티클을 업데이트하거나, 없으면 새 아티클 생성
-2. 각 아티클은 [[다른아티클제목]] 형식으로 크로스레퍼런스 포함
-3. 카테고리: person(연구자), project(과제), research_trend(연구동향), meeting_thread(미팅주제), experiment(실험), collaboration(협업), general
-4. 마크다운 형식, 간결하고 정보 밀도 높게
-5. 날짜 정보는 반드시 포함
-6. 이모지 사용 금지
+2. 1순위 소스(GDrive)의 내용은 기존 아티클 내용을 덮어씀 — notion_page 등 3순위 소스의 내용과 충돌하면 GDrive 값을 우선
+3. 각 아티클은 [[다른아티클제목]] 형식으로 크로스레퍼런스 포함
+4. 카테고리: person(연구자), project(과제), research_trend(연구동향), meeting_thread(미팅주제), experiment(실험), collaboration(협업), general
+5. 마크다운 형식, 간결하고 정보 밀도 높게
+6. 날짜 정보는 반드시 포함
+7. 이모지 사용 금지
 
 JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
 [
