@@ -1092,7 +1092,7 @@ export async function deleteWikiArticle(id: string) {
 }
 
 export async function triggerWikiIngest() {
-  return apiFetch<{ message: string; enqueued: number; processed: number; updated: string[] }>('/api/wiki/ingest', { method: 'POST' }, 0, 120000);
+  return apiFetch<{ message: string; status?: string; enqueued?: number; processed?: number; updated?: string[] }>('/api/wiki/ingest', { method: 'POST' }, 0, 15000);
 }
 
 export async function triggerWikiSynthesis() {

@@ -163,12 +163,38 @@ export default function WikiPage() {
   async function handleIngest() {
     setIngestLoading(true);
     try {
-      const res = await triggerWikiIngest() as { enqueued: number; processed: number; updated: string[] };
-      showToast(`Ingest 완료 — ${res.processed}건 처리, ${res.updated.length}개 업데이트`);
-      await loadArticles();
+      await triggerWikiIngest();
+      showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
+
+      // 완료될 때까지 폴링 (3초 간격, 최대 3분)
+      const startPending = status?.pendingQueueItems ?? 0;
+      let polls = 0;
+      const maxPolls = 60;
+      const pollInterval = setInterval(async () => {
+        polls++;
+        try {
+          const s = await getWikiStatus();
+          setStatus(s as WikiStatus);
+          const pending = (s as WikiStatus).pendingQueueItems;
+          if (pending === 0 || polls >= maxPolls) {
+            clearInterval(pollInterval);
+            setIngestLoading(false);
+            await loadArticles();
+            if (pending === 0) {
+              showToast(`Ingest 완료`);
+            } else {
+              showToast(`Ingest 시간 초과 — 일부 처리됨 (대기: ${pending}건)`, 'err');
+            }
+          }
+        } catch {
+          // 폴링 실패는 무시
+        }
+      }, 3000);
+
+      // 폴링이 끝나기 전에 컴포넌트가 언마운트되면 정리
+      return () => clearInterval(pollInterval);
     } catch {
-      showToast('Ingest 실패', 'err');
-    } finally {
+      showToast('Ingest 요청 실패', 'err');
       setIngestLoading(false);
     }
   }

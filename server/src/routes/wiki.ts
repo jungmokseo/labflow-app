@@ -104,6 +104,7 @@ export async function wikiRoutes(app: FastifyInstance) {
   });
 
   // ── POST /api/wiki/ingest — 수동 ingest 트리거 (OWNER만) ─
+  // 즉시 202 반환 후 백그라운드에서 처리 (Vercel 30s proxy 타임아웃 우회)
   app.post(
     '/api/wiki/ingest',
     { preHandler: requirePermission('OWNER') },
@@ -112,33 +113,28 @@ export async function wikiRoutes(app: FastifyInstance) {
       const labId = await resolveLabId(userId);
       if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
-      try {
-        const enqueued = await enqueueNewData(labId, userId);
+      // 즉시 응답 — 백그라운드에서 실제 처리
+      reply.code(202).send({ message: 'Ingest 시작됨', status: 'processing' });
 
-        // 큐가 빌 때까지 반복 처리 (15개씩 배치)
-        let totalProcessed = 0;
-        const allUpdated: string[] = [];
-        let rounds = 0;
-        const maxRounds = 10; // 안전 상한
+      // 백그라운드 처리 (응답과 무관하게 실행)
+      setImmediate(async () => {
+        try {
+          const enqueued = await enqueueNewData(labId, userId);
+          console.log(`[wiki] enqueued ${enqueued} items for labId ${labId}`);
 
-        while (rounds < maxRounds) {
-          const result = await ingestAndCompile(labId);
-          totalProcessed += result.processed;
-          allUpdated.push(...result.updated);
-          rounds++;
-          if (result.processed === 0) break;
+          let rounds = 0;
+          const maxRounds = 10;
+          while (rounds < maxRounds) {
+            const result = await ingestAndCompile(labId);
+            console.log(`[wiki] round ${rounds + 1}: processed ${result.processed}, updated ${result.updated.length}`);
+            rounds++;
+            if (result.processed === 0) break;
+          }
+          console.log(`[wiki] ingest complete after ${rounds} rounds`);
+        } catch (err) {
+          logError('background', '[wiki] background ingest 실패', { labId })(err);
         }
-
-        return reply.send({
-          message: '위키 ingest 완료',
-          enqueued,
-          processed: totalProcessed,
-          updated: [...new Set(allUpdated)],
-        });
-      } catch (err) {
-        logError('background', 'POST /api/wiki/ingest 실패', { labId })(err);
-        return reply.code(500).send({ error: '위키 ingest 실패' });
-      }
+      });
     },
   );
 
