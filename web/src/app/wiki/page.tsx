@@ -532,15 +532,56 @@ export default function WikiPage() {
         {/* 모바일: 아티클 미선택 시 숨김 */}
         <div className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col min-h-0`}>
           {!selectedId ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-              <BookOpen className="w-12 h-12 text-text-muted mb-3" />
-              <p className="text-text-muted text-sm">왼쪽에서 아티클을 선택하세요</p>
-              {status && status.totalArticles === 0 && (
-                <div className="mt-4 p-4 bg-bg-input rounded-xl border border-border text-sm text-text-muted max-w-xs">
-                  아직 생성된 위키가 없습니다.<br />
-                  <span className="text-primary font-medium cursor-pointer" onClick={handleIngest}>Ingest 버튼</span>을 눌러 시작하세요.
+            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+              <div className="max-w-xl mx-auto">
+                <div className="flex items-center gap-2 mb-3">
+                  <BookOpen className="w-5 h-5 text-primary" />
+                  <h2 className="text-base font-semibold text-text-heading">지식 위키 사용법</h2>
                 </div>
-              )}
+                <p className="text-sm text-text-muted mb-4">
+                  연구실의 프로젝트 · 미팅 · 인적 데이터 · 최신 동향을 통합한 연구 지식베이스입니다.
+                  Notion / 미팅 노트 / GDrive 데이터를 매일 자동 수집하여 카테고리별 아티클로 정리합니다.
+                </p>
+
+                <div className="space-y-2 mb-6">
+                  <div className="p-3 bg-bg-input rounded-lg border border-border">
+                    <p className="text-xs font-medium text-text-heading mb-1">📂 카테고리 필터</p>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      상단 칩으로 연구원·과제·연구동향·미팅·실험·협업별로 좁혀볼 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-bg-input rounded-lg border border-border">
+                    <p className="text-xs font-medium text-text-heading mb-1">🔗 아티클 간 연결</p>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      본문에 나오는 <span className="text-primary">파란색 링크</span>를 누르면 관련 아티클로 바로 이동합니다 (예: 프로젝트 → 담당자, 미팅 → 관련 프로젝트).
+                    </p>
+                  </div>
+                  <div className="p-3 bg-bg-input rounded-lg border border-border">
+                    <p className="text-xs font-medium text-text-heading mb-1">🔍 검색</p>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      상단 검색창에 제목 또는 태그 일부를 입력하여 빠르게 찾을 수 있습니다.
+                    </p>
+                  </div>
+                  <div className="p-3 bg-bg-input rounded-lg border border-border">
+                    <p className="text-xs font-medium text-text-heading mb-1">⚡ 갱신</p>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      <span className="text-primary font-medium">Ingest</span> 버튼: Notion·GDrive에서 신규 변경만 가져와 반영.
+                      <span className="text-primary font-medium"> 딥 리뷰</span> 버튼: 전체 위키 재분석 & 연결고리 발견.
+                    </p>
+                  </div>
+                </div>
+
+                {status && status.totalArticles === 0 ? (
+                  <div className="p-4 bg-primary/10 rounded-xl border border-primary/30 text-sm text-text-heading">
+                    아직 생성된 위키가 없습니다.<br />
+                    <button onClick={handleIngest} className="text-primary font-medium underline mt-1">Ingest 버튼</button>을 눌러 시작하세요.
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-muted text-center md:text-left">
+                    {status ? `${status.totalArticles}개 아티클 준비됨 — 좌측에서 선택하여 열람` : '아티클 로드 중...'}
+                  </p>
+                )}
+              </div>
             </div>
           ) : detailLoading ? (
             <div className="flex-1 flex items-center justify-center">
@@ -656,9 +697,30 @@ export default function WikiPage() {
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        a: ({ href, children }) => (
-                          <a href={href} className="text-primary hover:underline">{children}</a>
-                        ),
+                        a: ({ href, children }) => {
+                          // [[Title]] 위키링크 — 프리프로세싱 시 #wikilink:Title 로 변환된 href를 처리
+                          if (href?.startsWith('#wikilink:')) {
+                            const title = decodeURIComponent(href.slice('#wikilink:'.length));
+                            const matched = articles.find(a => a.title === title);
+                            if (matched) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => loadDetail(matched.id)}
+                                  className="text-primary hover:underline inline"
+                                >
+                                  {children}
+                                </button>
+                              );
+                            }
+                            return (
+                              <span className="text-text-muted italic" title="연결된 아티클 없음">
+                                {children}
+                              </span>
+                            );
+                          }
+                          return <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>;
+                        },
                         code: ({ children, className }) => {
                           const isBlock = className?.startsWith('language-');
                           return isBlock ? (
@@ -682,7 +744,7 @@ export default function WikiPage() {
                         hr: () => <hr className="border-border my-3" />,
                       }}
                     >
-                      {detail.content}
+                      {detail.content.replace(/\[\[([^\]]+)\]\]/g, (_: string, title: string) => `[${title}](#wikilink:${encodeURIComponent(title)})`)}
                     </ReactMarkdown>
                   </div>
                 )}
