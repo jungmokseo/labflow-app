@@ -237,8 +237,8 @@ export default function WikiPage() {
           <h1 className="text-lg font-bold text-text-heading">지식 위키</h1>
           {status && (
             <p className="text-xs text-text-muted">
-              {status.totalArticles}개 아티클 &middot; 처리 대기 {status.pendingQueueItems}건
-              {status.lastIngestAt && ` &middot; 마지막 갱신 ${timeAgo(status.lastIngestAt)}`}
+              {status.totalArticles}개 아티클 · 처리 대기 {status.pendingQueueItems}건
+              {status.lastIngestAt && ` · 마지막 갱신 ${timeAgo(status.lastIngestAt)}`}
             </p>
           )}
         </div>
