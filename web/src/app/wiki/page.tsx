@@ -162,63 +162,58 @@ export default function WikiPage() {
 
   async function handleIngest() {
     setIngestLoading(true);
+    showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
 
-    // 큐가 0이 될 때까지 자동으로 re-trigger (배치당 최대 3분 폴링)
-    const runBatch = async (): Promise<void> => {
+    // Railway 배치 1회 트리거 후 pending이 줄어들기를 기다림
+    // pending이 이전과 같으면(Railway 배치 완료) 새 배치 재트리거
+    // pending === 0이 될 때까지 무제한 반복, 폴링 횟수 제한 없음
+    let lastPending = -1;
+    let staleTicks = 0;      // pending이 변하지 않은 연속 횟수
+    const STALE_LIMIT = 20;  // 1분(3s×20) 동안 변화 없으면 새 배치 트리거
+
+    const interval = setInterval(async () => {
       try {
-        await triggerWikiIngest();
-      } catch {
-        showToast('Ingest 요청 실패', 'err');
-        setIngestLoading(false);
-        return;
-      }
-
-      let polls = 0;
-      const maxPolls = 60; // 3분
-
-      await new Promise<void>((resolve) => {
-        const pollInterval = setInterval(async () => {
-          polls++;
-          try {
-            const s = await getWikiStatus();
-            setStatus(s as WikiStatus);
-            const pending = (s as WikiStatus).pendingQueueItems;
-
-            if (pending === 0 || polls >= maxPolls) {
-              clearInterval(pollInterval);
-              await loadArticles();
-              resolve();
-            }
-          } catch {
-            // 폴링 실패는 무시하고 계속
-          }
-        }, 3000);
-      });
-    };
-
-    try {
-      showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
-      let round = 1;
-
-      while (true) {
-        await runBatch();
-
-        // 최신 상태 확인
         const s = await getWikiStatus();
         setStatus(s as WikiStatus);
         const pending = (s as WikiStatus).pendingQueueItems;
 
         if (pending === 0) {
+          clearInterval(interval);
+          setIngestLoading(false);
+          await loadArticles();
           showToast('Ingest 완료');
-          break;
+          return;
         }
 
-        // 아직 남아있으면 다음 배치 자동 시작
-        round++;
-        showToast(`배치 ${round} 시작 — 대기 ${pending}건 남음`);
+        if (pending === lastPending) {
+          staleTicks++;
+          if (staleTicks >= STALE_LIMIT) {
+            // Railway 배치가 끝난 것 — 새 배치 트리거
+            staleTicks = 0;
+            try {
+              await triggerWikiIngest();
+              showToast(`다음 배치 시작 — 대기 ${pending}건 남음`);
+            } catch {
+              // 트리거 실패해도 계속 폴링
+            }
+          }
+        } else {
+          staleTicks = 0; // pending이 줄고 있으면 리셋
+        }
+
+        lastPending = pending;
+      } catch {
+        // 폴링 실패는 무시하고 계속
       }
-    } finally {
+    }, 3000);
+
+    // 첫 배치 트리거
+    try {
+      await triggerWikiIngest();
+    } catch {
+      clearInterval(interval);
       setIngestLoading(false);
+      showToast('Ingest 요청 실패', 'err');
     }
   }
 
