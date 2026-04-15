@@ -1106,6 +1106,7 @@ export async function resetWikiNotionQueue() {
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;
+    keyPreview?: string;
     integrationName?: string;
     accessiblePageCount?: number;
     error?: string;

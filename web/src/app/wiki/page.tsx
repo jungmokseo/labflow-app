@@ -259,9 +259,11 @@ export default function WikiPage() {
         lines.push('Railway 대시보드에서 환경변수 추가 후 재배포 필요');
       } else if (res.error) {
         lines.push('❌ Notion API 호출 실패');
+        if (res.keyPreview) lines.push(`키: ${res.keyPreview}`);
         lines.push(`에러: ${res.error}`);
       } else {
         lines.push('✓ API 키 정상');
+        if (res.keyPreview) lines.push(`키: ${res.keyPreview}`);
         if (res.integrationName) lines.push(`통합: ${res.integrationName}`);
         lines.push(`접근 가능 페이지: ${res.accessiblePageCount ?? 0}개 (샘플)`);
         if (res.sampleTitles && res.sampleTitles.length > 0) {

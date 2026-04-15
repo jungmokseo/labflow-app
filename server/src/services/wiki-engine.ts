@@ -276,6 +276,7 @@ async function enqueueNotionData(labId: string): Promise<number> {
 /** Notion 연결 진단 — API 키 존재/유효성 및 접근 가능 페이지 수 확인 */
 export async function diagnoseNotion(): Promise<{
   apiKeySet: boolean;
+  keyPreview?: string;
   integrationName?: string;
   accessiblePageCount?: number;
   error?: string;
@@ -284,6 +285,9 @@ export async function diagnoseNotion(): Promise<{
   if (!env.NOTION_API_KEY) {
     return { apiKeySet: false };
   }
+
+  // 키 앞 6자만 노출 (예: "ntn_ab...", "secret...")
+  const keyPreview = env.NOTION_API_KEY.slice(0, 6) + '...';
 
   const notion = new NotionClient({ auth: env.NOTION_API_KEY });
 
@@ -310,6 +314,7 @@ export async function diagnoseNotion(): Promise<{
 
     return {
       apiKeySet: true,
+      keyPreview,
       integrationName,
       accessiblePageCount: searchRes.results.length,
       sampleTitles,
@@ -317,6 +322,7 @@ export async function diagnoseNotion(): Promise<{
   } catch (err: any) {
     return {
       apiKeySet: true,
+      keyPreview,
       error: err?.message ?? String(err),
     };
   }
