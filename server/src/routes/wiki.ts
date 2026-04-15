@@ -16,12 +16,24 @@ import { requirePermission } from '../middleware/permissions.js';
 import { logError } from '../services/error-logger.js';
 import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus } from '../services/wiki-engine.js';
 
+/** userId로 lab을 조회 (owner 우선, 그 다음 member) */
+async function resolveLabId(userId: string): Promise<string | null> {
+  const owned = await prisma.lab.findFirst({ where: { ownerId: userId }, select: { id: true } });
+  if (owned) return owned.id;
+  const membership = await prisma.labMember.findFirst({
+    where: { userId, active: true },
+    select: { labId: true },
+  });
+  return membership?.labId ?? null;
+}
+
 export async function wikiRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authMiddleware);
 
   // ── GET /api/wiki — 아티클 목록 ──────────────────────────
   app.get('/api/wiki', async (request: FastifyRequest, reply: FastifyReply) => {
-    const labId = request.labId;
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
     if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
     const query = request.query as Record<string, string>;
@@ -57,7 +69,8 @@ export async function wikiRoutes(app: FastifyInstance) {
 
   // ── GET /api/wiki/status — 위키 상태 ─────────────────────
   app.get('/api/wiki/status', async (request: FastifyRequest, reply: FastifyReply) => {
-    const labId = request.labId;
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
     if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
     try {
@@ -71,7 +84,8 @@ export async function wikiRoutes(app: FastifyInstance) {
 
   // ── GET /api/wiki/:id — 특정 아티클 ─────────────────────
   app.get('/api/wiki/:id', async (request: FastifyRequest, reply: FastifyReply) => {
-    const labId = request.labId;
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
     if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
     const { id } = request.params as { id: string };
@@ -94,14 +108,11 @@ export async function wikiRoutes(app: FastifyInstance) {
     '/api/wiki/ingest',
     { preHandler: requirePermission('OWNER') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const labId = request.labId;
-      const userId = request.userId;
-      if (!labId || !userId) return reply.code(400).send({ error: '연구실 또는 사용자 정보 없음' });
+      const userId = request.userId!;
+      const labId = await resolveLabId(userId);
+      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
       try {
-        const lab = await prisma.lab.findUnique({ where: { id: labId } });
-        if (!lab) return reply.code(404).send({ error: '연구실을 찾을 수 없습니다' });
-
         const enqueued = await enqueueNewData(labId, userId);
         const result = await ingestAndCompile(labId);
 
@@ -123,7 +134,8 @@ export async function wikiRoutes(app: FastifyInstance) {
     '/api/wiki/synthesis',
     { preHandler: requirePermission('OWNER') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const labId = request.labId;
+      const userId = request.userId!;
+      const labId = await resolveLabId(userId);
       if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
       try {
@@ -141,7 +153,8 @@ export async function wikiRoutes(app: FastifyInstance) {
     '/api/wiki/:id',
     { preHandler: requirePermission('OWNER') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const labId = request.labId;
+      const userId = request.userId!;
+      const labId = await resolveLabId(userId);
       if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
       const { id } = request.params as { id: string };
@@ -174,7 +187,8 @@ export async function wikiRoutes(app: FastifyInstance) {
     '/api/wiki/:id',
     { preHandler: requirePermission('OWNER') },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const labId = request.labId;
+      const userId = request.userId!;
+      const labId = await resolveLabId(userId);
       if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
       const { id } = request.params as { id: string };
