@@ -159,6 +159,31 @@ export async function wikiRoutes(app: FastifyInstance) {
     });
   });
 
+  // ── POST /api/wiki/reset-notion — Notion 큐 재처리 초기화 (OWNER만) ─
+  // 처리 완료된 모든 notion_page 큐 항목을 삭제하여 다음 Ingest 시 전부 재처리
+  app.post('/api/wiki/reset-notion', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
+
+    try {
+      const result = await prisma.wikiRawQueue.deleteMany({
+        where: { labId, sourceType: 'notion_page' },
+      });
+      return reply.send({
+        message: `Notion 큐 초기화 완료 — ${result.count}건 삭제됨`,
+        deleted: result.count,
+      });
+    } catch (err) {
+      logError('background', 'POST /api/wiki/reset-notion 실패', { labId })(err);
+      return reply.code(500).send({ error: 'Notion 큐 초기화 실패' });
+    }
+  });
+
   // ── POST /api/wiki/synthesis — 수동 synthesis 트리거 (OWNER만) ─
   // 즉시 202 반환 후 백그라운드에서 처리 (Vercel 30s proxy 타임아웃 우회)
   app.post('/api/wiki/synthesis', async (request: FastifyRequest, reply: FastifyReply) => {

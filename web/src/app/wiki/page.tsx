@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   getWikiArticles, getWikiArticle, getWikiStatus, updateWikiArticle,
-  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis,
+  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue,
   type WikiArticle, type WikiStatus,
 } from '@/lib/api';
 import {
@@ -250,6 +250,18 @@ export default function WikiPage() {
     }, POLL_MS);
   }
 
+  async function handleResetNotion() {
+    if (!confirm('Notion 페이지 큐를 초기화합니다.\n처리 완료된 모든 Notion 항목이 삭제되고, 다음 Ingest에서 개선된 추출 로직으로 전체 재처리됩니다.\n\n진행할까요?')) return;
+    try {
+      const res = await resetWikiNotionQueue();
+      showToast(res.message);
+      const s = await getWikiStatus();
+      setStatus(s as WikiStatus);
+    } catch {
+      showToast('초기화 실패', 'err');
+    }
+  }
+
   async function handleSynthesis() {
     if (!confirm('Opus 딥 리뷰를 실행합니다. 시간이 걸릴 수 있습니다.')) return;
     setSynthLoading(true);
@@ -309,6 +321,15 @@ export default function WikiPage() {
           >
             {synthLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             딥 리뷰
+          </button>
+          <button
+            onClick={handleResetNotion}
+            disabled={ingestLoading}
+            title="Notion 페이지 큐 초기화 (개선된 추출 로직으로 재처리)"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Notion 재처리
           </button>
           <button onClick={loadArticles} className="p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg transition-colors">
             <RefreshCw className="w-4 h-4" />

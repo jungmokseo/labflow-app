@@ -1098,3 +1098,7 @@ export async function triggerWikiIngest() {
 export async function triggerWikiSynthesis() {
   return apiFetch<{ message: string }>('/api/wiki/synthesis', { method: 'POST' }, 0, 180000);
 }
+
+export async function resetWikiNotionQueue() {
+  return apiFetch<{ message: string; deleted: number }>('/api/wiki/reset-notion', { method: 'POST' }, 0, 30000);
+}

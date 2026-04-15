@@ -82,22 +82,33 @@ function blockToLine(b: any): string {
   }
 }
 
-/** 블록 배열 재귀 변환 (has_children인 블록의 자식 fetch + indent) */
+/**
+ * 블록 배열 재귀 변환 — 깊이 무제한, 안전장치 포함.
+ * 안전장치: 순환 참조 방지(visited Set), 페이지당 최대 블록 수 제한(MAX_BLOCKS_PER_PAGE)
+ */
+const MAX_BLOCKS_PER_PAGE = 2000; // 페이지 하나당 최대 블록 수 (안전 한계)
+
 async function blocksToMarkdownRecursive(
   notion: NotionClient,
   blocks: any[],
   depth: number = 0,
-  maxDepth: number = 3,
+  visited: Set<string> = new Set(),
+  counter: { count: number } = { count: 0 },
 ): Promise<string> {
   const lines: string[] = [];
   const indent = '  '.repeat(depth);
 
   for (const b of blocks) {
+    if (counter.count >= MAX_BLOCKS_PER_PAGE) break;
+    if (visited.has(b.id)) continue;
+    visited.add(b.id);
+    counter.count++;
+
     const line = blockToLine(b);
     if (line) lines.push(indent + line);
 
-    // 자식 블록 재귀 (toggle, list, callout, column_list, synced_block, table 등)
-    if (b.has_children && depth < maxDepth) {
+    // has_children이면 자식 재귀 (깊이 제한 없음)
+    if (b.has_children && counter.count < MAX_BLOCKS_PER_PAGE) {
       try {
         let children: any[] = [];
         let cursor: string | undefined = undefined;
@@ -112,7 +123,7 @@ async function blocksToMarkdownRecursive(
         } while (cursor);
 
         if (children.length > 0) {
-          const childMd = await blocksToMarkdownRecursive(notion, children, depth + 1, maxDepth);
+          const childMd = await blocksToMarkdownRecursive(notion, children, depth + 1, visited, counter);
           if (childMd) lines.push(childMd);
         }
       } catch { /* 자식 fetch 실패 시 스킵 */ }
@@ -231,14 +242,14 @@ async function enqueueNotionData(labId: string): Promise<number> {
             bodyBlocks = bodyBlocks.concat(blockRes.results as any[]);
             blockCursor = blockRes.has_more ? blockRes.next_cursor : undefined;
           } while (blockCursor);
-          bodyText = await blocksToMarkdownRecursive(notion, bodyBlocks, 0, 3);
+          bodyText = await blocksToMarkdownRecursive(notion, bodyBlocks);
         } catch { /* 블록 없으면 생략 */ }
 
         const content = [
           `[노션] ${title}`,
           propText,
           bodyText,
-        ].filter(Boolean).join('\n').slice(0, 10000);
+        ].filter(Boolean).join('\n').slice(0, 30000);
 
         if (content.length < 20) continue; // 빈 페이지 스킵
 
@@ -653,11 +664,11 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
  * @returns { processed: number, updated: string[] }
  */
 export async function ingestAndCompile(labId: string, userId?: string): Promise<{ processed: number; updated: string[] }> {
-  // 1. 미처리 큐 항목 가져오기 (limit 50)
+  // 1. 미처리 큐 항목 가져오기 (페이지당 컨텐츠가 최대 30k이므로 10개씩)
   const queue = await prisma.wikiRawQueue.findMany({
     where: { labId, processedAt: null },
     orderBy: { createdAt: 'asc' },
-    take: 15,
+    take: 10,
   });
 
   if (queue.length === 0) {
