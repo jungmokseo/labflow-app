@@ -11,6 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { Client as NotionClient } from '@notionhq/client';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { logError } from './error-logger.js';
@@ -45,6 +46,214 @@ function generateId(): string {
   const timestamp = Date.now().toString(36);
   const randomPart = Math.random().toString(36).slice(2, 9);
   return `c${timestamp}${randomPart}`;
+}
+
+// ── Notion 헬퍼 ───────────────────────────────────────────
+
+/** Notion RichText 배열 → 일반 문자열 */
+function richTextToStr(richText: any[]): string {
+  if (!Array.isArray(richText)) return '';
+  return richText.map((t: any) => t.plain_text ?? '').join('');
+}
+
+/** Notion 블록 배열 → 마크다운 텍스트 (최대 depth=1) */
+function blocksToMarkdown(blocks: any[]): string {
+  const lines: string[] = [];
+  for (const b of blocks) {
+    switch (b.type) {
+      case 'paragraph':         lines.push(richTextToStr(b.paragraph?.rich_text ?? [])); break;
+      case 'heading_1':         lines.push('# ' + richTextToStr(b.heading_1?.rich_text ?? [])); break;
+      case 'heading_2':         lines.push('## ' + richTextToStr(b.heading_2?.rich_text ?? [])); break;
+      case 'heading_3':         lines.push('### ' + richTextToStr(b.heading_3?.rich_text ?? [])); break;
+      case 'bulleted_list_item':lines.push('- ' + richTextToStr(b.bulleted_list_item?.rich_text ?? [])); break;
+      case 'numbered_list_item':lines.push('1. ' + richTextToStr(b.numbered_list_item?.rich_text ?? [])); break;
+      case 'to_do':             lines.push((b.to_do?.checked ? '[x] ' : '[ ] ') + richTextToStr(b.to_do?.rich_text ?? [])); break;
+      case 'quote':             lines.push('> ' + richTextToStr(b.quote?.rich_text ?? [])); break;
+      case 'callout':           lines.push(richTextToStr(b.callout?.rich_text ?? [])); break;
+      case 'toggle':            lines.push(richTextToStr(b.toggle?.rich_text ?? [])); break;
+      case 'code':              lines.push('```\n' + richTextToStr(b.code?.rich_text ?? []) + '\n```'); break;
+      default: break;
+    }
+  }
+  return lines.filter(Boolean).join('\n');
+}
+
+/** Notion 페이지 제목 추출 */
+function getPageTitle(page: any): string {
+  const props = page.properties ?? {};
+  for (const key of Object.keys(props)) {
+    const p = props[key];
+    if (p.type === 'title' && Array.isArray(p.title)) {
+      return richTextToStr(p.title) || '(제목 없음)';
+    }
+  }
+  return '(제목 없음)';
+}
+
+/** Notion 페이지 properties → 텍스트 요약 (title 제외) */
+function propsToText(props: Record<string, any>): string {
+  const lines: string[] = [];
+  for (const [key, p] of Object.entries(props)) {
+    if (p.type === 'title') continue;
+    let val = '';
+    switch (p.type) {
+      case 'rich_text':   val = richTextToStr(p.rich_text ?? []); break;
+      case 'select':      val = p.select?.name ?? ''; break;
+      case 'multi_select':val = (p.multi_select ?? []).map((s: any) => s.name).join(', '); break;
+      case 'date':        val = p.date?.start ?? ''; break;
+      case 'checkbox':    val = p.checkbox ? '예' : '아니오'; break;
+      case 'number':      val = p.number?.toString() ?? ''; break;
+      case 'url':         val = p.url ?? ''; break;
+      case 'email':       val = p.email ?? ''; break;
+      case 'phone_number':val = p.phone_number ?? ''; break;
+      case 'status':      val = p.status?.name ?? ''; break;
+      case 'people':      val = (p.people ?? []).map((u: any) => u.name ?? '').join(', '); break;
+      default: break;
+    }
+    if (val) lines.push(`${key}: ${val}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Notion 지정 DB/페이지에서 데이터를 수집해 WikiRawQueue에 추가.
+ * 계정 정보(4e835742) DB는 보안상 제외.
+ */
+const NOTION_DB_SOURCES = [
+  { id: '495c03f9-1170-4fa0-9961-f49bb5c8635c', label: '연구실 FAQ' },
+  { id: '7bc879e4-3f8f-477c-b679-a4ab652c06a9', label: '규정/매뉴얼' },
+  { id: 'b4e01f85-2e14-447c-a165-cf1894602623', label: '과제 정보' },
+  { id: '501ec0ca-5469-4264-91e4-b3148e3ea830', label: '인적사항' },
+];
+
+const NOTION_PAGE_SOURCES = [
+  { id: '311f9f17-6cf4-8086-b90c-f665a712a928', label: '연구실 개인별 관리' },
+  { id: '324f9f17-6cf4-8150-b25c-c2acb1952a95', label: '수행 과제 목록' },
+];
+
+async function enqueueNotionData(labId: string): Promise<number> {
+  if (!env.NOTION_API_KEY) return 0;
+
+  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  let enqueued = 0;
+
+  // ── DB 소스 처리 ─────────────────────────────────────────
+  for (const src of NOTION_DB_SOURCES) {
+    try {
+      const dbId = src.id.replace(/-/g, '');
+      let cursor: string | undefined = undefined;
+
+      do {
+        const res: any = await notion.databases.query({
+          database_id: dbId,
+          start_cursor: cursor,
+          page_size: 20,
+        });
+
+        for (const page of res.results) {
+          const pageId = page.id.replace(/-/g, '');
+          const sourceId = `notion_${pageId}`;
+          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+          if (existing) continue;
+
+          const title = getPageTitle(page);
+          const propText = propsToText(page.properties ?? {});
+
+          // 페이지 본문 블록 가져오기
+          let bodyText = '';
+          try {
+            const blocks: any = await notion.blocks.children.list({ block_id: page.id, page_size: 50 });
+            bodyText = blocksToMarkdown(blocks.results);
+          } catch { /* 본문 없으면 생략 */ }
+
+          const content = [
+            `[노션/${src.label}] ${title}`,
+            propText,
+            bodyText,
+          ].filter(Boolean).join('\n').slice(0, 3000);
+
+          if (content.length < 20) continue; // 내용 없는 페이지 스킵
+
+          await prisma.wikiRawQueue.create({
+            data: {
+              id: generateId(),
+              labId,
+              sourceType: 'notion_page',
+              sourceId,
+              content,
+            },
+          });
+          enqueued++;
+        }
+
+        cursor = res.has_more ? res.next_cursor : undefined;
+      } while (cursor);
+    } catch (err) {
+      logError('background', `[wiki-engine] Notion DB enqueue 실패: ${src.label}`, { labId })(err);
+    }
+  }
+
+  // ── 단일 페이지 소스 처리 (자식 페이지 1레벨 포함) ─────────
+  for (const src of NOTION_PAGE_SOURCES) {
+    try {
+      const pageId = src.id.replace(/-/g, '');
+
+      // 페이지 자체
+      const blocks: any = await notion.blocks.children.list({ block_id: pageId, page_size: 100 });
+      const childPages = blocks.results.filter((b: any) => b.type === 'child_page');
+      const bodyBlocks = blocks.results.filter((b: any) => b.type !== 'child_page');
+      const bodyText = blocksToMarkdown(bodyBlocks);
+
+      if (bodyText.trim()) {
+        const sourceId = `notion_${pageId}`;
+        const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+        if (!existing) {
+          await prisma.wikiRawQueue.create({
+            data: {
+              id: generateId(),
+              labId,
+              sourceType: 'notion_page',
+              sourceId,
+              content: `[노션/${src.label}]\n${bodyText}`.slice(0, 3000),
+            },
+          });
+          enqueued++;
+        }
+      }
+
+      // 자식 페이지들
+      for (const childBlock of childPages.slice(0, 15)) {
+        try {
+          const childId = childBlock.id.replace(/-/g, '');
+          const childSourceId = `notion_${childId}`;
+          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId: childSourceId } });
+          if (existing) continue;
+
+          const childTitle = childBlock.child_page?.title ?? '(제목 없음)';
+          const childBlocks: any = await notion.blocks.children.list({ block_id: childBlock.id, page_size: 50 });
+          const childBody = blocksToMarkdown(childBlocks.results);
+
+          if (!childBody.trim()) continue;
+
+          await prisma.wikiRawQueue.create({
+            data: {
+              id: generateId(),
+              labId,
+              sourceType: 'notion_page',
+              sourceId: childSourceId,
+              content: `[노션/${src.label}] ${childTitle}\n${childBody}`.slice(0, 3000),
+            },
+          });
+          enqueued++;
+        } catch { /* 개별 자식 페이지 실패는 무시 */ }
+      }
+    } catch (err) {
+      logError('background', `[wiki-engine] Notion Page enqueue 실패: ${src.label}`, { labId })(err);
+    }
+  }
+
+  console.log(`[wiki-engine] enqueueNotionData 완료: ${enqueued}개 Notion 항목 추가 (labId: ${labId})`);
+  return enqueued;
 }
 
 // ── enqueueNewData ────────────────────────────────────────
@@ -445,11 +654,16 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] MemberInfo enqueue 실패', { labId })(err);
   }
 
+  // ── Notion ───────────────────────────────────────────────
+  try {
+    const notionCount = await enqueueNotionData(labId);
+    enqueued += notionCount;
+  } catch (err) {
+    logError('background', '[wiki-engine] Notion enqueue 실패', { labId })(err);
+  }
+
   // ── Slack (future) ────────────────────────────────────────
   // TODO: Slack 연동 시 여기에 추가
-  // const slackMessages = await prisma.slackMessage.findMany(...)
-  // sourceType: 'slack', sourceId: slackMessage.id
-  // ─────────────────────────────────────────────────────────
 
   console.log(`[wiki-engine] enqueueNewData 완료: ${enqueued}개 항목 추가 (labId: ${labId})`);
   return enqueued;

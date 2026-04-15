@@ -15,6 +15,7 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REFRESH_TOKEN: z.string().optional(), // GDrive 동기화용 고정 토큰 (PI 계정)
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),
+  NOTION_API_KEY: z.string().optional(),
   GDRIVE_FILE_ACCOUNTS: z.string().optional(),       // BLISS 아이디/비밀번호 스프레드시트 ID
   GDRIVE_FILE_PROJECT_INFO: z.string().optional(),   // 과제 정보 스프레드시트 ID
   GDRIVE_FILE_ACKNOWLEDGMENT: z.string().optional(), // 과제 사사 스프레드시트 ID
