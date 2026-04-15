@@ -58,23 +58,64 @@ function richTextToStr(richText: any[]): string {
   return richText.map((t: any) => t.plain_text ?? '').join('');
 }
 
-/** Notion 블록 배열 → 마크다운 텍스트 (최대 depth=1) */
-function blocksToMarkdown(blocks: any[]): string {
+/** 단일 Notion 블록 → 마크다운 한 줄 (자식은 별도 처리) */
+function blockToLine(b: any): string {
+  switch (b.type) {
+    case 'paragraph':         return richTextToStr(b.paragraph?.rich_text ?? []);
+    case 'heading_1':         return '# ' + richTextToStr(b.heading_1?.rich_text ?? []);
+    case 'heading_2':         return '## ' + richTextToStr(b.heading_2?.rich_text ?? []);
+    case 'heading_3':         return '### ' + richTextToStr(b.heading_3?.rich_text ?? []);
+    case 'bulleted_list_item':return '- ' + richTextToStr(b.bulleted_list_item?.rich_text ?? []);
+    case 'numbered_list_item':return '1. ' + richTextToStr(b.numbered_list_item?.rich_text ?? []);
+    case 'to_do':             return (b.to_do?.checked ? '[x] ' : '[ ] ') + richTextToStr(b.to_do?.rich_text ?? []);
+    case 'quote':             return '> ' + richTextToStr(b.quote?.rich_text ?? []);
+    case 'callout':           return richTextToStr(b.callout?.rich_text ?? []);
+    case 'toggle':            return richTextToStr(b.toggle?.rich_text ?? []);
+    case 'code':              return '```\n' + richTextToStr(b.code?.rich_text ?? []) + '\n```';
+    case 'equation':          return b.equation?.expression ? `$${b.equation.expression}$` : '';
+    case 'table_row':         return '| ' + (b.table_row?.cells ?? []).map((c: any[]) => richTextToStr(c)).join(' | ') + ' |';
+    case 'child_page':        return `[하위 페이지] ${b.child_page?.title ?? ''}`;
+    case 'child_database':    return `[하위 DB] ${b.child_database?.title ?? ''}`;
+    case 'bookmark':          return b.bookmark?.url ? `[북마크] ${b.bookmark.url}` : '';
+    case 'link_to_page':      return '[페이지 링크]';
+    default: return '';
+  }
+}
+
+/** 블록 배열 재귀 변환 (has_children인 블록의 자식 fetch + indent) */
+async function blocksToMarkdownRecursive(
+  notion: NotionClient,
+  blocks: any[],
+  depth: number = 0,
+  maxDepth: number = 3,
+): Promise<string> {
   const lines: string[] = [];
+  const indent = '  '.repeat(depth);
+
   for (const b of blocks) {
-    switch (b.type) {
-      case 'paragraph':         lines.push(richTextToStr(b.paragraph?.rich_text ?? [])); break;
-      case 'heading_1':         lines.push('# ' + richTextToStr(b.heading_1?.rich_text ?? [])); break;
-      case 'heading_2':         lines.push('## ' + richTextToStr(b.heading_2?.rich_text ?? [])); break;
-      case 'heading_3':         lines.push('### ' + richTextToStr(b.heading_3?.rich_text ?? [])); break;
-      case 'bulleted_list_item':lines.push('- ' + richTextToStr(b.bulleted_list_item?.rich_text ?? [])); break;
-      case 'numbered_list_item':lines.push('1. ' + richTextToStr(b.numbered_list_item?.rich_text ?? [])); break;
-      case 'to_do':             lines.push((b.to_do?.checked ? '[x] ' : '[ ] ') + richTextToStr(b.to_do?.rich_text ?? [])); break;
-      case 'quote':             lines.push('> ' + richTextToStr(b.quote?.rich_text ?? [])); break;
-      case 'callout':           lines.push(richTextToStr(b.callout?.rich_text ?? [])); break;
-      case 'toggle':            lines.push(richTextToStr(b.toggle?.rich_text ?? [])); break;
-      case 'code':              lines.push('```\n' + richTextToStr(b.code?.rich_text ?? []) + '\n```'); break;
-      default: break;
+    const line = blockToLine(b);
+    if (line) lines.push(indent + line);
+
+    // 자식 블록 재귀 (toggle, list, callout, column_list, synced_block, table 등)
+    if (b.has_children && depth < maxDepth) {
+      try {
+        let children: any[] = [];
+        let cursor: string | undefined = undefined;
+        do {
+          const res: any = await notion.blocks.children.list({
+            block_id: b.id,
+            page_size: 100,
+            ...(cursor ? { start_cursor: cursor } : {}),
+          });
+          children = children.concat(res.results as any[]);
+          cursor = res.has_more ? res.next_cursor : undefined;
+        } while (cursor);
+
+        if (children.length > 0) {
+          const childMd = await blocksToMarkdownRecursive(notion, children, depth + 1, maxDepth);
+          if (childMd) lines.push(childMd);
+        }
+      } catch { /* 자식 fetch 실패 시 스킵 */ }
     }
   }
   return lines.filter(Boolean).join('\n');
@@ -176,7 +217,7 @@ async function enqueueNotionData(labId: string): Promise<number> {
         const title = getPageTitle(page);
         const propText = propsToText((page as any).properties ?? {});
 
-        // 직접 블록 수집 (child_page 블록은 제외 — 검색에서 별도로 잡힘)
+        // 직접 블록 수집 (모든 블록 포함, 자식까지 재귀 추출)
         let bodyText = '';
         try {
           let bodyBlocks: any[] = [];
@@ -187,19 +228,17 @@ async function enqueueNotionData(labId: string): Promise<number> {
               page_size: 100,
               ...(blockCursor ? { start_cursor: blockCursor } : {}),
             });
-            bodyBlocks = bodyBlocks.concat(
-              (blockRes.results as any[]).filter((b: any) => b.type !== 'child_page'),
-            );
+            bodyBlocks = bodyBlocks.concat(blockRes.results as any[]);
             blockCursor = blockRes.has_more ? blockRes.next_cursor : undefined;
           } while (blockCursor);
-          bodyText = blocksToMarkdown(bodyBlocks);
+          bodyText = await blocksToMarkdownRecursive(notion, bodyBlocks, 0, 3);
         } catch { /* 블록 없으면 생략 */ }
 
         const content = [
           `[노션] ${title}`,
           propText,
           bodyText,
-        ].filter(Boolean).join('\n').slice(0, 3000);
+        ].filter(Boolean).join('\n').slice(0, 10000);
 
         if (content.length < 20) continue; // 빈 페이지 스킵
 
