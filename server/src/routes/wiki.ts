@@ -95,6 +95,26 @@ export async function wikiRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /api/wiki/notion-diagnosis — Notion 연결 진단 (OWNER만) ───
+  // :id 라우트보다 먼저 선언 — 정적 경로 우선 매칭 확실히 보장
+  app.get('/api/wiki/notion-diagnosis', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
+
+    try {
+      const result = await diagnoseNotion();
+      return reply.send(result);
+    } catch (err) {
+      logError('background', 'GET /api/wiki/notion-diagnosis 실패', { labId })(err);
+      return reply.code(500).send({ error: 'Notion 진단 실패' });
+    }
+  });
+
   // ── GET /api/wiki/:id — 특정 아티클 ─────────────────────
   app.get('/api/wiki/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = request.userId!;
@@ -157,25 +177,6 @@ export async function wikiRoutes(app: FastifyInstance) {
         ingestLocks.delete(labId);
       }
     });
-  });
-
-  // ── GET /api/wiki/notion-diagnosis — Notion 연결 진단 (OWNER만) ───
-  app.get('/api/wiki/notion-diagnosis', async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = request.userId!;
-    const labId = await resolveLabId(userId);
-    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
-
-    if (!(await isLabOwner(userId, labId))) {
-      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
-    }
-
-    try {
-      const result = await diagnoseNotion();
-      return reply.send(result);
-    } catch (err) {
-      logError('background', 'GET /api/wiki/notion-diagnosis 실패', { labId })(err);
-      return reply.code(500).send({ error: 'Notion 진단 실패' });
-    }
   });
 
   // ── POST /api/wiki/reset-notion — Notion 큐 재처리 초기화 (OWNER만) ─
