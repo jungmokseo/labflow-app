@@ -26,7 +26,7 @@ export interface ExtractedRelation {
 
 export type EntityType = 'person' | 'project' | 'paper' | 'term' | 'equipment' | 'journal' | 'institution' | 'topic';
 export type RelationType = 'participates_in' | 'authored' | 'uses_term' | 'published_in' | 'supervises' | 'collaborates_with' | 'cited_by' | 'related_to' | 'discussed_in' | 'mentioned_in';
-export type SourceType = 'chat' | 'meeting' | 'email' | 'paper_alert' | 'onboarding' | 'manual' | 'seed';
+export type SourceType = 'chat' | 'meeting' | 'email' | 'paper_alert' | 'onboarding' | 'manual' | 'seed' | 'wiki';
 
 // ── Gemini 관계 추출 프롬프트 ──────────────────────────
 const RELATION_EXTRACTION_PROMPT = `당신은 학술 연구 환경에서 엔티티(개체)와 관계를 추출하는 전문가입니다.

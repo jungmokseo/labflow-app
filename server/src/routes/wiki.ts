@@ -135,7 +135,7 @@ export async function wikiRoutes(app: FastifyInstance) {
         let rounds = 0;
         const maxRounds = 10;
         while (rounds < maxRounds) {
-          const result = await ingestAndCompile(labId);
+          const result = await ingestAndCompile(labId, userId);
           console.log(`[wiki] round ${rounds + 1}: processed ${result.processed}, updated ${result.updated.length}`);
           rounds++;
           if (result.processed === 0) break;

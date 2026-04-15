@@ -15,6 +15,7 @@ import { Client as NotionClient } from '@notionhq/client';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { logError } from './error-logger.js';
+import { buildGraphFromText } from './knowledge-graph.js';
 
 // ── Anthropic 클라이언트 ──────────────────────────────────
 function getAnthropicClient(): Anthropic {
@@ -116,273 +117,95 @@ function propsToText(props: Record<string, any>): string {
 }
 
 /**
- * Notion 지정 DB/페이지에서 데이터를 수집해 WikiRawQueue에 추가.
- * 계정 정보(4e835742) DB는 보안상 제외.
+ * Notion 전체 워크스페이스를 탐색해 WikiRawQueue에 추가.
+ * notion.search()로 모든 페이지를 한 번에 수집 — 하드코딩 소스 목록 불필요.
+ * 계정 정보 DB(4e835742...) 및 그 하위 페이지만 보안상 제외.
  */
-// ── 활성 Notion 소스 (레거시 Jarvis DB 제외) ─────────────
-const NOTION_DB_SOURCES = [
-  // 연구실 프로젝트/아이디어 관리
-  { id: '37e9d1e2-155a-4f1a-8a17-a12f271f8c7d', label: 'BLISS 프로젝트' },
-  { id: '9da9d2f4-2574-4252-9ad3-f1a4a90398de', label: '아이디어 박스' },
-  // 미팅 노트 (최근 60일)
-  { id: 'c2eeadfd-525c-4971-a6cc-849bdb8563fb', label: 'BLISS 미팅 노트', daysLimit: 60 },
-  { id: 'b93602f3-d9c7-4e81-b2db-535054292607', label: '링크솔루텍 미팅 노트', daysLimit: 60 },
-];
 
-const NOTION_PAGE_SOURCES = [
-  // 학생별 주간보고 허브 (가장 중요한 소스)
-  { id: '311f9f17-6cf4-8086-b90c-f665a712a928', label: '연구실 개인별 관리' },
-  // 회사 직원별 관리
-  { id: '311f9f17-6cf4-8095-ac72-e31e2274dfdb', label: '링크솔루텍 직원별 관리' },
-  // 전략/기획 페이지
-  { id: '32cf9f17-6cf4-81f8-a0ee-d9f668e7c3cf', label: 'Physical AI 연구 전략' },
-];
+// 보안상 수집 제외할 Notion 페이지/DB ID (대시 없는 형태)
+const NOTION_EXCLUDED_IDS = new Set([
+  '4e835742f14748f09e22b19ef9fe24b8', // 🔑 계정 정보 DB
+]);
 
 async function enqueueNotionData(labId: string): Promise<number> {
   if (!env.NOTION_API_KEY) return 0;
 
   const notion = new NotionClient({ auth: env.NOTION_API_KEY });
   let enqueued = 0;
+  let searchCursor: string | undefined = undefined;
 
-  // ── DB 소스 처리 ─────────────────────────────────────────
-  for (const src of NOTION_DB_SOURCES) {
+  do {
+    let res: any;
     try {
-      const dbId = src.id.replace(/-/g, '');
-      let cursor: string | undefined = undefined;
-      const sinceDate = (src as any).daysLimit
-        ? new Date(Date.now() - (src as any).daysLimit * 24 * 60 * 60 * 1000).toISOString()
-        : undefined;
-
-      do {
-        const queryParams: any = {
-          database_id: dbId,
-          start_cursor: cursor,
-          page_size: 20,
-        };
-        if (sinceDate) {
-          queryParams.filter = {
-            property: 'last_edited_time',
-            last_edited_time: { on_or_after: sinceDate },
-          };
-        }
-        const res: any = await notion.databases.query(queryParams);
-
-        for (const page of res.results) {
-          const pageId = page.id.replace(/-/g, '');
-          const title = getPageTitle(page);
-          const propText = propsToText(page.properties ?? {});
-
-          // 페이지 본문 + 자식 페이지 블록 가져오기
-          let allPageBlocks: any[] = [];
-          try {
-            let blockCursor: string | undefined = undefined;
-            do {
-              const blockRes: any = await notion.blocks.children.list({
-                block_id: page.id,
-                page_size: 100,
-                ...(blockCursor ? { start_cursor: blockCursor } : {}),
-              });
-              allPageBlocks = allPageBlocks.concat(blockRes.results);
-              blockCursor = blockRes.has_more ? blockRes.next_cursor : undefined;
-            } while (blockCursor);
-          } catch { /* 블록 없으면 생략 */ }
-
-          const childPageBlocks = allPageBlocks.filter((b: any) => b.type === 'child_page');
-          const bodyBlocks = allPageBlocks.filter((b: any) => b.type !== 'child_page');
-          const bodyText = blocksToMarkdown(bodyBlocks);
-
-          // DB 항목 자체 (properties + body)
-          const sourceId = `notion_${pageId}`;
-          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-          if (!existing) {
-            const content = [
-              `[노션/${src.label}] ${title}`,
-              propText,
-              bodyText,
-            ].filter(Boolean).join('\n').slice(0, 3000);
-
-            if (content.length >= 20) {
-              await prisma.wikiRawQueue.create({
-                data: { id: generateId(), labId, sourceType: 'notion_page', sourceId, content },
-              });
-              enqueued++;
-            }
-          }
-
-          // 자식 페이지들 (프로젝트별 세부 논의, 실험 기록 등) — 최대 30개
-          for (const childBlock of childPageBlocks.slice(0, 30)) {
-            try {
-              const childId = childBlock.id.replace(/-/g, '');
-              const childSourceId = `notion_${childId}`;
-              const childExisting = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId: childSourceId } });
-              if (childExisting) continue;
-
-              const childTitle = childBlock.child_page?.title ?? '(제목 없음)';
-
-              // 자식 페이지 블록 가져오기
-              let childBlocks: any[] = [];
-              let childCursor: string | undefined = undefined;
-              do {
-                const childRes: any = await notion.blocks.children.list({
-                  block_id: childBlock.id,
-                  page_size: 100,
-                  ...(childCursor ? { start_cursor: childCursor } : {}),
-                });
-                childBlocks = childBlocks.concat(childRes.results);
-                childCursor = childRes.has_more ? childRes.next_cursor : undefined;
-              } while (childCursor);
-
-              const grandChildPages = childBlocks.filter((b: any) => b.type === 'child_page');
-              const childBodyBlocks = childBlocks.filter((b: any) => b.type !== 'child_page');
-              const childBodyText = blocksToMarkdown(childBodyBlocks);
-
-              if (childBodyText.trim() || grandChildPages.length > 0) {
-                const childContent = `[노션/${src.label}] ${title} > ${childTitle}\n${childBodyText}`.slice(0, 3000);
-                if (childContent.length >= 20) {
-                  await prisma.wikiRawQueue.create({
-                    data: { id: generateId(), labId, sourceType: 'notion_page', sourceId: childSourceId, content: childContent },
-                  });
-                  enqueued++;
-                }
-              }
-
-              // 손자 페이지까지 (2레벨 深) — 최대 10개
-              for (const grandChild of grandChildPages.slice(0, 10)) {
-                try {
-                  const gcId = grandChild.id.replace(/-/g, '');
-                  const gcSourceId = `notion_${gcId}`;
-                  const gcExisting = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId: gcSourceId } });
-                  if (gcExisting) continue;
-
-                  const gcTitle = grandChild.child_page?.title ?? '(제목 없음)';
-                  const gcRes: any = await notion.blocks.children.list({ block_id: grandChild.id, page_size: 50 });
-                  const gcBody = blocksToMarkdown(gcRes.results.filter((b: any) => b.type !== 'child_page'));
-                  if (!gcBody.trim()) continue;
-
-                  const gcContent = `[노션/${src.label}] ${title} > ${childTitle} > ${gcTitle}\n${gcBody}`.slice(0, 3000);
-                  if (gcContent.length >= 20) {
-                    await prisma.wikiRawQueue.create({
-                      data: { id: generateId(), labId, sourceType: 'notion_page', sourceId: gcSourceId, content: gcContent },
-                    });
-                    enqueued++;
-                  }
-                } catch { /* 손자 페이지 실패 무시 */ }
-              }
-            } catch { /* 자식 페이지 실패 무시 */ }
-          }
-        }
-
-        cursor = res.has_more ? res.next_cursor : undefined;
-      } while (cursor);
+      res = await notion.search({
+        filter: { property: 'object', value: 'page' },
+        page_size: 100,
+        ...(searchCursor ? { start_cursor: searchCursor } : {}),
+      });
     } catch (err) {
-      logError('background', `[wiki-engine] Notion DB enqueue 실패: ${src.label}`, { labId })(err);
+      logError('background', '[wiki-engine] Notion search 실패', { labId })(err);
+      break;
     }
-  }
 
-  // ── 단일 페이지 소스 처리 ──────────────────────────────────
-  for (const src of NOTION_PAGE_SOURCES) {
-    try {
-      const pageId = src.id.replace(/-/g, '');
-      let allBlocks: any[] = [];
-      let cursor: string | undefined = undefined;
+    for (const page of res.results) {
+      try {
+        const pageId = (page.id as string).replace(/-/g, '');
 
-      // 전체 블록 페이지네이션
-      do {
-        const res: any = await notion.blocks.children.list({
-          block_id: pageId,
-          page_size: 100,
-          ...(cursor ? { start_cursor: cursor } : {}),
-        });
-        allBlocks = allBlocks.concat(res.results);
-        cursor = res.has_more ? res.next_cursor : undefined;
-      } while (cursor);
+        // 제외 목록 체크
+        if (NOTION_EXCLUDED_IDS.has(pageId)) continue;
 
-      const childPages = allBlocks.filter((b: any) => b.type === 'child_page');
-      const bodyBlocks = allBlocks.filter((b: any) => b.type !== 'child_page');
+        // 부모가 제외 DB/페이지인 경우 스킵
+        const parentDbId = ((page.parent as any)?.database_id ?? '').replace(/-/g, '');
+        const parentPageId = ((page.parent as any)?.page_id ?? '').replace(/-/g, '');
+        if (NOTION_EXCLUDED_IDS.has(parentDbId) || NOTION_EXCLUDED_IDS.has(parentPageId)) continue;
 
-      // H1 기준으로 섹션 분할 (학생별 분리 등 대용량 페이지 처리)
-      const sections: Array<{ heading: string; blocks: any[] }> = [];
-      let currentSection: { heading: string; blocks: any[] } = { heading: '', blocks: [] };
+        // 이미 큐에 있으면 스킵
+        const sourceId = `notion_${pageId}`;
+        const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+        if (existing) continue;
 
-      for (const b of bodyBlocks) {
-        if (b.type === 'heading_1') {
-          if (currentSection.blocks.length > 0 || currentSection.heading) {
-            sections.push(currentSection);
-          }
-          currentSection = { heading: richTextToStr(b.heading_1?.rich_text ?? []), blocks: [] };
-        } else {
-          currentSection.blocks.push(b);
-        }
-      }
-      if (currentSection.blocks.length > 0 || currentSection.heading) {
-        sections.push(currentSection);
-      }
+        // 페이지 제목 + DB 속성
+        const title = getPageTitle(page);
+        const propText = propsToText((page as any).properties ?? {});
 
-      // 섹션이 여러 개면 섹션별로 enqueue, 아니면 전체를 하나로
-      if (sections.length > 1) {
-        for (const section of sections) {
-          const sectionText = blocksToMarkdown(section.blocks);
-          if (!sectionText.trim() && !section.heading) continue;
-
-          // 섹션 제목을 sourceId에 포함해 중복 방지
-          const sectionKey = section.heading.replace(/\s+/g, '_').slice(0, 40);
-          const sourceId = `notion_${pageId}_${sectionKey}`;
-          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-          if (existing) continue;
-
-          const content = `[노션/${src.label}] ${section.heading}\n${sectionText}`.slice(0, 3000);
-          if (content.length < 30) continue;
-
-          await prisma.wikiRawQueue.create({
-            data: { id: generateId(), labId, sourceType: 'notion_page', sourceId, content },
-          });
-          enqueued++;
-        }
-      } else {
-        const bodyText = blocksToMarkdown(bodyBlocks);
-        if (bodyText.trim()) {
-          const sourceId = `notion_${pageId}`;
-          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
-          if (!existing) {
-            await prisma.wikiRawQueue.create({
-              data: {
-                id: generateId(), labId, sourceType: 'notion_page', sourceId,
-                content: `[노션/${src.label}]\n${bodyText}`.slice(0, 3000),
-              },
-            });
-            enqueued++;
-          }
-        }
-      }
-
-      // 자식 페이지들 (1레벨, 최대 20개)
-      for (const childBlock of childPages.slice(0, 20)) {
+        // 직접 블록 수집 (child_page 블록은 제외 — 검색에서 별도로 잡힘)
+        let bodyText = '';
         try {
-          const childId = childBlock.id.replace(/-/g, '');
-          const childSourceId = `notion_${childId}`;
-          const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId: childSourceId } });
-          if (existing) continue;
+          let bodyBlocks: any[] = [];
+          let blockCursor: string | undefined = undefined;
+          do {
+            const blockRes: any = await notion.blocks.children.list({
+              block_id: page.id as string,
+              page_size: 100,
+              ...(blockCursor ? { start_cursor: blockCursor } : {}),
+            });
+            bodyBlocks = bodyBlocks.concat(
+              (blockRes.results as any[]).filter((b: any) => b.type !== 'child_page'),
+            );
+            blockCursor = blockRes.has_more ? blockRes.next_cursor : undefined;
+          } while (blockCursor);
+          bodyText = blocksToMarkdown(bodyBlocks);
+        } catch { /* 블록 없으면 생략 */ }
 
-          const childTitle = childBlock.child_page?.title ?? '(제목 없음)';
-          const childRes: any = await notion.blocks.children.list({ block_id: childBlock.id, page_size: 50 });
-          const childBody = blocksToMarkdown(childRes.results);
-          if (!childBody.trim()) continue;
+        const content = [
+          `[노션] ${title}`,
+          propText,
+          bodyText,
+        ].filter(Boolean).join('\n').slice(0, 3000);
 
-          await prisma.wikiRawQueue.create({
-            data: {
-              id: generateId(), labId, sourceType: 'notion_page', sourceId: childSourceId,
-              content: `[노션/${src.label}] ${childTitle}\n${childBody}`.slice(0, 3000),
-            },
-          });
-          enqueued++;
-        } catch { /* 개별 자식 페이지 실패 무시 */ }
-      }
-    } catch (err) {
-      logError('background', `[wiki-engine] Notion Page enqueue 실패: ${src.label}`, { labId })(err);
+        if (content.length < 20) continue; // 빈 페이지 스킵
+
+        await prisma.wikiRawQueue.create({
+          data: { id: generateId(), labId, sourceType: 'notion_page', sourceId, content },
+        });
+        enqueued++;
+      } catch { /* 개별 페이지 실패 무시 */ }
     }
-  }
 
-  console.log(`[wiki-engine] enqueueNotionData 완료: ${enqueued}개 Notion 항목 추가 (labId: ${labId})`);
+    searchCursor = res.has_more ? res.next_cursor : undefined;
+  } while (searchCursor);
+
+  console.log(`[wiki-engine] enqueueNotionData 완료: ${enqueued}개 Notion 페이지 추가 (labId: ${labId})`);
   return enqueued;
 }
 
@@ -806,7 +629,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
  *
  * @returns { processed: number, updated: string[] }
  */
-export async function ingestAndCompile(labId: string): Promise<{ processed: number; updated: string[] }> {
+export async function ingestAndCompile(labId: string, userId?: string): Promise<{ processed: number; updated: string[] }> {
   // 1. 미처리 큐 항목 가져오기 (limit 50)
   const queue = await prisma.wikiRawQueue.findMany({
     where: { labId, processedAt: null },
@@ -908,6 +731,13 @@ JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
         now,
       );
       updatedTitles.push(article.title);
+
+      // 지식 그래프 연계 — 아티클 내용에서 엔티티/관계 비동기 추출
+      if (userId) {
+        setImmediate(() => {
+          buildGraphFromText(userId, `${article.title}\n${article.content}`, 'wiki').catch(() => {});
+        });
+      }
     } catch (err) {
       logError('background', `[wiki-engine] 아티클 upsert 실패: ${article.title}`, { labId })(err);
     }
