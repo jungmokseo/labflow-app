@@ -420,20 +420,38 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
 
   // ── GDrive 기반 소스 재큐 헬퍼 ─────────────────────────────
   // project / lab_member / member_info / acknowledgment 는 GDrive가 진실의 원천.
-  // 이미 큐에 있어도 삭제 후 재생성해서 항상 최신 DB 값을 반영한다.
-  async function requeue(sourceType: string, sourceId: string, content: string): Promise<void> {
-    await prisma.wikiRawQueue.deleteMany({ where: { labId, sourceId } });
-    await prisma.wikiRawQueue.create({
-      data: { id: generateId(), labId, sourceType, sourceId, content },
-    });
-    enqueued++;
+  // - 큐에 없으면 → 신규 생성
+  // - 큐에 있고 미처리(processedAt=null) → skip (곧 처리됨)
+  // - 큐에 있고 처리완료(processedAt!=null) → DB updatedAt > processedAt 일 때만 재큐
+  async function requeueIfChanged(
+    sourceType: string,
+    sourceId: string,
+    content: string,
+    dbUpdatedAt: Date,
+  ): Promise<void> {
+    const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
+    if (!existing) {
+      // 최초 등록
+      await prisma.wikiRawQueue.create({
+        data: { id: generateId(), labId, sourceType, sourceId, content },
+      });
+      enqueued++;
+    } else if (existing.processedAt !== null && dbUpdatedAt > existing.processedAt) {
+      // 처리된 이후 DB가 갱신된 경우만 재큐
+      await prisma.wikiRawQueue.delete({ where: { id: existing.id } });
+      await prisma.wikiRawQueue.create({
+        data: { id: generateId(), labId, sourceType, sourceId, content },
+      });
+      enqueued++;
+    }
+    // processedAt=null(대기중) 또는 변경 없음 → skip
   }
 
-  // ── LabMember (GDrive 연동 — 항상 최신값으로 재큐) ──────────
+  // ── LabMember (GDrive 연동 — 변경 시만 재큐) ───────────────
   try {
     const members = await prisma.labMember.findMany({
       where: { labId, active: true },
-      select: { id: true, name: true, nameEn: true, role: true, email: true, team: true, metadata: true },
+      select: { id: true, name: true, nameEn: true, role: true, email: true, team: true, metadata: true, updatedAt: true },
     });
 
     for (const m of members) {
@@ -444,13 +462,13 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (m.metadata && typeof m.metadata === 'object' && Object.keys(m.metadata as object).length > 0) {
         parts.push(`추가정보: ${JSON.stringify(m.metadata)}`);
       }
-      await requeue('lab_member', `labmember_${m.id}`, parts.join('\n'));
+      await requeueIfChanged('lab_member', `labmember_${m.id}`, parts.join('\n'), m.updatedAt);
     }
   } catch (err) {
     logError('background', '[wiki-engine] LabMember enqueue 실패', { labId })(err);
   }
 
-  // ── Project (GDrive 연동 — 항상 최신값으로 재큐) ─────────────
+  // ── Project (GDrive 연동 — 변경 시만 재큐) ──────────────────
   try {
     const projects = await prisma.project.findMany({
       where: { labId, status: 'active' },
@@ -459,6 +477,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
         funder: true, period: true, pi: true, pm: true,
         ministry: true, responsibility: true,
         acknowledgmentKo: true, acknowledgmentEn: true,
+        updatedAt: true,
       },
     });
 
@@ -474,7 +493,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (p.responsibility) parts.push(`책임내용: ${p.responsibility}`);
       if (p.acknowledgmentKo) parts.push(`사사문구(한): ${p.acknowledgmentKo.slice(0, 300)}`);
       if (p.acknowledgmentEn) parts.push(`사사문구(영): ${p.acknowledgmentEn.slice(0, 300)}`);
-      await requeue('project', `project_${p.id}`, parts.join('\n'));
+      await requeueIfChanged('project', `project_${p.id}`, parts.join('\n'), p.updatedAt);
     }
   } catch (err) {
     logError('background', '[wiki-engine] Project enqueue 실패', { labId })(err);
@@ -515,13 +534,14 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] Publication enqueue 실패', { labId })(err);
   }
 
-  // ── Acknowledgment (GDrive 연동 — 항상 최신값으로 재큐) ──────
+  // ── Acknowledgment (GDrive 연동 — 변경 시만 재큐) ───────────
   try {
     const acks = await prisma.acknowledgment.findMany({
       where: { labId },
       select: {
         id: true, type: true, paperTitle: true, authors: true,
         journal: true, publishedAt: true, acknowledgedProjects: true,
+        updatedAt: true,
       },
     });
 
@@ -532,19 +552,20 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (a.journal) parts.push(`저널/학회: ${a.journal}`);
       if (a.publishedAt) parts.push(`발표일: ${a.publishedAt}`);
       if (a.acknowledgedProjects) parts.push(`사사 과제: ${a.acknowledgedProjects.slice(0, 300)}`);
-      await requeue('acknowledgment', `acknowledgment_${a.id}`, parts.join('\n'));
+      await requeueIfChanged('acknowledgment', `acknowledgment_${a.id}`, parts.join('\n'), a.updatedAt);
     }
   } catch (err) {
     logError('background', '[wiki-engine] Acknowledgment enqueue 실패', { labId })(err);
   }
 
-  // ── MemberInfo (GDrive 연동 — 항상 최신값으로 재큐, 민감정보 제외) ─
+  // ── MemberInfo (GDrive 연동 — 변경 시만 재큐, 민감정보 제외) ─
   try {
     const memberInfos = await prisma.memberInfo.findMany({
       where: { labId },
       select: {
         id: true, name: true, degree: true, department: true,
         joinYear: true, graduationYear: true, researcherId: true,
+        updatedAt: true,
         // bankName/accountNumber 제외 (민감 정보)
       },
     });
@@ -556,7 +577,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
       if (mi.joinYear) parts.push(`입학년도: ${mi.joinYear}`);
       if (mi.graduationYear) parts.push(`졸업년도: ${mi.graduationYear}`);
       if (mi.researcherId) parts.push(`연구자번호: ${mi.researcherId}`);
-      await requeue('member_info', `memberinfo_${mi.id}`, parts.join('\n'));
+      await requeueIfChanged('member_info', `memberinfo_${mi.id}`, parts.join('\n'), mi.updatedAt);
     }
   } catch (err) {
     logError('background', '[wiki-engine] MemberInfo enqueue 실패', { labId })(err);
