@@ -162,39 +162,62 @@ export default function WikiPage() {
 
   async function handleIngest() {
     setIngestLoading(true);
-    try {
-      await triggerWikiIngest();
-      showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
 
-      // 완료될 때까지 폴링 (3초 간격, 최대 3분)
-      const startPending = status?.pendingQueueItems ?? 0;
+    // 큐가 0이 될 때까지 자동으로 re-trigger (배치당 최대 3분 폴링)
+    const runBatch = async (): Promise<void> => {
+      try {
+        await triggerWikiIngest();
+      } catch {
+        showToast('Ingest 요청 실패', 'err');
+        setIngestLoading(false);
+        return;
+      }
+
       let polls = 0;
-      const maxPolls = 60;
-      const pollInterval = setInterval(async () => {
-        polls++;
-        try {
-          const s = await getWikiStatus();
-          setStatus(s as WikiStatus);
-          const pending = (s as WikiStatus).pendingQueueItems;
-          if (pending === 0 || polls >= maxPolls) {
-            clearInterval(pollInterval);
-            setIngestLoading(false);
-            await loadArticles();
-            if (pending === 0) {
-              showToast(`Ingest 완료`);
-            } else {
-              showToast(`Ingest 시간 초과 — 일부 처리됨 (대기: ${pending}건)`, 'err');
-            }
-          }
-        } catch {
-          // 폴링 실패는 무시
-        }
-      }, 3000);
+      const maxPolls = 60; // 3분
 
-      // 폴링이 끝나기 전에 컴포넌트가 언마운트되면 정리
-      return () => clearInterval(pollInterval);
-    } catch {
-      showToast('Ingest 요청 실패', 'err');
+      await new Promise<void>((resolve) => {
+        const pollInterval = setInterval(async () => {
+          polls++;
+          try {
+            const s = await getWikiStatus();
+            setStatus(s as WikiStatus);
+            const pending = (s as WikiStatus).pendingQueueItems;
+
+            if (pending === 0 || polls >= maxPolls) {
+              clearInterval(pollInterval);
+              await loadArticles();
+              resolve();
+            }
+          } catch {
+            // 폴링 실패는 무시하고 계속
+          }
+        }, 3000);
+      });
+    };
+
+    try {
+      showToast('Ingest 시작됨 — 백그라운드에서 처리 중입니다');
+      let round = 1;
+
+      while (true) {
+        await runBatch();
+
+        // 최신 상태 확인
+        const s = await getWikiStatus();
+        setStatus(s as WikiStatus);
+        const pending = (s as WikiStatus).pendingQueueItems;
+
+        if (pending === 0) {
+          showToast('Ingest 완료');
+          break;
+        }
+
+        // 아직 남아있으면 다음 배치 자동 시작
+        round++;
+        showToast(`배치 ${round} 시작 — 대기 ${pending}건 남음`);
+      }
+    } finally {
       setIngestLoading(false);
     }
   }
