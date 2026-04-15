@@ -6,13 +6,16 @@
  * GET    /api/wiki/:id          → 특정 아티클
  * POST   /api/wiki/ingest       → 수동 ingest 트리거 (OWNER만)
  * POST   /api/wiki/synthesis    → 수동 deep synthesis 트리거 (OWNER만)
+ * PUT    /api/wiki/:id          → 아티클 수정 (OWNER만)
  * DELETE /api/wiki/:id          → 아티클 삭제 (OWNER만)
+ *
+ * NOTE: requirePermission preHandler 사용 금지 — request.labId 미설정 타이밍 버그.
+ *       대신 resolveLabId(userId) 후 직접 owner 체크.
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/permissions.js';
 import { logError } from '../services/error-logger.js';
 import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus } from '../services/wiki-engine.js';
 
@@ -25,6 +28,12 @@ async function resolveLabId(userId: string): Promise<string | null> {
     select: { labId: true },
   });
   return membership?.labId ?? null;
+}
+
+/** userId가 labId의 owner인지 확인 */
+async function isLabOwner(userId: string, labId: string): Promise<boolean> {
+  const lab = await prisma.lab.findFirst({ where: { id: labId, ownerId: userId }, select: { id: true } });
+  return !!lab;
 }
 
 export async function wikiRoutes(app: FastifyInstance) {
@@ -105,113 +114,117 @@ export async function wikiRoutes(app: FastifyInstance) {
 
   // ── POST /api/wiki/ingest — 수동 ingest 트리거 (OWNER만) ─
   // 즉시 202 반환 후 백그라운드에서 처리 (Vercel 30s proxy 타임아웃 우회)
-  app.post(
-    '/api/wiki/ingest',
-    { preHandler: requirePermission('OWNER') },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId!;
-      const labId = await resolveLabId(userId);
-      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+  app.post('/api/wiki/ingest', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
-      // 즉시 응답 — 백그라운드에서 실제 처리
-      reply.code(202).send({ message: 'Ingest 시작됨', status: 'processing' });
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
 
-      // 백그라운드 처리 (응답과 무관하게 실행)
-      setImmediate(async () => {
-        try {
-          const enqueued = await enqueueNewData(labId, userId);
-          console.log(`[wiki] enqueued ${enqueued} items for labId ${labId}`);
+    // 즉시 응답 — 백그라운드에서 실제 처리
+    reply.code(202).send({ message: 'Ingest 시작됨', status: 'processing' });
 
-          let rounds = 0;
-          const maxRounds = 10;
-          while (rounds < maxRounds) {
-            const result = await ingestAndCompile(labId);
-            console.log(`[wiki] round ${rounds + 1}: processed ${result.processed}, updated ${result.updated.length}`);
-            rounds++;
-            if (result.processed === 0) break;
-          }
-          console.log(`[wiki] ingest complete after ${rounds} rounds`);
-        } catch (err) {
-          logError('background', '[wiki] background ingest 실패', { labId })(err);
+    // 백그라운드 처리 (응답과 무관하게 실행)
+    setImmediate(async () => {
+      try {
+        const enqueued = await enqueueNewData(labId, userId);
+        console.log(`[wiki] enqueued ${enqueued} items for labId ${labId}`);
+
+        let rounds = 0;
+        const maxRounds = 10;
+        while (rounds < maxRounds) {
+          const result = await ingestAndCompile(labId);
+          console.log(`[wiki] round ${rounds + 1}: processed ${result.processed}, updated ${result.updated.length}`);
+          rounds++;
+          if (result.processed === 0) break;
         }
-      });
-    },
-  );
+        console.log(`[wiki] ingest complete after ${rounds} rounds`);
+      } catch (err) {
+        logError('background', '[wiki] background ingest 실패', { labId })(err);
+      }
+    });
+  });
 
   // ── POST /api/wiki/synthesis — 수동 synthesis 트리거 (OWNER만) ─
-  app.post(
-    '/api/wiki/synthesis',
-    { preHandler: requirePermission('OWNER') },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId!;
-      const labId = await resolveLabId(userId);
-      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+  // 즉시 202 반환 후 백그라운드에서 처리 (Vercel 30s proxy 타임아웃 우회)
+  app.post('/api/wiki/synthesis', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
+
+    reply.code(202).send({ message: 'Deep synthesis 시작됨', status: 'processing' });
+
+    setImmediate(async () => {
       try {
         await deepSynthesis(labId);
-        return reply.send({ message: 'Deep synthesis 완료' });
+        console.log('[wiki] deepSynthesis complete');
       } catch (err) {
-        logError('background', 'POST /api/wiki/synthesis 실패', { labId })(err);
-        return reply.code(500).send({ error: 'Deep synthesis 실패' });
+        logError('background', '[wiki] background deepSynthesis 실패', { labId })(err);
       }
-    },
-  );
+    });
+  });
 
   // ── PUT /api/wiki/:id — 아티클 수정 (OWNER만) ───────────
-  app.put(
-    '/api/wiki/:id',
-    { preHandler: requirePermission('OWNER') },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId!;
-      const labId = await resolveLabId(userId);
-      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+  app.put('/api/wiki/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
-      const { id } = request.params as { id: string };
-      const body = request.body as { title?: string; category?: string; content?: string; tags?: string[] };
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
 
-      try {
-        const article = await prisma.wikiArticle.findFirst({ where: { id, labId } });
-        if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
+    const { id } = request.params as { id: string };
+    const body = request.body as { title?: string; category?: string; content?: string; tags?: string[] };
 
-        const updated = await prisma.wikiArticle.update({
-          where: { id },
-          data: {
-            ...(body.title !== undefined ? { title: body.title } : {}),
-            ...(body.category !== undefined ? { category: body.category } : {}),
-            ...(body.content !== undefined ? { content: body.content } : {}),
-            ...(body.tags !== undefined ? { tags: body.tags } : {}),
-            version: { increment: 1 },
-          },
-        });
-        return reply.send(updated);
-      } catch (err) {
-        logError('background', 'PUT /api/wiki/:id 실패', { labId })(err);
-        return reply.code(500).send({ error: '아티클 수정 실패' });
-      }
-    },
-  );
+    try {
+      const article = await prisma.wikiArticle.findFirst({ where: { id, labId } });
+      if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
+
+      const updated = await prisma.wikiArticle.update({
+        where: { id },
+        data: {
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.category !== undefined ? { category: body.category } : {}),
+          ...(body.content !== undefined ? { content: body.content } : {}),
+          ...(body.tags !== undefined ? { tags: body.tags } : {}),
+          version: { increment: 1 },
+        },
+      });
+      return reply.send(updated);
+    } catch (err) {
+      logError('background', 'PUT /api/wiki/:id 실패', { labId })(err);
+      return reply.code(500).send({ error: '아티클 수정 실패' });
+    }
+  });
 
   // ── DELETE /api/wiki/:id — 아티클 삭제 (OWNER만) ─────────
-  app.delete(
-    '/api/wiki/:id',
-    { preHandler: requirePermission('OWNER') },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = request.userId!;
-      const labId = await resolveLabId(userId);
-      if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+  app.delete('/api/wiki/:id', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
 
-      const { id } = request.params as { id: string };
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
 
-      try {
-        const article = await prisma.wikiArticle.findFirst({ where: { id, labId } });
-        if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
+    const { id } = request.params as { id: string };
 
-        await prisma.wikiArticle.delete({ where: { id } });
-        return reply.send({ message: '아티클 삭제 완료', id });
-      } catch (err) {
-        logError('background', 'DELETE /api/wiki/:id 실패', { labId })(err);
-        return reply.code(500).send({ error: '아티클 삭제 실패' });
-      }
-    },
-  );
+    try {
+      const article = await prisma.wikiArticle.findFirst({ where: { id, labId } });
+      if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
+
+      await prisma.wikiArticle.delete({ where: { id } });
+      return reply.send({ message: '아티클 삭제 완료', id });
+    } catch (err) {
+      logError('background', 'DELETE /api/wiki/:id 실패', { labId })(err);
+      return reply.code(500).send({ error: '아티클 삭제 실패' });
+    }
+  });
 }
