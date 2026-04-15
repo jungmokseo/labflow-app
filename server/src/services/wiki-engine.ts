@@ -375,7 +375,9 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
     logError('background', '[wiki-engine] Brain Message enqueue 실패', { labId })(err);
   }
 
-  // ── PaperAlertResult (stars >= 2) ────────────────────────
+  // ── PaperAlertResult (stars >= 2, 시간 제한 없이 미처리만) ────
+  // 시간 필터 제거: 주간 알림은 주 1회 batch로 들어오므로 시간 윈도우에 의존 불가.
+  // sourceId(paper result id) 기반 dedup으로 이미 큐에 있던 것만 건너뜀.
   try {
     const alerts = await prisma.paperAlert.findMany({
       where: { labId },
@@ -388,7 +390,6 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
         where: {
           alertId: { in: alertIds },
           stars: { gte: 2 },
-          createdAt: { gte: since },
         },
         select: {
           id: true,
@@ -399,6 +400,7 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
           pubDate: true,
           createdAt: true,
         },
+        orderBy: { createdAt: 'desc' },
       });
 
       for (const p of papers) {
@@ -676,11 +678,33 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
     return { processed: 0, updated: [] };
   }
 
-  // 2. 기존 위키 아티클 인덱스 (title + category + tags만)
+  // 2. 기존 위키 아티클 인덱스
   const existingArticles = await prisma.wikiArticle.findMany({
     where: { labId },
     select: { title: true, category: true, tags: true },
   });
+
+  // 2-1. 논문 알림이 큐에 있으면 연구 관련 아티클(project, publication, research_trend, experiment)의
+  //      본문을 추가로 제공해서 LLM이 실제로 크로스 레퍼런스할 수 있도록 한다.
+  const hasPaperAlert = queue.some(q => q.sourceType === 'paper_alert');
+  let researchContext = '';
+  if (hasPaperAlert) {
+    const researchArticles = await prisma.wikiArticle.findMany({
+      where: {
+        labId,
+        category: { in: ['project', 'publication', 'research_trend', 'experiment'] },
+      },
+      select: { title: true, category: true, content: true },
+      orderBy: { updatedAt: 'desc' },
+      take: 30, // 최신 30개
+    });
+    if (researchArticles.length > 0) {
+      researchContext = '\n\n[기존 연구 아티클 본문 — 논문 알림과 연계 판단용]\n' +
+        researchArticles.map(a =>
+          `### ${a.title} (${a.category})\n${a.content.slice(0, 800)}`
+        ).join('\n\n---\n\n');
+    }
+  }
 
   const anthropic = getAnthropicClient();
 
@@ -707,7 +731,7 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
 ${queueText}
 
 [기존 위키 아티클 목록]
-${existingText}
+${existingText}${researchContext}
 
 지시사항:
 1. 새 데이터를 분석해서 관련 있는 기존 아티클을 업데이트하거나, 없으면 새 아티클 생성
@@ -717,6 +741,14 @@ ${existingText}
 5. 마크다운 형식, 간결하고 정보 밀도 높게
 6. 날짜 정보는 반드시 포함
 7. 이모지 사용 금지
+
+[논문 알림(paper_alert) 처리 규칙 — 매우 중요]
+연구동향 아티클은 BLISS Lab의 기존 연구(과제·논문·실험)와 반드시 연계되어야 가치가 있습니다.
+paper_alert 데이터를 처리할 때는 다음을 준수하세요:
+- 위에 제공된 [기존 연구 아티클 본문]을 읽고, 논문과 관련 있는 내부 과제/논문/실험을 찾아내세요
+- 새로 만드는 연구동향 아티클의 내용에 "관련 내부 연구" 섹션을 포함하고, 어떤 기존 연구와 어떻게 연결되는지(유사 접근법/보완/경쟁 등) 구체적으로 서술하세요
+- 해당 기존 연구 아티클들을 [[아티클제목]] 형식으로 명시적으로 참조하세요
+- 관련 내부 연구가 없으면 "관련 내부 연구 없음 — 신규 탐색 영역"으로 명시하세요
 
 JSON 출력 형식 (배열만 출력, 다른 텍스트 없이):
 [
