@@ -1106,13 +1106,13 @@ export async function resetWikiNotionQueue() {
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;
-    rawProcessEnvSet: boolean;
-    rawKeyLength: number;
+    rawProcessEnvSet?: boolean;
+    rawKeyLength?: number;
     keyPreview?: string;
     integrationName?: string;
     accessiblePageCount?: number;
     error?: string;
     sampleTitles?: string[];
-    notionRelatedEnvVars: string[];
+    notionRelatedEnvVars?: string[];
   }>('/api/wiki/notion-diagnosis', { method: 'GET' }, 0, 15000);
 }

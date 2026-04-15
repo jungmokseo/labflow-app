@@ -255,10 +255,16 @@ export default function WikiPage() {
       const res = await diagnoseNotion();
       const lines: string[] = [];
 
-      // 항상 표시하는 raw env 정보
-      lines.push(`process.env.NOTION_API_KEY: ${res.rawProcessEnvSet ? `설정됨 (길이 ${res.rawKeyLength})` : '미설정'}`);
-      lines.push(`NOTION 관련 env 변수명: [${res.notionRelatedEnvVars.join(', ') || '없음'}]`);
-      lines.push('');
+      // 항상 표시하는 raw env 정보 (구버전 서버 호환 — undefined 방어)
+      if (typeof res.rawProcessEnvSet === 'boolean') {
+        lines.push(`process.env.NOTION_API_KEY: ${res.rawProcessEnvSet ? `설정됨 (길이 ${res.rawKeyLength ?? '?'})` : '미설정'}`);
+      }
+      if (Array.isArray(res.notionRelatedEnvVars)) {
+        lines.push(`NOTION 관련 env 변수명: [${res.notionRelatedEnvVars.join(', ') || '없음'}]`);
+      }
+      if (typeof res.rawProcessEnvSet === 'boolean' || Array.isArray(res.notionRelatedEnvVars)) {
+        lines.push('');
+      }
 
       if (!res.apiKeySet) {
         lines.push('❌ env.NOTION_API_KEY (zod 검증 후) 미설정');
