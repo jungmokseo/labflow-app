@@ -467,7 +467,7 @@ export async function ingestAndCompile(labId: string): Promise<{ processed: numb
   const queue = await prisma.wikiRawQueue.findMany({
     where: { labId, processedAt: null },
     orderBy: { createdAt: 'asc' },
-    take: 50,
+    take: 15,
   });
 
   if (queue.length === 0) {

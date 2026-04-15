@@ -114,13 +114,26 @@ export async function wikiRoutes(app: FastifyInstance) {
 
       try {
         const enqueued = await enqueueNewData(labId, userId);
-        const result = await ingestAndCompile(labId);
+
+        // 큐가 빌 때까지 반복 처리 (15개씩 배치)
+        let totalProcessed = 0;
+        const allUpdated: string[] = [];
+        let rounds = 0;
+        const maxRounds = 10; // 안전 상한
+
+        while (rounds < maxRounds) {
+          const result = await ingestAndCompile(labId);
+          totalProcessed += result.processed;
+          allUpdated.push(...result.updated);
+          rounds++;
+          if (result.processed === 0) break;
+        }
 
         return reply.send({
           message: '위키 ingest 완료',
           enqueued,
-          processed: result.processed,
-          updated: result.updated,
+          processed: totalProcessed,
+          updated: [...new Set(allUpdated)],
         });
       } catch (err) {
         logError('background', 'POST /api/wiki/ingest 실패', { labId })(err);

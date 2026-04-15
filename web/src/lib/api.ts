@@ -64,7 +64,7 @@ export function clearTokenCache() {
   tokenExpiresAt = 0;
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2): Promise<T> {
+export async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2, timeoutMs = 30000): Promise<T> {
   const url = `${API_BASE}${path}`;
   const authHeaders = await getAuthHeaders();
 
@@ -78,7 +78,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, retri
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       const res = await fetch(url, {
         ...options,
@@ -1092,9 +1092,9 @@ export async function deleteWikiArticle(id: string) {
 }
 
 export async function triggerWikiIngest() {
-  return apiFetch<{ message: string; enqueued: number; processed: number; updated: string[] }>('/api/wiki/ingest', { method: 'POST' });
+  return apiFetch<{ message: string; enqueued: number; processed: number; updated: string[] }>('/api/wiki/ingest', { method: 'POST' }, 0, 120000);
 }
 
 export async function triggerWikiSynthesis() {
-  return apiFetch<{ message: string }>('/api/wiki/synthesis', { method: 'POST' });
+  return apiFetch<{ message: string }>('/api/wiki/synthesis', { method: 'POST' }, 0, 180000);
 }
