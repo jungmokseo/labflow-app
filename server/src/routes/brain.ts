@@ -21,7 +21,7 @@ import { aiRateLimiter, trackAICost, COST_PER_CALL, calculateAnthropicCost } fro
 import { logApiCost } from '../services/cost-logger.js';
 import { env } from '../config/env.js';
 import { hybridSearch, rerank, validateResponse, isRagReady, embedAndStore } from '../services/rag-engine.js';
-import { generateEmbedding, searchPapers, setEmbeddingUserId } from '../services/embedding-service.js';
+import { generateEmbedding, searchPapers, searchWikiArticles, setEmbeddingUserId } from '../services/embedding-service.js';
 import { getGraphContextForQuery, buildGraphFromText } from '../services/knowledge-graph.js';
 
 // ── Modularized imports ──────────────────────────────
@@ -835,6 +835,9 @@ export async function brainRoutes(app: FastifyInstance) {
         setEmbeddingUserId(request.userId!);
         const { embedding } = await generateEmbedding(query);
         results.paperChunks = await searchPapers(prisma, embedding, 5, 0.3, lab?.id);
+        if (lab?.id) {
+          results.wikiChunks = await searchWikiArticles(prisma, embedding, lab.id, 5, 0.3);
+        }
       } catch {}
     }
 

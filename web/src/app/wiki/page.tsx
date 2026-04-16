@@ -15,6 +15,7 @@ import {
 
 const CATEGORIES = [
   { value: '', label: '전체' },
+  { value: 'insight', label: '🔮 인사이트' },
   { value: 'person', label: '연구원' },
   { value: 'project', label: '과제' },
   { value: 'research_trend', label: '연구동향' },
@@ -25,6 +26,7 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_BADGE: Record<string, string> = {
+  insight: 'bg-indigo-100 text-indigo-700',
   person: 'bg-blue-100 text-blue-700',
   project: 'bg-green-100 text-green-700',
   research_trend: 'bg-purple-100 text-purple-700',

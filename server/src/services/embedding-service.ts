@@ -301,6 +301,120 @@ export async function deletePaperEmbeddings(
   return (result as any)?.count || 0;
 }
 
+// ══════════════════════════════════════════════════════════
+// Wiki Article embeddings (paper_embeddings 동일 패턴)
+// ══════════════════════════════════════════════════════════
+
+let wikiEmbeddingsTableEnsured = false;
+
+async function ensureWikiEmbeddingsTable(prisma: any): Promise<void> {
+  if (wikiEmbeddingsTableEnsured) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS wiki_embeddings (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      article_id   TEXT NOT NULL,
+      lab_id       TEXT NOT NULL,
+      title        TEXT NOT NULL,
+      category     TEXT,
+      chunk_index  INT NOT NULL DEFAULT 0,
+      chunk_text   TEXT NOT NULL,
+      embedding    vector(1536),
+      metadata     JSONB DEFAULT '{}',
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(article_id, chunk_index)
+    )
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_wiki_embed_lab ON wiki_embeddings(lab_id)`);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_wiki_embed_article ON wiki_embeddings(article_id)`);
+  wikiEmbeddingsTableEnsured = true;
+}
+
+export interface WikiChunk {
+  articleId: string;
+  labId: string;
+  title: string;
+  category?: string | null;
+  chunkIndex: number;
+  chunkText: string;
+  metadata?: Record<string, any>;
+}
+
+export async function storeWikiEmbedding(
+  prisma: any,
+  chunk: WikiChunk,
+  embedding: number[],
+): Promise<string> {
+  await ensureWikiEmbeddingsTable(prisma);
+  const vectorStr = `[${embedding.join(',')}]`;
+
+  const result = await prisma.$queryRawUnsafe(`
+    INSERT INTO wiki_embeddings (article_id, lab_id, title, category, chunk_index, chunk_text, embedding, metadata)
+    VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8::jsonb)
+    ON CONFLICT (article_id, chunk_index) DO UPDATE SET
+      title = EXCLUDED.title,
+      category = EXCLUDED.category,
+      chunk_text = EXCLUDED.chunk_text,
+      embedding = EXCLUDED.embedding,
+      metadata = EXCLUDED.metadata,
+      created_at = NOW()
+    RETURNING id::text
+  `,
+    chunk.articleId,
+    chunk.labId,
+    chunk.title,
+    chunk.category ?? null,
+    chunk.chunkIndex,
+    chunk.chunkText,
+    vectorStr,
+    JSON.stringify(chunk.metadata ?? {}),
+  );
+
+  return result[0].id;
+}
+
+export async function deleteWikiEmbeddings(prisma: any, articleId: string): Promise<void> {
+  await ensureWikiEmbeddingsTable(prisma);
+  await prisma.$executeRawUnsafe(`DELETE FROM wiki_embeddings WHERE article_id = $1`, articleId);
+}
+
+export interface WikiSearchResult {
+  id: string;
+  articleId: string;
+  title: string;
+  category: string | null;
+  chunkIndex: number;
+  chunkText: string;
+  similarity: number;
+}
+
+export async function searchWikiArticles(
+  prisma: any,
+  queryEmbedding: number[],
+  labId: string,
+  limit: number = 5,
+  threshold: number = 0.5,
+): Promise<WikiSearchResult[]> {
+  await ensureWikiEmbeddingsTable(prisma);
+  const vectorStr = `[${queryEmbedding.join(',')}]`;
+
+  const results = await prisma.$queryRawUnsafe(`
+    SELECT
+      id::text,
+      article_id as "articleId",
+      title,
+      category,
+      chunk_index as "chunkIndex",
+      chunk_text as "chunkText",
+      1 - (embedding <=> $1::vector) as similarity
+    FROM wiki_embeddings
+    WHERE lab_id = $4 AND 1 - (embedding <=> $1::vector) > $2
+    ORDER BY embedding <=> $1::vector
+    LIMIT $3
+  `, vectorStr, threshold, limit, labId);
+
+  return results as WikiSearchResult[];
+}
+
 /**
  * 저장된 논문 목록 조회 (중복 제거)
  */

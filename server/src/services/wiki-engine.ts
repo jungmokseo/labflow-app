@@ -17,6 +17,7 @@ import { env } from '../config/env.js';
 import { logError } from './error-logger.js';
 import { buildGraphFromText } from './knowledge-graph.js';
 import { logApiCost } from './cost-logger.js';
+import { generateEmbedding, chunkText, storeWikiEmbedding, deleteWikiEmbeddings } from './embedding-service.js';
 
 // ── Anthropic 클라이언트 ──────────────────────────────────
 function getAnthropicClient(): Anthropic {
@@ -947,6 +948,39 @@ ${queueText}`;
     }
   }
 
+  // 6-1. Embedding 생성 (RAG용) — fire-and-forget, Brain이 벡터 검색으로 활용
+  if (updatedTitles.length > 0) {
+    setImmediate(async () => {
+      try {
+        const upserted = await prisma.wikiArticle.findMany({
+          where: { labId, title: { in: updatedTitles } },
+          select: { id: true, title: true, category: true, content: true },
+        });
+        for (const a of upserted) {
+          try {
+            const chunks = chunkText(`# ${a.title}\n\n${a.content}`, 1500);
+            await deleteWikiEmbeddings(prisma, a.id); // 이전 chunk 제거 후 재생성
+            for (let i = 0; i < chunks.length; i++) {
+              const { embedding } = await generateEmbedding(chunks[i]);
+              await storeWikiEmbedding(prisma, {
+                articleId: a.id,
+                labId,
+                title: a.title,
+                category: a.category,
+                chunkIndex: i,
+                chunkText: chunks[i],
+              }, embedding);
+            }
+          } catch (err) {
+            logError('background', `[wiki-engine] embedding 실패: ${a.title}`, { labId })(err);
+          }
+        }
+      } catch (err) {
+        logError('background', '[wiki-engine] embedding 배치 실패', { labId })(err);
+      }
+    });
+  }
+
   // 7. 처리된 큐 마킹
   await prisma.wikiRawQueue.updateMany({
     where: { id: { in: queue.map(q => q.id) } },
@@ -1058,41 +1092,63 @@ ${articlesText}
  * 관련도 순 정렬: 제목 매칭 > 태그 매칭 > 내용 매칭
  */
 export async function searchWiki(labId: string, query: string, limit = 5): Promise<any[]> {
+  if (!query || query.trim().length === 0) return [];
+
+  // 1순위: 벡터 검색 (OpenAI embedding 사용 가능 시)
+  if (env.OPENAI_API_KEY) {
+    try {
+      const { generateEmbedding, searchWikiArticles } = await import('./embedding-service.js');
+      const { embedding } = await generateEmbedding(query);
+      const hits = await searchWikiArticles(prisma, embedding, labId, limit * 2, 0.3);
+      if (hits.length > 0) {
+        // 같은 article의 여러 chunk 중 최고 점수만 유지
+        const byArticle = new Map<string, typeof hits[0]>();
+        for (const h of hits) {
+          const prev = byArticle.get(h.articleId);
+          if (!prev || h.similarity > prev.similarity) byArticle.set(h.articleId, h);
+        }
+        const topIds = [...byArticle.values()]
+          .sort((a, b) => b.similarity - a.similarity)
+          .slice(0, limit)
+          .map(h => h.articleId);
+        if (topIds.length > 0) {
+          const arts = await prisma.wikiArticle.findMany({
+            where: { id: { in: topIds } },
+            select: { id: true, title: true, category: true, content: true, tags: true, updatedAt: true },
+          });
+          // topIds 순서 유지
+          const order = new Map(topIds.map((id, idx) => [id, idx]));
+          return arts
+            .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+            .map(a => ({ ...a, content: a.content.slice(0, 800) }));
+        }
+      }
+    } catch (err) {
+      logError('background', '[wiki-engine] 벡터 검색 실패 → 키워드 fallback', { labId })(err);
+    }
+  }
+
+  // Fallback: 키워드 기반
   const keywords = query.toLowerCase().split(/\s+/).filter(k => k.length > 1);
   if (keywords.length === 0) return [];
 
-  // 모든 아티클 가져오기 (대용량 위키가 아닌 연구실 특성상 전체 로드 후 메모리 필터링)
   const articles = await prisma.wikiArticle.findMany({
     where: { labId },
-    select: {
-      id: true,
-      title: true,
-      category: true,
-      content: true,
-      tags: true,
-      updatedAt: true,
-    },
+    select: { id: true, title: true, category: true, content: true, tags: true, updatedAt: true },
     orderBy: { updatedAt: 'desc' },
   });
 
-  // 관련도 점수 계산
   const scored = articles.map(a => {
     const titleLow = a.title.toLowerCase();
     const tagsLow = a.tags.map(t => t.toLowerCase());
     const contentLow = a.content.toLowerCase();
     let score = 0;
-
     for (const kw of keywords) {
       if (titleLow.includes(kw)) score += 10;
       if (tagsLow.some(t => t.includes(kw))) score += 5;
       if (contentLow.includes(kw)) score += 1;
     }
-
-    return {
-      ...a,
-      content: a.content.slice(0, 500), // truncate
-      score,
-    };
+    return { ...a, content: a.content.slice(0, 500), score };
   });
 
   return scored
