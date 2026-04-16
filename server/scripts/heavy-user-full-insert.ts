@@ -50,6 +50,8 @@ async function main() {
     'articles-people.json',
     'articles-extra.json',
     'articles-insights.json',
+    'articles-insights-v2.json',
+    'articles-insights-v3.json',
   ];
 
   const all: Article[] = [];

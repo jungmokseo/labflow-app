@@ -1,0 +1,1284 @@
+{
+  "members": {
+    "count": 25,
+    "list": [
+      {
+        "name": "김찬수",
+        "nameEn": null,
+        "role": "학생",
+        "email": "nce9080@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2025324061",
+          "researcherId": "13081012"
+        }
+      },
+      {
+        "name": "박기준",
+        "nameEn": null,
+        "role": "학생",
+        "email": "kijunpark31@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2018324041",
+          "researcherId": "11868917"
+        }
+      },
+      {
+        "name": "박시연",
+        "nameEn": null,
+        "role": "학생",
+        "email": "pksy51630@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2023324044",
+          "researcherId": "13134708"
+        }
+      },
+      {
+        "name": "김지현",
+        "nameEn": null,
+        "role": "학생",
+        "email": "jihyunkim08@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2021314076",
+          "researcherId": "11781972"
+        }
+      },
+      {
+        "name": "김장호",
+        "nameEn": null,
+        "role": "학생",
+        "email": "jangho.kim@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2024311484",
+          "researcherId": "13192440"
+        }
+      },
+      {
+        "name": "김상원",
+        "nameEn": null,
+        "role": "학생",
+        "email": "sangwon277@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2023311334",
+          "researcherId": "12808381"
+        }
+      },
+      {
+        "name": "박재규",
+        "nameEn": null,
+        "role": "학생",
+        "email": "jaegyu.park@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2020314107",
+          "researcherId": "12470594"
+        }
+      },
+      {
+        "name": "이유림",
+        "nameEn": null,
+        "role": "학생",
+        "email": "l22yurim@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2022314080",
+          "researcherId": "12771906"
+        }
+      },
+      {
+        "name": "함혜인",
+        "nameEn": null,
+        "role": "학생",
+        "email": "hhi0706@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2025314093",
+          "researcherId": "13275018"
+        }
+      },
+      {
+        "name": "이연택",
+        "nameEn": null,
+        "role": "학생",
+        "email": "ytlee94@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2018314113",
+          "researcherId": "11836103"
+        }
+      },
+      {
+        "name": "김상인",
+        "nameEn": null,
+        "role": "학생",
+        "email": "tkddls0926@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2022321257",
+          "researcherId": "12890611"
+        }
+      },
+      {
+        "name": "장한빛",
+        "nameEn": null,
+        "role": "학생",
+        "email": "hanbit1jang@gmail.com",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2026314127",
+          "researcherId": "13502763"
+        }
+      },
+      {
+        "name": "조예진",
+        "nameEn": null,
+        "role": "학생",
+        "email": "yejin.jo12@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2021324059",
+          "researcherId": "12556618"
+        }
+      },
+      {
+        "name": "육근영",
+        "nameEn": null,
+        "role": "학생",
+        "email": "kyyook1118@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2024314090",
+          "researcherId": "12941893"
+        }
+      },
+      {
+        "name": "박상우",
+        "nameEn": null,
+        "role": "학생",
+        "email": "oowgnas10@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2023324065",
+          "researcherId": "12968672"
+        }
+      },
+      {
+        "name": "오진석",
+        "nameEn": null,
+        "role": "학생",
+        "email": "jinseok.oh13@gmail.com",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2022311316",
+          "researcherId": "12523177"
+        }
+      },
+      {
+        "name": "이주희",
+        "nameEn": null,
+        "role": "학생",
+        "email": "dlwngml0400@naver.com",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2022321273",
+          "researcherId": "12692460"
+        }
+      },
+      {
+        "name": "김수아",
+        "nameEn": null,
+        "role": "학생",
+        "email": "sooa.kim38@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2022314090",
+          "researcherId": "12807760"
+        }
+      },
+      {
+        "name": "김연주",
+        "nameEn": null,
+        "role": "학생",
+        "email": "yeonju.kim@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2021314134",
+          "researcherId": "11633590"
+        }
+      },
+      {
+        "name": "Xia BeiBei",
+        "nameEn": null,
+        "role": "학생",
+        "email": null,
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2025323066",
+          "researcherId": "13419335"
+        }
+      },
+      {
+        "name": "손가영",
+        "nameEn": null,
+        "role": "학생",
+        "email": "sonky0803@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2024314120",
+          "researcherId": "13076925"
+        }
+      },
+      {
+        "name": "김미도",
+        "nameEn": null,
+        "role": "학생",
+        "email": "mido.kim@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2026314103",
+          "researcherId": "13423663"
+        }
+      },
+      {
+        "name": "김태영",
+        "nameEn": null,
+        "role": "학생",
+        "email": "taeyoung.kim92@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2021323092",
+          "researcherId": "12409017"
+        }
+      },
+      {
+        "name": "정윤민",
+        "nameEn": null,
+        "role": "학생",
+        "email": "yunminj@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2025324042",
+          "researcherId": "13406464"
+        }
+      },
+      {
+        "name": "강민경",
+        "nameEn": null,
+        "role": "학생",
+        "email": "mkkang@yonsei.ac.kr",
+        "team": null,
+        "metadata": {
+          "birthday": null,
+          "studentId": "2021324063",
+          "researcherId": "12465545"
+        }
+      }
+    ]
+  },
+  "memberInfos": {
+    "count": 26,
+    "list": [
+      {
+        "name": "이연택",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "박기준",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "박재규",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김지현",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김연주",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "황수영",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "강민경",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김태영",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "조예진",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "이유림",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김수아",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "오진석",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "이주희",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "손가영",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김상원",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김상인",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "박상우",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "육근영",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김장호",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "박시연",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "함혜인",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김찬수",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "정윤민",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "Xia BeiBei",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "김미도",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      },
+      {
+        "name": "장한빛",
+        "degree": null,
+        "department": null,
+        "joinYear": null,
+        "graduationYear": null
+      }
+    ]
+  },
+  "publications": {
+    "count": 11,
+    "list": [
+      {
+        "title": "Universal hydrogel adhesives with robust chain entanglement for bridging soft electronic materials",
+        "authors": "Yejin Jo, Yurim Lee, Jeong Hyun Heo, Yeonzu Son, Tae Young Kim, Kijun Park, Soye Kim, Seo Jung Kim, Yoonhee Jin, Seongjun Park, Jungmok Seo",
+        "journal": null,
+        "year": null,
+        "nickname": null
+      },
+      {
+        "title": "Resealable Antithrombotic Artificial Vascular Graft Integrated with a Self-Healing Blood Flow Sensor",
+        "authors": "Kijun Park, Soojung An, Jihyun Kim, Sungjun Yoon, Jihyang Song, Daekwang Jung, Jae Park, Yeontaek Lee, Donghee Son, Jungmok Seo",
+        "journal": null,
+        "year": null,
+        "nickname": null
+      },
+      {
+        "title": "Lubricant-Infused Polymeric Interfaces: A Stretchable and Anti-Fouling Surface for Implantable Biomaterials",
+        "authors": "Tae Young Kim, Soohwan An, Young Kim, Seung Yeop Han, Jeuhee Lee, Kijun Park, Sangin Kim, Jae Park, Soo A Kim, Justin J. Chung, Seung-Woo Cho, and Jungmok Seo*",
+        "journal": "ADVANCED FUNCTIONAL MATERIALS",
+        "year": null,
+        "nickname": null
+      },
+      {
+        "title": "Slippery dopamine-fluoropolymer hybrid surface for improving biliary stent longevity",
+        "authors": "Tae Young Kim, Won-Jong Lee, Yurim Lee, Seo Jung Kim, Sungjin Min, Seyong Chung, Soo A Kim, Keun-Young Yook, Chang-Hwan Moon, Yeontaek Lee, Kijun Park, Dae-Hyun Kim, Jungmok Seo",
+        "journal": "Bioactive Materials",
+        "year": 2026,
+        "nickname": null
+      },
+      {
+        "title": "Optimized Electrical Stimulation Using a Spray-Printed Conductive Electroceutical Patch for Accelerated Wound Healing in Diabetic Mice",
+        "authors": "Jung Hyun Kim, Soo A Kim, Seung Hyun Lee, Young Min Jeon, Kijun Park, Minkyong Kang, Sangwon Kim, Tae Young Kim, Yeontaek Lee, Chun Gwon Park, Jungmok Seo, Jung Seung Lee",
+        "journal": "Advanced Healthcare Materials",
+        "year": 2026,
+        "nickname": null
+      },
+      {
+        "title": "Bioadaptive liquid-infused multifunctional fibers for long-term neural recording via BDNF stabilization and enhanced neural interaction",
+        "authors": "Tae Young Kim, Yeonzu Son, Keun-Young Yook, Dong Gyu Lee, Young Kim, Seo Jung Kim, Kijun Park, Yurim Lee, Tae Kyung Lee, Justin J. Chung, Congqi Yang, Seongjun Park, Jungmok Seo",
+        "journal": "Science Advances",
+        "year": 2025,
+        "nickname": null
+      },
+      {
+        "title": "Bioadaptive liquid-infused multifunctional fibers for long-term neural recording via BDNF stabilization and enhanced neural interaction",
+        "authors": "Tae Young Kim, Yeonzu Son, Keun-Young Yook, Dong Gyu Lee, Young Kim, Seo Jung Kim, Kijun Park, Yurim Lee, Tae Kyung Lee, Justin J. Chung, Congqi Yang, Seongjun Park, Jungmok Seo",
+        "journal": "Science Advances",
+        "year": 2025,
+        "nickname": null
+      },
+      {
+        "title": "Synergistic Mechano-Fluidic Self-Fusion of PVA modified Liquid Metal Particles for Sintering-Free Soft Electronics",
+        "authors": "Keun-Young Yook, Tae Young Kim, Sangwon Kim, Chansoo Kim, Minkyong Kang, Yurim Lee, Mido Kim, Seung Yeop Han, Seung-Woo Cho, Gun-Hee Lee, Jungmok Seo",
+        "journal": "WILEY-VCH",
+        "year": 2024,
+        "nickname": null
+      },
+      {
+        "title": "A Mechanically Resilient and Tissue-Conformable Hydrogel with Hemostatic and Antibacterial Capabilities for Wound Care",
+        "authors": "Jae Park, Tae Young Kim, Yeonju Kim, Soohwan An, Kyeong Seok Kim, Minkyong Kang, Soo A Kim, Jayoung Kim, Joonseok Lee, Seung-Woo Cho, and Jungmok Seo*",
+        "journal": "ADVANCED SCIENCE",
+        "year": 2023,
+        "nickname": null
+      },
+      {
+        "title": "Intrinsically Nonswellable Multifunctional Hydrogel with Dynamic Nanoconfinement Networks for Robust Tissue-Adaptable Bioelectronics",
+        "authors": "Jae Park, Ju Yeon Kim, Jeong Hyun Heo, Yeonju Kim, Soo A Kim, Kijun Park, Yeontaek Lee, Yoonhee Jin, Su Ryon Shin, Dae Woo Kim, and Jungmok Seo*",
+        "journal": "ADVANCED SCIENCE",
+        "year": 2023,
+        "nickname": null
+      },
+      {
+        "title": "Antibacterial infection and immune-evasive coating for orthopedic implants",
+        "authors": "Kyomin Chae, Woo Young Jang, Kijun Park, Jinhyeok Lee, Hyunchul Kim, Kyoungbun Lee, Chang Kyu Lee, Yeontaek Lee, Soon Hyuck Lee, Jungmok Seo",
+        "journal": "Science Advances",
+        "year": 2020,
+        "nickname": null
+      }
+    ]
+  },
+  "projects": {
+    "count": 21,
+    "list": [
+      {
+        "name": "인체유사 패치 기술을 활용한 투명 스킨패치 및 LED 패치 개발",
+        "shortName": null,
+        "businessName": "TIPS 기술창업기업",
+        "funder": "산하기관 (용역)",
+        "period": "24.12.02 ~ 27.06.02",
+        "pi": "서정목",
+        "pm": "수아/민경/근영",
+        "ministry": "중소벤처기업부",
+        "responsibility": "X"
+      },
+      {
+        "name": "하이드로겔 자동배합 공정 스케일업 시 조성 및 물성 균일성 확보를 위한 최적 공정 조건 도출 및 실증",
+        "shortName": null,
+        "businessName": null,
+        "funder": "K-Hero",
+        "period": null,
+        "pi": "서정목",
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "고밀도 이종 집적 반도체 패키징을 위한 수화-탈수화 기반 하이드로겔 비전도성 접착 필름 소재 기술 개발",
+        "shortName": null,
+        "businessName": "이공분야기초연구사업\n-국가아젠다 기초연구",
+        "funder": "한국연구재단",
+        "period": "25.09.01 ~ 28.08.31",
+        "pi": "서정목",
+        "pm": "유림/혜인",
+        "ministry": "과학기술정보통신부",
+        "responsibility": "책"
+      },
+      {
+        "name": "창상 회복 및 피부재생을 위한 스트레처블 LED 마스크 개발",
+        "shortName": null,
+        "businessName": "시장대응형",
+        "funder": "산하기관 (용역)",
+        "period": "24.11.02 ~ 27.06.02",
+        "pi": "서정목",
+        "pm": "수아/민경/근영",
+        "ministry": "중소벤처기업부",
+        "responsibility": "X"
+      },
+      {
+        "name": "첨단산업 글로벌 혁신인재 성장지원 사업 (핵심소재, 이차전지)",
+        "shortName": null,
+        "businessName": null,
+        "funder": "산업통상자원부",
+        "period": "2024-03-01 ~ 2027-02-28",
+        "pi": "서정목",
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "바이오 센테니얼 융합 연구소 (노화성 신경퇴행성 질환 치료를 위한 전기장 기반 무선 신경 차단-모니터링 HMI 플랫폼 개발)",
+        "shortName": null,
+        "businessName": null,
+        "funder": "과기정통부",
+        "period": "2025-09-01 ~ 2028-08-31",
+        "pi": "서정목",
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "파킨슨 환자의 장기능 저하 치료를 위한 초장기 초소형 IC 칩 통합형 연성 전자약 폐루프 시스템 개발",
+        "shortName": null,
+        "businessName": null,
+        "funder": "과기정통부",
+        "period": "2025-04-01 ~ 2027-12-31",
+        "pi": "서정목",
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "손상된 말초 및 중추 신경 재생을 위한 신경 섬유 다발 수준 정밀 전기자극 치료 원천 기술 개발",
+        "shortName": "BRL",
+        "businessName": "BRL",
+        "funder": "한국연구재단",
+        "period": "25.06.01 - 28.05.31",
+        "pi": "서정목",
+        "pm": "근영/윤민",
+        "ministry": "과학기술정보통신부",
+        "responsibility": "공"
+      },
+      {
+        "name": "이온영동법 기반 비침습법 약물 전달 결합형 LED 광마스크 패치 개발",
+        "shortName": "SBA",
+        "businessName": "SBA",
+        "funder": "서울경제진흥원",
+        "period": "25.09.01 ~ 27.07.31",
+        "pi": "서정목",
+        "pm": "시연",
+        "ministry": "서울특별시",
+        "responsibility": "X"
+      },
+      {
+        "name": "파킨슨 환자의 장기능 저하 치료를 위한\n초장기 초소형 IC 칩 통합형 연성 전자약 폐루프 시스템 개발",
+        "shortName": null,
+        "businessName": "바이오의료기술개발사업\n-뇌과학선도융합기술개발",
+        "funder": "한국연구재단",
+        "period": "25.04.01 ~ 27.12.31",
+        "pi": null,
+        "pm": "근영/찬수",
+        "ministry": "과학기술정보통신부",
+        "responsibility": "책"
+      },
+      {
+        "name": "국가아젠다",
+        "shortName": "국가아젠다",
+        "businessName": null,
+        "funder": null,
+        "period": null,
+        "pi": null,
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "바이오 센테니얼 융합 연구소(노화성 신경퇴행성 질환 치료를 위한 전기장 기반 무선 신경 차단-모니터링 HMI 플랫폼 개발)",
+        "shortName": "NRL",
+        "businessName": "NRL",
+        "funder": "한국연구재단",
+        "period": "25.09.01 ~ 28.08.31",
+        "pi": null,
+        "pm": "근영",
+        "ministry": "과학기술정보통신부",
+        "responsibility": "공"
+      },
+      {
+        "name": "항균.방오 기능과 연.경조직 선택적 지직 재생 성능을 지닌 차세대 융복합 소재 기반 골유착 촉진 임플란트 코팅 기술 개발",
+        "shortName": null,
+        "businessName": "치대 과제",
+        "funder": "연세대학교 산학협력단",
+        "period": "25.04.01 ~ 26.03.31",
+        "pi": null,
+        "pm": "태영",
+        "ministry": "연세대학교",
+        "responsibility": "X"
+      },
+      {
+        "name": "첨단산업 글로벌 혁신인재 성장지원 사업(핵심소재, 이차전지)",
+        "shortName": null,
+        "businessName": "산업혁신인재성자지원\n(해외연계)사업",
+        "funder": "한국산업기술진흥원",
+        "period": "24.03.01 ~ 27.02.28",
+        "pi": null,
+        "pm": "예진",
+        "ministry": "산업통상자원부",
+        "responsibility": "X"
+      },
+      {
+        "name": "힘줄 재건 및 재활을 위한 면역회피 기능성 봉합사 및 전자 봉합사 제품/ 사업화",
+        "shortName": null,
+        "businessName": "범부처 후속- 봉합사",
+        "funder": "범부처처",
+        "period": "2023 ~ 2025.12.31",
+        "pi": null,
+        "pm": "예진",
+        "ministry": "범부처전주기의료기기연구개발사업단",
+        "responsibility": "공"
+      },
+      {
+        "name": "신진인프라",
+        "shortName": "신진인프라",
+        "businessName": null,
+        "funder": null,
+        "period": null,
+        "pi": null,
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "Tips",
+        "shortName": "Tips",
+        "businessName": null,
+        "funder": null,
+        "period": null,
+        "pi": null,
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "글로벌 혁신인재",
+        "shortName": "글로벌 혁신인재",
+        "businessName": null,
+        "funder": null,
+        "period": null,
+        "pi": null,
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "뇌선도",
+        "shortName": "뇌선도",
+        "businessName": null,
+        "funder": null,
+        "period": null,
+        "pi": null,
+        "pm": null,
+        "ministry": null,
+        "responsibility": null
+      },
+      {
+        "name": "펠티에 소자 적용 냉각 및 발열 하이드로겔 패치 통합형 스마트 운동정보 측정기기 개발",
+        "shortName": "RISE-Y",
+        "businessName": "RISE-Y",
+        "funder": "연세대학교 산학협력단",
+        "period": "25.08.25 ~ 30.02.28",
+        "pi": "서정목",
+        "pm": "시연",
+        "ministry": "연세대학교 RISE-Y 사업단",
+        "responsibility": "X"
+      },
+      {
+        "name": "고령 외상성 근손실 개선을 위한 약물전달 기반 자가전원형 생분해성 이온토포레틱 이식소자와 통합 재활 플랫폼 개발",
+        "shortName": "나노소재",
+        "businessName": "나노소재",
+        "funder": "한국연구재단",
+        "period": "25.07.01 ~ 29.12.31",
+        "pi": "서정목",
+        "pm": "가영",
+        "ministry": "과학기술정보통신부부",
+        "responsibility": "공"
+      }
+    ]
+  },
+  "acknowledgments": {
+    "count": 22,
+    "list": [
+      {
+        "paperTitle": "Bioadaptive Liquid-Infused Multi-functional neural Fiber for Temporal Protection of Conjugated BDNF and Promotion of Neural interaction to Enhance Long-Term Neural Recording",
+        "type": "학회",
+        "journal": "중국생체재료 | 중국(항저우) | 국제 | 오랄",
+        "publishedAt": "25.10.10",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Improving Biliary Stent Longevity via Surface Modification with Bio-inspired Anti-fouling Technology",
+        "type": "학회",
+        "journal": "MRS | 미국(보스턴) | 국제 | 포스터",
+        "publishedAt": "25.12.02",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "A Simple and Additive-Free Method for preparing Liquid Metal Paste via Sonication for Robust interconnects in soft Electronic applications",
+        "type": "학회",
+        "journal": "MRS | 미국(보스턴) | 국제 | 구두",
+        "publishedAt": "25.12.01",
+        "acknowledgedProjects": "[\"뇌선도\",\"치대\"]"
+      },
+      {
+        "paperTitle": "Rapid and Scalable Lubrication Coating for Industrial and Medical Applications via Sequential Dip-Coating",
+        "type": "논문",
+        "journal": "Advanced Materials Interfaces",
+        "publishedAt": "2025.07.30",
+        "acknowledgedProjects": "[\"봉합사\",\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "Bioadaptive Liquid-Infused Multifunctional Fibers for Long-Term Neural Recording via BDNF Stabilization and Enhanced Neural Interaction",
+        "type": "논문",
+        "journal": "Science Advances",
+        "publishedAt": "2025.09.10",
+        "acknowledgedProjects": "[\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "Encapsulation Strategies for OLEDs: From Conventional Devices to Flexible and Biointegrated Application",
+        "type": "논문",
+        "journal": "Advanced Electronic Materials",
+        "publishedAt": "2025.11.18",
+        "acknowledgedProjects": "[\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "Optimized Electrical Stimulation Using a Spray-Printed Conductive Electroceutical Patch for Accelerated Wound Healing in Diabetic Mice",
+        "type": "논문",
+        "journal": "Advanced Healthcare Materials",
+        "publishedAt": "2025.12.24",
+        "acknowledgedProjects": "[\"뇌선도\",\"SBA\",\"TIPS (용역)\"]"
+      },
+      {
+        "paperTitle": "Ion‑Mediated Structural Engineering of Hydrogel Interfaces for Tunable Mechanical and Analyte Diffusion Properties in Electrochemical Biosensors",
+        "type": "논문",
+        "journal": "Advanced Materials",
+        "publishedAt": "2026.03.05",
+        "acknowledgedProjects": "[\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "기체 선택투과성이 향상된 기체분리막 및 그 제조 방법",
+        "type": "특허",
+        "journal": null,
+        "publishedAt": null,
+        "acknowledgedProjects": null
+      },
+      {
+        "paperTitle": "적측형 유기-액상 계면 기반의 고내구성 항바이오파울링 봉지막 구조체 및 그 제조 방법",
+        "type": "특허",
+        "journal": null,
+        "publishedAt": null,
+        "acknowledgedProjects": null
+      },
+      {
+        "paperTitle": "바이오 몰레큘 안정화와 신경 상호작용 향상을 위한 코팅 개발 및 다기능성 뉴럴파이버 적용을 통한 장기 신경 기록 전략",
+        "type": "특허",
+        "journal": null,
+        "publishedAt": null,
+        "acknowledgedProjects": "[\"뇌선도\",\"brl\"]"
+      },
+      {
+        "paperTitle": "미세유체칩 및 이의 제조 방법",
+        "type": "특허",
+        "journal": null,
+        "publishedAt": null,
+        "acknowledgedProjects": "[\"전자약\",\"중견\"]"
+      },
+      {
+        "paperTitle": "Hydrogel-based anisotropic conductive film for highly integrated packaging in soft electronics",
+        "type": "학회",
+        "journal": "금속재료학회 | 한국(제주도) | 국내 | 포스터",
+        "publishedAt": "25.04.23",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Hydrogel-based anisotropic conductive film for universal soft electronics packaging",
+        "type": "학회",
+        "journal": "대한전자공학회 | 한국(제주도) | 국내 | 포스터",
+        "publishedAt": "25.06.25",
+        "acknowledgedProjects": "[\"범부처\",\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "Hydrogel−Based Anisotropic Conductive Film for High-Performance Integration of Soft Electronics",
+        "type": "학회",
+        "journal": "MRS | 미국(보스턴) | 국제 | 구두",
+        "publishedAt": "25.12.02",
+        "acknowledgedProjects": "[\"뇌선도\",\"나노소재\"]"
+      },
+      {
+        "paperTitle": "Simple Fabrication of High-Conductivity Liquid Metal\nVertical Interconnects for Stretchable Permeable Electronics",
+        "type": "학회",
+        "journal": "대한전자공학회 | 한국(제주도) | 국내 | 포스터",
+        "publishedAt": "25.06.25",
+        "acknowledgedProjects": "[\"범부처\",\"뇌선도\",\"BRL\"]"
+      },
+      {
+        "paperTitle": "Adaptive Liquid-Infused Multi-functional neural Fiber for Temporal Protection of Conjugated BDNF and Promotion of Neural interaction to Enhance Long-Term Neural Recording",
+        "type": "학회",
+        "journal": "한국고분자학회 | 한국(제주) | 국내 | 포스터",
+        "publishedAt": "25.04.17",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Bioadaptive Liquid-Infused Multi-functional neural Fiber for Temporal Protection of Conjugated BDNF and Promotion of Neural interaction to Enhance Long-Term Neural Recording",
+        "type": "학회",
+        "journal": "한국생체재료 | 한국 (부산) | 국내 | 포스터",
+        "publishedAt": "25.09.11",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Bioadaptive Liquid-Infused Multi-functional neural Fiber for Temporal Protection of Conjugated BDNF and Promotion of Neural interaction to Enhance Long-Term Neural Recording",
+        "type": "학회",
+        "journal": "MRS | 미국(보스턴) | 국제 | 구두",
+        "publishedAt": "25.12.02",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Quinone-Mediated, Tissue-Adaptive Double-Network Hydrogel for Instant Hemostasis and Wet-Tissue Adhesion",
+        "type": "학회",
+        "journal": "GCIM | 한국(제주도) | 국내 | 구두",
+        "publishedAt": "25.06.15",
+        "acknowledgedProjects": "[\"범부처\"]"
+      },
+      {
+        "paperTitle": "Quinone-Mediated, Tissue-Adaptive Double-Network Hydrogel for Instant Hemostasis and Wet-Tissue Adhesion",
+        "type": "학회",
+        "journal": "MRS | 미국(보스턴) | 국제 | 구두",
+        "publishedAt": "25.12.03",
+        "acknowledgedProjects": "[\"뇌선도\",\"치대\"]"
+      },
+      {
+        "paperTitle": "One-step Fabrication of Highly Adhesive LM Paste\n: High-Resolution Printing for Soft Electronics",
+        "type": "학회",
+        "journal": "대한전자공학회 | 한국(제주도) | 국내 | 포스터",
+        "publishedAt": "25.06.25",
+        "acknowledgedProjects": "[\"범부처\",\"뇌선도\",\"BRL\"]"
+      }
+    ]
+  },
+  "knowledgeGraph": {
+    "totalNodes": 124,
+    "topByCentrality": [
+      {
+        "name": "BLISS Lab",
+        "type": "institution",
+        "degree": 66
+      },
+      {
+        "name": "서정목",
+        "type": "person",
+        "degree": 49
+      },
+      {
+        "name": "BLISS Lab 멤버 목록",
+        "type": "topic",
+        "degree": 45
+      },
+      {
+        "name": "Slippery dopamine-fluoropolymer hybrid surface for improving biliary stent longevity",
+        "type": "paper",
+        "degree": 10
+      },
+      {
+        "name": "Resealable Antithrombotic Artificial Vascular Graft Integrated with a Self-Healing Blood Flow Sensor",
+        "type": "paper",
+        "degree": 10
+      },
+      {
+        "name": "조예진",
+        "type": "person",
+        "degree": 7
+      },
+      {
+        "name": "황수영",
+        "type": "person",
+        "degree": 6
+      },
+      {
+        "name": "김태영",
+        "type": "person",
+        "degree": 6
+      },
+      {
+        "name": "이주희",
+        "type": "person",
+        "degree": 6
+      },
+      {
+        "name": "김상인",
+        "type": "person",
+        "degree": 6
+      },
+      {
+        "name": "과기정통부",
+        "type": "institution",
+        "degree": 6
+      },
+      {
+        "name": "장한빛",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "김지현",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "Xia BeiBei",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "손가영",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "박상우",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "김찬수",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "오진석",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "김장호",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "함혜인",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "김수아",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "박기준",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "한국연구재단",
+        "type": "institution",
+        "degree": 5
+      },
+      {
+        "name": "Ion-Mediated Structural Engineering of Hydrogel Interfaces for Tunable Mechanical and Analyte Diffusion Properties in Electrochemical Biosensors",
+        "type": "paper",
+        "degree": 5
+      },
+      {
+        "name": "박시연",
+        "type": "person",
+        "degree": 5
+      },
+      {
+        "name": "김상원",
+        "type": "person",
+        "degree": 4
+      },
+      {
+        "name": "육근영",
+        "type": "person",
+        "degree": 4
+      },
+      {
+        "name": "이연택",
+        "type": "person",
+        "degree": 4
+      },
+      {
+        "name": "정윤민",
+        "type": "person",
+        "degree": 4
+      },
+      {
+        "name": "강민경",
+        "type": "person",
+        "degree": 4
+      }
+    ]
+  },
+  "tagDistribution": [
+    [
+      "sim-by-claude-code",
+      97
+    ],
+    [
+      "BLISS Lab",
+      48
+    ],
+    [
+      "연구자",
+      23
+    ],
+    [
+      "멤버",
+      23
+    ],
+    [
+      "researcher",
+      22
+    ],
+    [
+      "hydrogel",
+      17
+    ],
+    [
+      "liquid-metal",
+      15
+    ],
+    [
+      "2025",
+      14
+    ],
+    [
+      "meeting",
+      13
+    ],
+    [
+      "뇌선도",
+      11
+    ],
+    [
+      "학회발표",
+      10
+    ],
+    [
+      "2026-04",
+      9
+    ],
+    [
+      "insight",
+      8
+    ],
+    [
+      "deep-insight",
+      8
+    ],
+    [
+      "autoPCB",
+      8
+    ],
+    [
+      "범부처",
+      7
+    ],
+    [
+      "BRL",
+      7
+    ],
+    [
+      "2026-03",
+      7
+    ],
+    [
+      "국제",
+      6
+    ],
+    [
+      "하이드로겔팀",
+      6
+    ],
+    [
+      "신경기록",
+      5
+    ],
+    [
+      "BDNF",
+      5
+    ],
+    [
+      "MRS",
+      5
+    ],
+    [
+      "보스턴",
+      5
+    ],
+    [
+      "논문",
+      5
+    ],
+    [
+      "사사",
+      5
+    ],
+    [
+      "하이드로겔",
+      5
+    ],
+    [
+      "소프트전자소자",
+      5
+    ],
+    [
+      "포스터",
+      5
+    ],
+    [
+      "encapsulation",
+      5
+    ]
+  ],
+  "recentMeetings": {
+    "count": 3,
+    "list": [
+      {
+        "title": "액체금속 전극 부착 및 포토패터닝 최적화 회의",
+        "summary": "# 액체금속 전극 부착 및 포토패터닝 최적화 회의\n\n날짜: 2026년 4월 9일 AM 03:50 UTC\n참석자: 연구원, 선배 팀\n팀: 연구팀\n\n## 안건\n\n- 인비보 테스트 결과 공유\n- 전극 부착 방법 개선\n- 포토패터닝 입도 분석\n\n## 논의 내용\n\n### 인비보 테스트 결과 및 부착 방법 개선\n\n- **기존 샘플 성공률**: 이전 부착 방법으로 보낸 샘플의 성공률이 예상보다 낮게 측정됨\n- **부착 방법 차이**: 기존과 다른 부착 방법을 사용한 상태로 샘플을 전송하여 테스트 진행\n- **예리한 부분 압착 효과**: 최대한 예리한 부분으로 누르는 방식이 통전 성능을 크게 향상시키는 것으로 확인\n- **전극 기판 변형**: 선배님이 하부 전극 기판에 변형을 가하여 두 가지 샘플 제작\n- **샘플 1**: 열에 비교적 강한 폴리머를 헤드 위치 부분에 적용한 샘플\n- **샘플 2**: 후면에 PI 테이프 패킹을 적용한 샘플\n- **실링 폴리머 문제**: 오래된 실링 폴리머 사용으로 인한 손상 발생으로 재제작 필요\n\n### 포토패터닝 입도 분석 진행\n\n- **분산 최적화 목표**: 액체금속(LM) 입자의 분산 상태 확인을 통한 공정 최적화\n- **입도 분석 실시**: LM 입자 분산도 평가를 위한 입도 분석 진행\n- **GelMA 직접 혼합**: GelMA와 LM을 직접 섞는 방식으로 진행\n- **측정 중 경화 이슈**: GelMA가 측정 과정에서 큐어링되는 문제 발생\n\n## 다음 미팅까지 할 일\n\n- 개선된 부착 방법으로 성공률 재평가\n- 포토패터닝 입도 분석 결과 검토 및 최적화 방향 결정",
+        "actionItems": [
+          "새로 제작한 실링 폴리머로 재실험 진행 (오늘 받은 샘플 사용)",
+          "예리한 부분 압착 방식으로 부착 방법 변경 적용",
+          "GelMA 큐어링 문제 해결 방안 모색"
+        ],
+        "createdAt": "2026-04-09T03:50:36.703Z"
+      },
+      {
+        "title": "안티드라잉 하이드로겔 진행 회의",
+        "summary": "# 안티드라잉 하이드로겔 진행 회의\n\n\n## 안건\n\n- 추천서 초안 확인\n- 안티드라잉 하이드로겔 어플리케이션 진행 상황\n- 추가 측정 및 시험 현황\n\n## 논의 내용\n\n### 추천서 초안 확인\n\n- 민경 학생이 제출한 추천서 초안을 교수님이 아직 확인하지 못함. 파일의 맨 뒤쪽에 위치함.\n\n### 안티드라잉 하이드로겔 스트레인 센서 진행 상황\n\n- 초기 구리 테이프 테스트는 불안정하여 구리선 방식 스트레인 센서 실험으로 변경. 하이드로겔이 두껍게 제작되고 신호 변동 폭이 낮아 분석에 어려움이 있었으며, 싱크레이트 문제로 신호가 지단 형태로 보임. 이후 하이드로겔을 얇고 작게 제작하여 손 부착력을 개선, 신호는 잘 얻었으나 현재 분석 중임.\n\n### 스트레인 센서 정확도 향상 방안 (온디바이스 AI 활용)\n\n- 스트레인 센서의 정확도 한계를 보완하기 위해 시각/청각 등 복합 정보를 온디바이스 AI(Google Gemma LLM)와 결합하는 방안을 모색할 것을 제안. 이를 통해 센서만으로 구별 어려운 것을 인지하고 연구 스토리를 강화할 수 있는지 고민 필요.\n\n### 추가 측정 및 시험 현황\n\n- X 및 CA 측정 진행 중 (X는 의뢰, CA는 이번 주 진행). 하이드로겔-피부 접착력 측정 및 안티프리딩 하이드로겔 사진 자료 확보 완료. 생체 적합성 시험은 완료되었으며 데이터 정리 필요.\n\n## 다음 미팅까지 할 일\n\n- 하이드로겔 스트레인 센서 신호 분석 완료\n- X 및 CA 측정 데이터 확보 및 분석\n- 온디바이스 AI(Gemma) 활용 방안 구체화 및 연구 방향 논의",
+        "actionItems": [
+          "교수님: 민경 학생 추천서 초안 확인",
+          "학생: 스트레인 센서와 온디바이스 AI(Gemma LLM) 결합 방안 및 연구 스토리 구상",
+          "학생: CA 측정 진행",
+          "학생: 생체 적합성 시험 데이터 정리"
+        ],
+        "createdAt": "2026-04-09T03:04:25.183Z"
+      },
+      {
+        "title": "화상회의 기술 점검 및 발표 준비",
+        "summary": "# 화상회의 기술 점검 및 발표 준비\n\n날짜: 2026년 4월 6일 PM 02:04 UTC\n액션 아이템: 발표자가 직접 발표 진행 / 마이크 위치 조정으로 음성 품질 유지\n참석자: 부 대표, 발표자, 참석자들\n팀: 전체\n\n## 안건\n\n- 화면 공유 설정\n- 음성 품질 확인\n- 발표 준비\n\n## 논의 내용\n\n### 화상회의 기술 설정\n\n- **화면 공유 설정**: 초기 화면 공유 권한 설정에 시간이 소요됨\n- **참가자 권한 관리**: 모든 참가자에게 공유 권한 부여 필요\n- **음성 품질 이슈**: 마이크와 이어폰 연결 상태로 인한 음성 품질 저하 발생\n- **음성 개선 조치**: 마이크를 입에 가까이 대어 음성 품질 개선 완료\n- **회의 진행 준비**: 발표자가 직접 발표 진행 예정\n\n## 액션 아이템\n\n- [ ] 발표자가 직접 발표 진행\n- [ ] 마이크 위치 조정으로 음성 품질 유지\n\n## 다음 미팅까지 할 일\n\n- 본격적인 발표 시작",
+        "actionItems": [
+          "발표자가 직접 발표 진행",
+          "마이크 위치 조정으로 음성 품질 유지",
+          "마이크 녹음 상태 초기 확인할 것."
+        ],
+        "createdAt": "2026-04-06T14:04:55.631Z"
+      }
+    ]
+  }
+}
