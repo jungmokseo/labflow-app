@@ -20,6 +20,7 @@ import { resetRoutes } from './routes/reset.js';
 import { brainRoutes, archiveOldSessions } from './routes/brain.js';
 import { labProfileRoutes } from './routes/lab-profile.js';
 import { paperAlertRoutes, startPaperAlertCron } from './routes/paper-alerts.js';
+import { startWeeklyBriefingCron } from './services/weekly-briefing.js';
 import { paperRoutes } from './routes/papers.js';
 import { labCaptureRoutes } from './routes/lab-captures.js';
 import { briefingRoutes } from './routes/briefing.js';
@@ -106,8 +107,9 @@ async function start() {
           const app = await buildApp();
           await app.listen({ port: env.PORT, host: env.HOST });
 
-      // 논문 알림 cron + 세션 아카이브
+      // 논문 알림 cron + 세션 아카이브 + 주간 브리핑 (매주 월요일 09:00 KST)
       startPaperAlertCron();
+      startWeeklyBriefingCron();
       setInterval(() => archiveOldSessions().catch((err) => console.error('[background] archiveOldSessions:', err.message || err)), 24 * 60 * 60 * 1000);
 
       // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)

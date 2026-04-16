@@ -1,0 +1,107 @@
+{
+  "articles": [
+    {
+      "title": "AutoPCB — 프로젝트 개요 및 3단계 로드맵",
+      "category": "project",
+      "content": "## 프로젝트 정의\n\nAutoPCB는 자연어 요구사항 또는 논문 입력으로부터 KiCad 프로젝트 → 제조 파일 → 펌웨어까지 자동 생성하는 AI 오케스트레이션 시스템이다. [[BLISS Lab]]의 [[LM Team]]이 주도하며 담당자는 장한빛, 김찬수 등. 최종 목표는 연세대 BLISS Lab의 핵심 기술인 **Stretchable PCB (액체금속 기반)** 자동 설계 확립.\n\n## 3단계 로드맵\n\n- **Phase 1 — Rigid PCB 복제 검증 (현재)**: KiCad 기반, 논문 회로를 그대로 복제하여 파이프라인 검증. 14개 Track 운영 중 (A~N), 각 학생이 2~3개 Track 담당 (장한빛, 김찬수, 김미도, 박시연, 이유림, 정윤민, 함혜인).\n- **Phase 2 — Flexible PCB**: Altium 활용, 기판 유전율/두께/휘어짐 반영 배치 규칙 확장. 바이오전자 분야 10~20개 논문 복제 후 패턴 라이브러리(analog_afe, temperature_control, stimulation, wireless, power, mcu) 축적 목표.\n- **Phase 3 — Stretchable PCB**: Serpentine interconnect 자동 생성, Island-bridge 구조 최적화, LM(액체금속) 배선 패턴. 자연어 → 제조 파일 → 주문 원클릭.\n\n## 8개 에이전트 구조 (오케스트라 비유)\n\nOrchestrator(지휘자) 하에 Spec, Component, Schematic, Simulation, Layout, Firmware, Verification 에이전트가 분업. 각 에이전트는 CLAUDE.md 별도 `.md`로 분리하여 컨텍스트 윈도우 비대화 방지.\n\n## Knowledge Base — 복리 효과\n\n`knowledge_base/` 하위 `reference_papers/`, `component_database/`, `design_patterns/`, `design_rules/`, `past_designs/`. 설계가 쌓일수록 품질 상승(1번째 70점 → 20번째 95점). 졸업한 학생의 노하우가 사라지지 않는 구조.\n\n## 14개 Track 현황 (v3.4, 2026-04-06)\n\n전 Track PASS(스키매틱). A/B/D(장한빛), C(김찬수), E/F(김미도), G/H(박시연), I/J(이유림), K/L(정윤민), M/N(함혜인). 각 Track은 바이오전자 대표 논문 1편씩 복제.",
+      "tags": ["autoPCB", "overview", "roadmap", "BLISS Lab", "stretchable PCB"],
+      "sources": [
+        "327f9f17-6cf4-812a-86d3-c4187a02126b",
+        "328f9f17-6cf4-816f-a4f3-cb703e3ee1bf",
+        "327f9f17-6cf4-8127-84e1-c361cabdee1c",
+        "32bf9f17-6cf4-81e6-a8f6-db0fed928c64"
+      ]
+    },
+    {
+      "title": "AutoPCB v1→v2→v3 아키텍처 진화사",
+      "category": "project",
+      "content": "## v1 — LLM 직접 S-expression 생성 (2026-03-09 ~ 03-23)\n\nLLM이 `.kicad_sch`/`.kicad_pcb` 좌표·wire 직접 작성. 규칙 강화 방식으로 논문 정답지에 무조건 맞추려 함. 문제: wire 누락(REC-003 5회 이상 재발), 핀 좌표 오류, courtyard 부정확, 패드 누락, 소자 겹침 반복. 293개 회귀 테스트로 겨우 방어.\n\n## v2 — JSON DSL + 결정적 변환기 (2026-03-30 ~ 04-01)\n\nLLM은 **\"무엇이 연결되는지\"만** 기술(`circuit_description.json`), 좌표/wire는 결정적 코드로 변환. 파이프라인: LLM → circuit_dsl.py 검증 → topology_checker.py 6단계 그래프 검증(NetworkX) → kicad_sch_generator.py → v1 validator. Track B 예: 연결 핀 88→117 (+33%), 1-pin 넷 0, 핀 번호 정확도 100%. REG-V2-001~008 회귀 테스트 추가.\n\n**v2 PCB Layout Generator (2026-04-01)**: 블록 기반 자동 배치 모듈. 빈 shell(2.3KB) → 완성 PCB(114KB). `.kicad_mod` 파싱 + 기능별 그룹 배치 + GND 양면 zone + via stitching. Track B: 45.5×51mm, 22부품, 0 overlap, KiCad CLI 통과.\n\n## v22-23 — netlist 기반 + 실제 KiCad 라이브러리 (2026-03-29)\n\nLLM 좌표/패드 추정 완전 제거. Schematic → kicad-cli netlist → 실제 라이브러리 footprint → courtyard 기반 배치. 방어 2종: `kicad_cli_verify.py`(Blocking DRC>0 자동 FAIL), `pinmap_cross_verify.py`(GND↔VCC 교차연결 CRITICAL). 37개 IC pinmap 확보, 12/14 Track Blocking DRC 0.\n\n## v3 — 기능 기반 설계 전환 (2026-04-02~)\n\n근본 인식: \"논문의 정확한 핀 번호 복제\"를 성공 기준으로 삼는 한 AI 환각은 구조적으로 못 막는다. 전환: **\"기능을 구현 가능한 핀으로 자유 배정\"**.\n\nAI 역할 축소 — v1(좌표+wire+핀 모두 추측) → v2(핀 번호 추측) → v3(추측 없음, 데이터시트 capability 테이블에서 결정적 할당). 사람 개입 3곳만: 칩 선택 승인, 처음 쓰는 칩 pinmap 대조, 최종 레이아웃 확인.\n\n## v3.1 — SKiDL + AI Symbol + Application Rules (ADR-001, 2026-04-07)\n\nSKiDL(Python 회로 기술)을 IR로 채택. AI는 데이터시트에서 **1회만** `.kicad_sym` 생성, 핀 번호↔이름 매핑 영구 자산화. 핀 번호는 영원히 AI 추론 영역에서 제거. Application Rules JSON으로 토폴로지(디커플링, 풀업)도 자산화.",
+      "tags": ["autoPCB", "architecture", "v1", "v2", "v3", "v3.1", "SKiDL"],
+      "sources": [
+        "336f9f17-6cf4-8103-906d-d79de3c58f87",
+        "334f9f17-6cf4-81f9-b0be-e01cd7b809c8",
+        "333f9f17-6cf4-81c3-ac89-f8e6bedd2935",
+        "33bf9f17-6cf4-811c-820d-c1a1de185e74",
+        "334f9f17-6cf4-8143-a670-d8f16eb99f04"
+      ]
+    },
+    {
+      "title": "AutoPCB v3 멀티에이전트 아키텍처 상세",
+      "category": "project",
+      "content": "## 설계 원칙\n\n- **\"만든 놈이 검증하지 않는다\"**: 작업 에이전트와 검증 에이전트 반드시 분리. v1/v2 최대 문제는 LLM이 만들면서 동시에 \"맞는 것 같다\" 판단한 구조.\n- **CLAUDE.md 비대화 방지**: Orchestrator 역할만 CLAUDE.md에, 각 에이전트 상세 지침은 별도 `agents/*.md`.\n\n## 에이전트 구성\n\n- **Orchestrator** (흐름 제어만) — 상태 머신: IDLE → RESEARCH → RESEARCH_VERIFY → [FAIL≤3 재시도] → GATE_1_WAITING → SCHEMATIC → SCHEMATIC_VERIFY → LAYOUT → GATE_2 → FIRMWARE → FIRMWARE_VERIFY → ACCUMULATE → GATE_3 → COMPLETE.\n- **Research Agent** — LLM이 집중 사용되는 유일 지점. NotebookLM MCP grounding으로 할루시네이션 제거. 출력: `component_spec.json`, `pinmap_v3.json`.\n- **Research Verifier** — 판단 아닌 체크리스트 실행(SQL+Python, LLM 안 씀). pinmap DB 존재, 전압 호환, I2C 주소 충돌, 인터페이스 일치.\n- **Schematic Agent** — `pin_assignment_engine`(결정적 capability 매칭) + v2 adapter + KiCad CLI. LLM 최소 사용. 출력: `.kicad_sch`.\n- **Schematic Verifier** — KiCad CLI DRC=0, 1-pin 넷 0, 전원 핀 완전 연결, 미사용 핀 처리 데이터시트 권장과 일치.\n- **Layout Stage** (반자동) — Flux/Quilter는 API 없음(브라우저). FreeRouting CLI 자동 / Flux·Quilter 수동 업로드.\n- **Firmware Agent / Verifier** — `pin_assignment.json` 기반 HAL·드라이버·앱 로직. 컴파일 통과, GPIO 정의 일치, IRQ 충돌 검사.\n- **Knowledge Accumulator** — 각 스테이지 완료 시 호출. `.kicad_pcb` 파싱 → 디커플링 캡 거리·블록 배치 패턴 → layout_rules 자동 축적.\n\n## Supabase RAG 인프라\n\n테이블: `autopcb_ic_datasheets`(정형 pinmap), `autopcb_datasheet_chunks`(pgvector 500~1000자 청크, text-embedding-3-small), `autopcb_layout_rules`, `autopcb_hal_references`, `autopcb_track_results`. RPC `match_datasheet_chunks`.\n\nResearch Agent 질의 흐름: **정형 SQL 우선** → 벡터 검색 → Claude API(청크만 참조, 없으면 \"정보 없음\"). 할루시네이션 0.\n\n## 게이트 (사람 승인 3곳)\n\nGATE 1 칩 선택 / GATE 2 레이아웃 확인 / GATE 3 실물 테스트. 파일 기반 느슨한 결합: `outputs/{track_id}/` 하위 11종 JSON·KiCad 파일.\n\n## Sprint 계획\n\nSprint 1 인프라(1~2일) → Sprint 2 데이터 입수(pinmap 37개 변환 + PDF 청크 임베딩, 2~3일) → Sprint 3 Research Agent+Verifier(2~3일) → Sprint 4 Schematic Agent+Verifier(2~3일).",
+      "tags": ["autoPCB", "v3", "multi-agent", "architecture", "Supabase", "RAG"],
+      "sources": [
+        "336f9f17-6cf4-815d-beca-d949d06172d2",
+        "337f9f17-6cf4-8157-879a-cc2d109179bf",
+        "337f9f17-6cf4-8135-b012-d93c7991bfdc"
+      ]
+    },
+    {
+      "title": "AutoPCB v3.1 세션 핸드오프 — 검증 체인 C7/C8/C9 + 리팩토링 트랙",
+      "category": "project",
+      "content": "## 최신 상태 (2026-04-15 ~ 04-16)\n\nv3.1 패러다임 + Knowledge Accumulator 4축(심볼·규칙·레이아웃·추출기 프롬프트) 모두 검증 완료 상태.\n\n## 검증 체인 Phase 6 편입 완료\n\n**C7 Voltage Domain Check (2026-04-14, commit ccce707)** — 검증 체인 A/B/C/C5/C6/D에 정적 전압 도메인 교차 검증 누락 해소. SC_6 regression hit (AEM10941 STATUS 4.3V → nRF52832 GPIO vdd_abs_max 3.9V FAIL). Check-A bonus: VSYS 4.2V > nRF 3.9V 2건. F-C7-2 patch로 false alarm 40%→0%.\n\n**C8 Analog Signal Chain Check (2026-04-15, commit 18e3944)** — Track L(PoC #15, INA333+OPA2369, MCU-less AFE) fixture. 3축: Check-G(게인), Check-BW(GBW/G ≥ 신호 대역), Check-VOS(오프셋, 레일 여유). KB `analog_params` 8 IC 전수 등록. regression_c8.py 5 assertions PASS.\n\n**C9 Power Tree DC Check (2026-04-16, commit 08cc072)** — 3단계 SPICE 로드맵 Stage 3. C7+C8 이후 LDO 기반 전원 트리 자동 검증. PoC #6 (NCP177AMX180TCG / NCP177BMX330TCG dual LDO). 3축: Check-Reg, Check-DO, Check-LT. KB `power_params` 2 IC. 8/8 assertions PASS.\n\n## 리팩토링 트랙 R1/R2/R3 (2026-04-16)\n\n- **R1 실행 완료**: SSOT 위반 36건 해소, WORKFLOW.md 848→178줄, auto-memory 201→75줄. doc_ssot_check.py 최종: 30 Finding, 32 .md verified.\n- **R2**: CC 템플릿 + spec 5종 감사. 범주 III 비율 c7_voltage_domain 4.5%, c8 3.7%, c9 2.1%, c6 4.8%.\n- **R3**: pre-commit hook 4종(doc_ssot_check + regression_c7/c8/c9) 자동 실행 537ms 측정. 수치 상한 폐기 → 15% 비율 트리거.\n\n## Q1/Q8 스펙\n\nQ8 Integration Contract (2026-04-14, bdfe73b): 핀/좌표 금지, Datasheet Gate 이중방어, mandatory/app_rules 변조 차단, V-1~V-7 파이프라인. FM-1~FM-8 실패 모드 전수 V-* 매핑.",
+      "tags": ["autoPCB", "v3.1", "verification", "C7", "C8", "C9", "refactoring"],
+      "sources": [
+        "33cf9f17-6cf4-8187-8425-fe49c046fe47"
+      ]
+    },
+    {
+      "title": "AutoPCB 14 Track 실행 결과 및 반복 버그 해결",
+      "category": "experiment",
+      "content": "## 14 Track 구성 (v3.4, 2026-04-06 전 Track PASS)\n\n- **A** Zhang2023 E-Stent (장한빛) 5 IC, 31 wires\n- **B** Huang2025 TED 온도제어 (장한빛) 4 IC, 80 wires\n- **C** EXG Sensor BioAmp (김찬수) 3 IC, 18 wires — TL074+ATTiny85+BoT-nLE522D\n- **D** Lim2025 Tibial Nerve (장한빛) 4 IC, 34 wires — RHS2116+CC1350\n- **E** Chen2025 HMI Wearable (김미도) 4 IC, 23 wires — NRF51822+AD8426\n- **F** Woodman2024 Stretchable Arduino (김미도) 4 IC, 40 wires — ATmega328P\n- **G** Zhou2025 Neonatal (박시연) 6 IC, 36 wires — nRF52832+ADS1291\n- **H** Park2025 Power Harvest (박시연) 4 IC, 36 wires — Dual nRF52832\n- **I** Kim2025 Blepharospasm (이유림) 3 IC, 30 wires — nRF52833+ADS1299\n- **J** Shin2025 Goniometry (이유림) 3 IC, 21 wires — ISP-1807 SiP\n- **K** Lee2025 fMMD Patch (정윤민) 6 IC, 60 wires (최대 규모)\n- **L** Chung2019 Neonatal EES (정윤민) 3 IC, 22 wires (최소 NFC)\n- **M** Kim2024 Athlete Monitor (함혜인) 6 IC, 43 wires — 5-modality\n- **N** Kim2025 Breast Milk (함혜인) 5 IC, 28 wires — MAX30009 BioZ\n\n## 해결한 핵심 기술 이슈\n\n1. **KiCad Y축 반전**: lib_symbol Y+=위, schematic Y+=아래. `world_y = center_y - local_y` 수정으로 핀 번호 정확도 0%→100%.\n2. **커스텀 라이브러리 자동 탐색**: `output/*/kicad/libraries/symbols/*.kicad_sym` 자동 검색, LCSC 스타일 `_0_1` → `_1_1` 우회.\n3. **(extends ...) 상속 감지**: TL074→LM2902 상속이 임베드되면 로드 실패. 자동 감지 → generated 모드.\n4. **중복 핀 이름 확장**: TB6612FNG PGND1→[3,4], PGND2→[9,10], STM32 VDD→[22,27,28] 자동.\n5. **EP(Exposed Pad) 처리**: 비숫자 핀 번호 \"EP\" 정렬 오류 수정.\n6. **KiCad 9 호환성 6종**: `(at X Y 0)` junction rotation 불허 → 11건 수정 (Track N).\n\n## 반복 버그 REC-001~005 (v19~v21)\n\nMCU 소자 롤백, 소자 간 거리 초기화, 와이어링 재발. 근본 원인: 컨텍스트 윈도우 제한, 세션 간 수정사항 손실(14→19세션 유실), 지침 선택적 준수. 해결: v21 gstack 회귀 종식 — 전체 코드 감사(28개 Python) + 회귀 테스트 75개 + CI `.github/workflows/regression.yml`. REC-001~005 전부 테스트로 잠금.\n\n## v1 vs v2 전체 비교 (14 Track)\n\n총 라벨 952 → 1,626 (+71%). label=0 Track: 1(Track I) → 0. label<10 Track: 2 → 0. 토폴로지 검증 6단계 전부 PASS. REC-003 위험 \"있음\" → \"구조적 불가능\".",
+      "tags": ["autoPCB", "tracks", "experiments", "regression", "KiCad"],
+      "sources": [
+        "334f9f17-6cf4-8143-a670-d8f16eb99f04",
+        "334f9f17-6cf4-8178-8ba8-ec53886c01ee",
+        "33af9f17-6cf4-812d-a35b-f091c6d998d0",
+        "32ef9f17-6cf4-819a-8607-f8d066ba4e6c",
+        "32bf9f17-6cf4-8146-944c-e2eb6e859331"
+      ]
+    },
+    {
+      "title": "AutoPCB 학습 노트 모음 — MCU 아키텍처·RF·라이브러리·인프라",
+      "category": "general",
+      "content": "## 전문 IC vs 범용 IC (v11, 2026-03-19)\n\nTrack A/B/C 범용(ATTiny45, STM32, MAX6675)은 LCSC 주문 가능, 심볼 내장, SPICE 모델 존재. Track D **RHS2116**(Intan, 자극+기록 동시)은 세 가지 모두 불가: $75(BOM 76%), KiCad 커스텀 생성 필수, behavioral 모델로 대체. 아날로그-디지털 노이즈 분리 까다로움.\n\n## RF PCB — Ground Plane이 보드 크기 결정\n\nTrack E 부품 면적 합 24.5×19mm → 실제 45×35mm. 이유: NRF51822 RF 매칭 ground clearance, chip antenna keepout zone (~10mm²), via fence 분리 공간, SWD·배터리 커넥터 여유.\n\n## MCU별 펌웨어 아키텍처 (v11.1)\n\n- **CC1350** (Track D): Cortex-M3 48MHz, TI-RTOS, 듀얼 CPU, SPI 12MHz, Sub-GHz+BLE 듀얼밴드 → RTOS 태스크.\n- **NRF51822** (Track E): Cortex-M0 16MHz, nRF SDK 이벤트 기반, PPI 하드웨어 체인 저전력 → CPU 없이 센서 읽기.\n- **ATmega328P** (Track F): AVR 8-bit 16MHz, Arduino 폴링, Sleep+watchdog → loop().\n\n## BLE SoC/SiP 비교 (v16)\n\n- **nRF52832** (Track G, H): Cortex-M4F 64MHz, 512KB/64KB, BLE 5.0, GPIO 32, QFN-48.\n- **nRF52833** (Track I): RAM 128KB(2배), BLE 5.1, GPIO 42(+10). 8채널 ADS1299 버퍼링에 선택.\n- **ISP-1807 SiP** (Track J): nRF52832 + 32MHz crystal + DC-DC + 안테나 단일 모듈. 대량 생산·RF 자신 없을 때.\n\n## 라이브러리 관리 (v13)\n\n3요소: `.kicad_sym`(이력서), `.kicad_mod`(발자국), `.step`(사진). 우선순위: KiCad 내장 → LCSC(JLC2KiCadLib) → SnapEDA/Ultra Librarian → 커스텀. JLC2KiCadLib 동작: LCSC 부품번호(C12594) → EasyEDA API → KiCad 변환. BOM 파서 `components` 키만 인식 버그, `lcsc_part` vs `lcsc_pn` 필드명 버그 수정.\n\n## 인프라 — Track Registry + Gate System (v12)\n\n`track_registry.json` 중앙 관리(source of truth). 각 Track에 `paper_id`, `pipeline_status`, `completed_stages`, `assigned_to`. BOM 스프레드시트와 유사. Gate 시스템: AI 8단계 자동 달리기 전 사람 검증 관문. 자동차 공장 품질 검사 비유.\n\n## 칩 디스커버리 — PPL-first + API Fallback (2026-04-09~12)\n\n의료/웨어러블 칩 선택지 좁음(ECG AFE ~5, BLE SoC ~7). 100개 칩 PPL DB(`ppl.json` v1.1) 큐레이션 + Digi-Key v4 OAuth2 / Mouser v2 API Fallback. `chip_selector/`: models.py, classifier.py(21 카테고리), selector.py 완료.\n\n## Claude Code CLI 가이드\n\n24시간 자율 운용용 프롬프트 패턴·설치·세션 관리 정리.",
+      "tags": ["autoPCB", "learning", "MCU", "RF", "library", "infrastructure", "chip discovery"],
+      "sources": [
+        "327f9f17-6cf4-8114-8812-db63e51d4e8a",
+        "327f9f17-6cf4-8114-97a3-f959100597ce",
+        "327f9f17-6cf4-81cd-b5dd-c08ea7ee39a6",
+        "327f9f17-6cf4-814a-b1f1-dedf042dd18f",
+        "327f9f17-6cf4-81fb-a7ec-f67fc717d8a4",
+        "327f9f17-6cf4-811d-89ce-c7ad7efb707c",
+        "327f9f17-6cf4-816e-9849-ee423510fdaf",
+        "32bf9f17-6cf4-8146-944c-e2eb6e859331",
+        "32bf9f17-6cf4-8185-99ee-edd4ff8df254",
+        "328f9f17-6cf4-8111-acbc-c1a0de55e143",
+        "328f9f17-6cf4-816f-a1ae-dc153b9dafe0",
+        "32df9f17-6cf4-8134-8a18-d133e623d9ed",
+        "33ef9f17-6cf4-815e-b9cb-c94c9bfad69b",
+        "329f9f17-6cf4-81d4-b8c0-d88ecbb85c18",
+        "328f9f17-6cf4-816f-9a37-fe97666d52f1"
+      ]
+    },
+    {
+      "title": "AutoPCB 사업화 — Flux.ai 분석과 글로벌 투 트랙 전략",
+      "category": "project",
+      "content": "## Flux.ai 경쟁사 분석\n\n2019 설립 샌프란시스코. 총 $49M 투자(Seed $12M + Series A $10M + Series B $27M, 2026.02). 사용자 1.1M명, 프로젝트 6.4M개. 가격: Starter $20/월, Pro $142/월(학생/교육자 대학 이메일로 Pro 영구 무료). 브라우저 기반 올인원 EDA + AI Copilot(자체 학습 LLM), Generalist/Librarian 전문 모델, RL 기반 Auto-Layout.\n\n**강점**: $49M+6년 개발, 100만 사용자 네트워크 효과, 2~4층 업계 최고 AI Auto-Layout, 학생 무료→졸업 후 유료 전환, Fortune 500 사용.\n\n**약점 (AutoPCB 관점)**:\n- **KiCad 역출력 불가(락인)**: KiCad→Flux 가능, Flux→KiCad 불가. 구독 종료 시 Gerber만. [[BLISS Lab]] KiCad 10+ 프로젝트 보유 환경에 큰 리스크.\n- **복잡한 프로젝트 AI 한계**: Trustpilot — 180부품·18 IC 45분/7 ACU 후 배치 0개. 원자적 단계 요구.\n- **fPCB/Stretchable 미지원**.\n- **펌웨어 한계**: 채팅 조언 수준, 컴파일 가능한 전체 프로젝트 생성 불가.\n\n## AutoPCB 포지셔닝\n\nFlux와 정면 경쟁 X. 차별점: **\"KiCad 생태계 안에서의 AI 오케스트레이션\"**. KiCad 파일 직접 출력(락인 없음), 기존 프로젝트 호환, fPCB/stretchable 지원, 완전한 펌웨어 파일.\n\n## ResearchFlow × AutoPCB 글로벌 병행 사업\n\nAI 기반 두 개의 글로벌 SaaS 사업:\n- **A. ResearchFlow** — AI Research Lab OS (교수/연구자/학과) — [[LabFlow]]와 연관.\n- **B. AutoPCB** — AI PCB 설계→제조→앱 (HW 스타트업/연구실) — Phase 1 MVP 진행 중.\n\n공통 인프라: GitHub Org, Next.js+shadcn+Clerk, Fastify+Prisma+BullMQ, Supabase, Gemini 2.5 Flash, Vercel/Railway.\n\n## 서울형 TIPS sPCB 과제 (2026-04-06, 외부미팅)\n\n참석: 서정목, 웰라인시스템 안영기 이사, 뉴트리 김희철 부대표, 이연택. 연세대 산학협력단 액체금속 기반 sPCB 원천기술 이전 → 웨어러블 양산 공정 + LED 뷰티 패치 + Peltier 헬스케어.\n\n**기술 목표**: 1차년도 액체금속 잉크 1.5 MS/m, 공정 재현성 90%, 30% 스트레칭 1만회 테스트. 2차년도 LED 피부재생(광출력 편차 ±5%, 균일도 90%) + Peltier+ECG/EMG+±10°C(SNR 20dB).\n\n**시장**: 홈 뷰티 디바이스 2030년 135조(연 26% 성장), LED 광치료 20조, 글로벌 웨어러블 115조.\n\n**투트랙 사업화**: B2B(화장품·의료기기 ODM/OEM), B2C(뉴트리 유통망 LED 패치·Peltier).\n\n**1차년도 예산**: 1.35억(정부 1억 74%), 인건비 9,900만(73%), 연세대 기술이전비 3,000만. 피드백: 웰라인 100억대 매출·10+ 업체 실장 협력 강조 필수.",
+      "tags": ["autoPCB", "business", "Flux.ai", "TIPS", "stretchable PCB", "웰라인시스템", "뉴트리"],
+      "sources": [
+        "336f9f17-6cf4-81d0-acc2-c79b7539c660",
+        "32bf9f17-6cf4-8169-bf3b-e53b1ea51d2f",
+        "33af9f17-6cf4-80b0-b85b-d438515457bc"
+      ]
+    },
+    {
+      "title": "AutoPCB 팀 미팅 기록 — 3/25, 4/1 [[LM Team]]",
+      "category": "meeting_thread",
+      "content": "## 3/25 AutoPCB 전체 미팅 (2026-03-25 21:00)\n\n**참석**: 장한빛, 박시연, 육근영, 이유림, 김찬수, 정윤민, 김미도 ([[LM Team]], [[Packaging Team]]).\n\n**프로젝트 비전 공유**:\n- 최종 목표: **Stretchable PCB 제작 기술 확립**\n- Phase 1(현재) Rigid PCB — KiCad 논문 복제\n- Phase 2 Flexible PCB — Altium\n- Phase 3 Stretchable PCB — 축적 지식 기반\n- \"노하우를 지식화하고 AI로 재현 가능하게\"\n\n**멀티 에이전트 시스템**: Claude Code 기반. 프로젝트 리더급 AI + 단계별 전문 AI(논문 분석, 스펙 추출, 컴포넌트 선정, BOM). 14개 Track 운영(1인당 2~3개), 3/9 시작 후 20개 버전까지.\n\n**반복 버그 3대 원인**:\n1. 컨텍스트 윈도우 제한(100만 토큰도 복잡 프로젝트에서 빠르게 소진)\n2. 세션 간 수정사항 손실(14세션 수정 → 19세션 유실)\n3. 지침 선택적 준수\n\n**해결**: 영구 레지스트리(세션 간 수정사항 전달), 매 세션 필수 규칙 확인 절차, 데이터시트 직접 제공(PDF 확보).\n\n**피드백 관리 전략**: 즉시 반영(핀 오류, 단종, 불필요 헤더, 패드 누락, 소자 겹침) / 보류(패드 형상, 실크스크린, 방수) / 논의(논문 복제 vs 단계 접근 → 논문 그대로 결정). 한 번에 여러 개 대신 하나씩 수정→확인→다음.\n\n**오픈소스 Track vs 논문 Track**: 전자(스키매틱·핀맵 업로드)는 개선 경향, 후자(논문만)는 빠진 정보로 개선 더딤 → 추가 입력 정보 보완 필요.\n\n## 4/1 AutoPCB 알고리즘 개발 (2026-04-01 22:30)\n\n**참석**: 장한빛 ([[LM Team]], [[Packaging Team]]).\n\n**알고리즘 버전 분석**:\n- V1 규칙 강화: 논문 정답지에 무조건 맞춤 → 규칙 복잡도↑ 오류↑\n- V2 LLM 레이어: I/O 자유도 → 좌표 틀어짐 → 플로팅 처리 개선\n- V3 제안: **칩+기능만 주고 AI 자유롭게 I/O 연결**, 미사용 핀 플로팅\n\n**핀 연결 오류 근본**: 같은 기능 핀 중 다른 번호 사용, 플로팅 핀에 AI 연결 시도(hallucination), AI가 논문 그림을 완벽히 읽지 못함.\n\n**중간 산출물 — 핀 맵핑 테이블**: 데이터시트 핀1~N + 논문 맵핑 테이블 → 사람이 중간 확인.\n\n**부품 배치 룰북 3~4개**:\n1. MCU 가운데(방사형 최적화)\n2. 커넥터 바깥쪽\n3. 비슷한 기능 근처 배치\n\n**GUI 개선**: KiCad 대신 웹 기반 GUI 검토. MCU·기능 선택 시 데이터시트 자동 연결.\n\n**Ground Pour + 장기 아이디어**: Flexible PCB는 그리드만 가능 → 안정성 저하. **Stretchable PCB + 리퀴드 메탈 조합 시 오히려 안정성 확보 가능성 (2년 후 연구 아이디어)**. 온디바이스 AI용 고성능 스트레처블 PCB 장기 과제.\n\n**액션 아이템**: 핀 맵핑 테이블 프롬프트 작성·잔디 공유, 중간 산출물 리스트 정리, Track B 외 추가 Track 데이터 확인, 부품 배치 룰북 작성.",
+      "tags": ["autoPCB", "meeting", "LM Team", "Packaging Team", "v3"],
+      "sources": [
+        "32ff9f17-6cf4-80a0-9e56-e3f1063f6378",
+        "336f9f17-6cf4-81e5-8778-c44ba71b8c6f",
+        "327f9f17-6cf4-81b6-8efe-f75c1b23e3e6"
+      ]
+    }
+  ]
+}

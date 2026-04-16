@@ -1,0 +1,158 @@
+{
+  "articles": [
+    {
+      "title": "김수아 (Soo A Kim)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]]\n**역할**: 박사과정, 하이드로겔 기반 센서/약물전달 및 후배 지도\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Iontophoretic Drug Delivery]] (w/ 윤민): GelMA type A/B zeta potential, microgel size distribution(5/7.5/10wt%), 전극 디자인 서치, drug library\n- [[Anti-drying Hydrogel]] / [[인조피부 하이드로겔]] (w/ 민경): Contact angle 측정, XPS/XRD 분석, NIH 3T3 viability test Day1/4/7 완료, anti-freezing test\n- [[Bentonite Ionic Hydrogel]] (w/ 예진, Beibei): Oxidized dextran 산화도·농도 최적화, LiCl 농도별 기계특성, Purpald 색 변화, FT-IR\n- [[Robot Arm Review]]: Schematic/스토리라인 정리\n- [[MXene Hydrogel]] (w/ 가영): 주제·방향성 논의, chemical 분석\n- [[Burns & Trauma Review]] (w/ 가영): Materials Today Bio 포맷팅 → 재제출\n- [[Wound Healing Microgel Bioink]]: Shin lab(신수련 교수님) Play-dough hydrogel Revision rebuttal·cell 실험\n\n## 특이사항\n- 후배들(윤민, 민경, 예진, 가영, 지민) 멘토링 및 워크시트 피드백을 병행.\n- Shin lab 연수 중. Wireless system(전력전달 효율·ADC) 개선, schematic drawing 병행.\n- 뉴트리 K-HERO 과제, TIPS 창상 치유 시험결과서 작성 지원.\n\n## 관련\n[[하이드로겔팀]] · [[Iontophoretic Drug Delivery]] · [[Anti-drying Hydrogel]] · [[Bentonite Ionic Hydrogel]] · [[MXene Hydrogel]] · [[Wound Healing Microgel Bioink]]",
+      "tags": ["researcher", "하이드로겔팀", "hydrogel", "drug-delivery"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "김태영 박사 (Tae Young Kim)",
+      "category": "person",
+      "content": "**소속 팀**: [[BLISS Lab]] (박사후연구원급, 논문 주도)\n**역할**: 다수의 고영향력 논문 주도 및 임용 준비 중\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Hemostatic Hydrogel]]: 2026.03 **Nat. Commun. Accepted**. Author checklist·사사 재정리, Borax+SA-DOPA 시스템.\n- [[Exosome Carrier]]: **Sci. Adv. To Review**. IBD 동물모델(w/ Beibei), Figure 1/3 schematic(w/ 유림, 찬수), 마우스 조직학.\n- [[LM Spray]] (pmLMP): 2026.04 **NPJ Flexible Electronics 제출 완료** (Editorial assignment). 이전 Nat. Commun. Manuscript under consideration 단계 경유.\n- [[LM Paste]]: Rheology 측정·데이터 분석, 근영 미팅, 조승우 교수님 연구실(한승엽 학생) 협력.\n- [[PDRN]]: MD simulation(w/ 찬수), Figure 1 및 전체 Figure 정리, Application 후보(수처실 확정, Implantable EMG), 생체적합성.\n- [[REDV-Stent]]: Outline 정리, Huvec 및 media 분양, PCR용 SMC 세포 구매.\n- [[Bile Duct Stent]]: Nature BME→AM→Bioactive Materials 투고, 담도 상피세포 실험, 스텐트 SEM-EDS, Rebuttal 제출.\n- [[LM DOPA]]: 미팅 및 진행사항 공유.\n\n## 특이사항\n- 임용 관련 서류 준비/제출 진행.\n- 미래도전 과제 공동작성 (w/ 민성진 교수님, 백세움 박사님).\n- Microfluidic chip 전달·시연.\n\n## 관련\n[[Hemostatic Hydrogel]] · [[LM Spray]] · [[LM Paste]] · [[PDRN]] · [[Exosome Carrier]] · [[REDV-Stent]] · [[Bile Duct Stent]]",
+      "tags": ["researcher", "postdoc", "hydrogel", "liquid-metal", "publication-lead"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "강민경 (Min-Kyung Kang)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]] / [[전자소자팀]]\n**역할**: 하이드로겔 센서 회로·시스템 통합\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Anti-drying Hydrogel]] / [[인조피부 PPG]] (w/ 수아, 미도): Adhesion force 측정(기판별), Raman/XPS/UV-vis/Rheometer, Biocompatibility Day7, 손가락 5개 strain sensor, PPG+Temperature sensor. PVA/PEDOT:PSS 하이드로겔 strain sensor 제작 및 GF 측정.\n- [[Breathable Electronics]]: Figure 1 구상·드로잉, application 실험, mesh 위 LM Paste 해상도 확인(SEM), 통기성 사진(훈연 연기), 메쉬 인장시험.\n- [[Encapsulation Hydrogel]]: Figure 1 구상, adhesion force 정리.\n- KIST 과제 보고서 대응, 특허 양도증 서명 취합, 리뷰 논문(Droplet) 제출.\n\n## 특이사항\n- 스크린 프린팅·블루투스·ATmega328 MCU 연동에 강점.\n- 통기성 증명 사진 촬영 등 실험 연출 단계 병목 해결 중.\n- 공동기기원 AFM/Dektak/Raman 교육 수료.\n- 나노소재과제 1세부 연구내용 요약본 작성/제출.\n\n## 관련\n[[하이드로겔팀]] · [[Anti-drying Hydrogel]] · [[Breathable Electronics]] · [[인조피부 PPG]]",
+      "tags": ["researcher", "하이드로겔팀", "flexible-electronics", "PPG-sensor"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "조예진 (Yejin Jo)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]] / [[패키징팀]] (다중 협업)\n**역할**: 다수 병행 프로젝트 매니지먼트\n\n## 연구 히스토리 / 담당 프로젝트\n- [[ACF]] (Anisotropic Conductive Film, w/ 유림): 성균관대 미팅, Figure 1-4/캡션, 50/50 SHP stretching, 칩 본더 샘플 제작.\n- [[스텐트]]: **ACS Nano 논문 제출 완료** (2026.02). 리비전 대응, 구교철 교수님 공유.\n- [[Encapsulation]]: 인트로/Fig 1-2, 커버레터·파일 양식, 김현재 교수님 피드백.\n- [[Clean View]]: 임상 20건 정리, AI/VS code 기반 데이터 정리(w/ 김세근 박사님), 보라매 IRB.\n- [[췌장 디바이스]]: membrane 실험, 데이터 정리.\n- [[Robot Arm]] / [[Robot Arm Review]] (Shin lab): Core-shell microgel, CaCl2 UV 가교, degradation/bulk gel, 폴리머 합성, Figure 일러스트, 스토리라인.\n- [[Ionic Hydrogel]]: odex 합성, in vitro cell viability, gel 위 cell seeding, 전기자극 실험 방안.\n- [[난소암 치료제]]: Cisplatin release, SEM, 파티클 코팅(신수련 교수님 미팅).\n\n## 특이사항\n- 실험 장비 파손·재료 지연 등 외부 병목 시 시뮬레이션/데이터 정리/리뷰 논문으로 유연 전환.\n- Shin lab biweekly 발표 진행.\n\n## 관련\n[[ACF]] · [[스텐트]] · [[Encapsulation]] · [[Clean View]] · [[Robot Arm]] · [[Ionic Hydrogel]] · [[패키징팀]]",
+      "tags": ["researcher", "하이드로겔팀", "multi-project", "clinical"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "이유림 (Yurim Lee)",
+      "category": "person",
+      "content": "**소속 팀**: [[패키징팀]] / [[전자소자팀]]\n**역할**: Soft electronics packaging·encapsulation 주도, 다수 후배 지도\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Soft Interconnect]] (w/ 예진): Figure 1/intro 수정, in vivo sample 통전 테스트 및 부착(김예원 연구원 전달), 플립칩 본더 케이블 커넥션.\n- [[Soft Electronics Packaging Review]]: **논문 제출 완료** (연택 박사 피드백 반영, Fig 1-8).\n- [[Wearable TED]] / [[TED Review]] (w/ 혜인): Nano Energy 포맷팅·제출, 하이드로겔 냉각/회복 실험, serpentine 구조, 구리 레이저 커팅(성균관대 교육), PAAS/GelMA 인성 최적화.\n- [[Photo-adhesive]] (w/ 혜인): LM 농도별 패터닝 해상도, 컨택 저항 측정, GelMA 추가 제작, 큐어링 파워/시간별 통전 확률.\n- [[LM Encapsulation]] (w/ 한빛): WVTR/OTR(경희대), SEM LM penetration, thin film transfer, 새 장비(0.0005 해상도).\n- [[NCF]] (w/ 한빛): Cu pillar 전기도금, 레이저 커터 대체 검토.\n- [[AutoPCB]]: 기본 셋업 및 담당 Track 확인, microLED align.\n\n## 특이사항\n- 플립칩 본더 외부 사용자 장비 운용 지원.\n- 인프라 과제 최종보고서 제출 완료.\n\n## 관련\n[[패키징팀]] · [[Soft Interconnect]] · [[Wearable TED]] · [[Photo-adhesive]] · [[LM Encapsulation]] · [[AutoPCB]]",
+      "tags": ["researcher", "패키징팀", "packaging", "encapsulation", "flip-chip"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "박시연 (Si-Yeon Park)",
+      "category": "person",
+      "content": "**소속 팀**: [[전자소자팀]]\n**역할**: Stretchable/Synaptic transistor 소자 개발, 공동연구 인터페이스\n\n## 연구 히스토리 / 담당 프로젝트\n- [[PEDOT:PSS Transistor]] (Stretchable/Synaptic): PVA 하이드로겔 게이트 절연체 최적화, 3x3·5x5 어레이, 4x4 array 데이터, Synaptic plasticity/MNIST simulation(testing accuracy), SEBS substrate(OHP film) 공정, SEM-EDS.\n- [[강주훈 교수님 공동연구]] (2D materials & soft electronics): High-k dielectric 스터디, SEBS 위 MoS2/Au 전극 photolithography, Ag nanowire embedding 논문 서치, CNT stretchable electrode, Ferroelectric dielectric.\n- [[AutoPCB]] Track G, H, 뉴트리 과제 절연저항측정 의뢰, 이온토포레틱 중간보고서.\n- 리뷰 지원: [[Wearable TED Review]] (TE leg), [[Soft Packaging Review]] (트랜지스터 파트).\n\n## 특이사항\n- UV 램프 고장 시 대체 광원 테스트 등 인프라 이슈를 적극 대응.\n- AFM, Raman spectroscopy 교육 수료. 동물실험 교육 이수.\n- CEED mask aligner 최적화 예정(w/ 유림, 혜인).\n\n## 관련\n[[전자소자팀]] · [[PEDOT:PSS Transistor]] · [[강주훈 교수님 공동연구]] · [[AutoPCB]]",
+      "tags": ["researcher", "전자소자팀", "transistor", "2D-materials", "synaptic"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "육근영 (Keun-Young Yook)",
+      "category": "person",
+      "content": "**소속 팀**: [[LM팀]] (Liquid Metal)\n**역할**: LM Paste/Spray 하드웨어·시스템 통합 주도, BK21 행정 지원, DS2019 해외파견 합격\n\n## 연구 히스토리 / 담당 프로젝트\n- [[LM Spray]] (pmLMP): **NPJ Flexible Electronics 제출 완료** (2026.04). 스프레이 조건/TEM/SEM, 수산화 갈륨 검증, 논문 초안(Fig 2-6) 완성, IRB 서류.\n- [[LM Paste]]: In-situ XRD(상온~800도) 비결정형 데이터, Powder XRD 비교, TEM SAED, Rheology 측정, high-res 프린팅, micro LED array(w/ 유림), cryo FIB SEM 대안→3D CT 검토, 기판별 adhesion.\n- [[Ingestible Intestine Sensor]]: Manuscript 스터디·이유한 교수님 전달, 4-layer 초소형 PCB 설계.\n- [[뇌선도/BRL 신경자극기]]: LM paste 배선·전극 임피던스, 카이스트(김철 교수님 연구실) 스펙 전극, 4/6 삼성서울병원 동물실험(w/ 찬수).\n- [[PDA-LM]]: 찬수 미팅, 메커니즘 증명 실험.\n- [[EMI]] (w/ 미도): 민병욱 교수님 연구실 장비 교육.\n- [[LM Paste for HBM]]: Wafer SEM 단면, 진동실험 wafer 설계/주문.\n- [[뉴트리]] LED 마스크: FPCB 아일랜드 구조, 전체 LM 신축 마스크(w/ 윤민, 찬수).\n\n## 특이사항\n- 해외파견(DS2019) 합격 확정, 조재현 교수님 미팅.\n- 웰라인 기술이전 발표자료(4/8 발표평가, w/ 찬수).\n- BK21·서울시 과제 행정 주도. Nature Communications 리뷰 코멘트(w/ 미도).\n- 후배(승완, 미도) 실험 계획 지원, 미도 논문 리뷰 지원.\n\n## 관련\n[[LM팀]] · [[LM Spray]] · [[LM Paste]] · [[뇌선도/BRL 신경자극기]] · [[Ingestible Intestine Sensor]] · [[뉴트리]]",
+      "tags": ["researcher", "LM팀", "liquid-metal", "hardware", "overseas-visit"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "함혜의 (Hye-In Ham)",
+      "category": "person",
+      "content": "**소속 팀**: [[패키징팀]] / 에너지소자\n**역할**: Thermoelectric device·photo-patternable adhesive 개발\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Wearable TED Review]] (w/ 유림): **논문 수정 및 제출 완료** (2026.04.12). Nano Energy 포맷팅, 공저자 피드백 반영.\n- [[Wearable TED]] (w/ 유림): RTD temp sensor/TED 구매, LiCl 농도별 온도 변화, Cu laser cutter 교육(성균관대), 기판 CAD, 하이드로겔 최적화, 새 PCB 어레이 제작(패드-배선 저항 ~10옴 이슈).\n- [[Photo-adhesive]] (w/ 유림): GelMA-H/Cellulose-ma 용액, LM 1~5%(v/v) patterning resolution, contact 저항(큐어링 파워·시간), DLS/SEM 입자 분산, siemens star mask, Omnicure S-2000 고장 시 LED 손전등 대체 패터닝.\n- [[AutoPCB]] Track M, N, Kicad 기본.\n- 가영 학생 논문 리비전 보조, 학과 홍보 자료.\n\n## 특이사항\n- 장비 결함/두께 불균일 등 실무 병목에 대체안 적극 도출.\n- 플립칩 본더 외부 사용자(오럼머티리얼) 장비 운용 지원(4시간/회, 누적 17시간).\n- EDS, DLS/Zeta 교육 수강. 플립칩 본더 교육 이수 및 SEM 시험 통과.\n\n## 관련\n[[패키징팀]] · [[Wearable TED]] · [[Photo-adhesive]] · [[AutoPCB]]",
+      "tags": ["researcher", "패키징팀", "thermoelectric", "adhesive"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "정윤민 (Yun-Min Jung)",
+      "category": "person",
+      "content": "**소속 팀**: [[LM팀]] / [[전자소자팀]]\n**역할**: 무선전력전송(WPT) 및 시스템 설계\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Iontophoretic Drug Delivery System]] (w/ 수아): WPT micro gel particle size, zeta potential, Rx ADC converting 회로, Tx PCB 내부 printing, Cell 논문 스터디, electrode 구조별 효율, microgel size/charge, GelMA 제작법 학습.\n- [[Wireless Power Transfer]]: Rigid Tx → Soft Rx 무선전력전송 성공, 공진주파수 맞추기(soft Rx 샘플 제작), rigid Tx를 PCB 형태로 전환(PCB 내부 antenna printing), AC/DC converter 빵판 구현 완료, VNA Rx 공진 확인, MATLAB 시뮬레이션, 자기 공명 결합(Magnetic Resonant Coupling), 센터 탭 코일.\n- [[TFT/DLOE Encapsulation]]: Sputter/Parylene C 코터 인수인계(장호 선배), WVTR 샘플 경희대 의뢰, Bare/SLPL/DLOE 비교.\n- [[Neuromodulation Chip]]: ENS001 개발보드, 카이스트 미팅, Rigid → FPCB 계획.\n- [[AutoPCB]] Track K, L. [[뉴트리]] LED 샘플(Attiny85+LED, w/ 근영).\n- 종합설계 아두이노/EXG pill 프로젝트(w/ 지민, 승완, 현지).\n\n## 특이사항\n- 클린룸 기반 반도체 공정(Sputter, Scribing) 역량 병행.\n- 외부 측정 기관(경희대)과 협업.\n\n## 관련\n[[LM팀]] · [[Iontophoretic Drug Delivery System]] · [[Wireless Power Transfer]] · [[TFT/DLOE Encapsulation]] · [[AutoPCB]]",
+      "tags": ["researcher", "LM팀", "wireless-power", "circuit-design"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "박지민 (Jimin Park)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]] (신규 인턴, 2026 합류)\n**역할**: 하이드로겔/전극 소재 인턴, 가영 지도 하 수행\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Zwitterion Hydrogel]] / [[GPSB Hydrogel]] / [[생분해 하이드로겔]]: 프로토콜·UV 최적화, tensile test(220%+ stretch/twist), PBS degradation, 산화 문제 해결, 동결건조, adhesion 향상.\n- [[MXene Hydrogel]] (w/ 가영): 리뷰 논문 스터디·랩 미팅 발표, FT-IR/XPS/XRD 정리, STAT hydrogel kneading, MXene@RhoB 약물방출, 성분 분석.\n- [[식물 생리학적 전극]] (w/ 가영): Conformable hydrogel 기반 논문 스터디, 전극 모델 구상, CNT/그래핀/LM 후보물질 서치, Bio glue 최적화, methyl cellulose 시약 구매.\n- [[EXG 전전종설]]: PVA/PEDOT:PSS/MC electrode 프로토콜, 3M 전극 대체 PEDOT:PSS 하이드로겔, EG/DBSA 생체적합성, 중간보고서 하이드로겔 부분. 아두이노 스터디(w/ 윤민, 승완, 현지).\n- 선배 지원: 가영 Hemostatic hydrogel Adv. Sci. 리비전 스터디·발표, Beibei/시연/가영 PDMS 미팅.\n\n## 특이사항\n- 2026 초 합류한 신규 인턴으로 빠른 적응.\n- PDMS UV 프로토콜 재구성(w/ 가영).\n\n## 관련\n[[하이드로겔팀]] · [[Zwitterion Hydrogel]] · [[MXene Hydrogel]] · [[식물 생리학적 전극]] · [[EXG 전전종설]]",
+      "tags": ["researcher", "intern", "하이드로겔팀", "hydrogel"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "홍승완 (Seung-Wan Hong)",
+      "category": "person",
+      "content": "**소속 팀**: [[LM팀]] (학부 연구생, Senior Thesis)\n**역할**: Stretchable LED array & LM TIM, 학부 종합설계 연계\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Stretchable LED Array]]: 4x4 LED array 마무리, LM patterning 연습(w/ 현지), LED mask 제작(w/ 찬수, 현지), Microbump 솔더링으로 다층 쇼트 방지, Chip bonding 신장 안정성 확보.\n- [[LM TIM]] (Thermal Interface Material): CPU 히트싱크 실험(기본/thermal grease/LM paste 순차 측정), LM paste 침투 SEM, 소니케이션 시간별 점도 TIM 샘플, 한국기술교육대 Thermal Conductivity 측정, Soft Robotics 열관리·SMA 액추에이터 논문 스터디.\n- [[Delamination]]: 웨이퍼 200-500um gap SEM(w/ 근영), SU-8 몰드 패턴, CAD 전송.\n- [[EXG 전전종설]] (w/ 지민, 윤민, 현지): LM 무선통신 stretchable sensor 주제선정, 브레드보드·아두이노 활용 센서 시스템, EXG sensor 전극부 실험 보조.\n\n## 특이사항\n- 학부 Senior Thesis(LM TIM) 심화 진행.\n- 대학원 원서접수 마무리. 뉴트리 LED 마스크 시제품 테스트 지원.\n\n## 관련\n[[LM팀]] · [[Stretchable LED Array]] · [[LM TIM]] · [[EXG 전전종설]]",
+      "tags": ["researcher", "undergraduate", "LM팀", "thermal-management"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "김찬수 (Chan-Su Kim)",
+      "category": "person",
+      "content": "**소속 팀**: [[LM팀]] / [[전자소자팀]]\n**역할**: 신소재 최적화(PDA-LM)·회로 설계·MD/DFT 시뮬레이션\n\n## 연구 히스토리 / 담당 프로젝트\n- [[PDA-LM]] (Polydopamine-modified Liquid Metal): TEM 측정·분석, 산성/염기성 환경 산화막 두께 메커니즘, AR-XPS·ICP-MS, Ga-O/Ga-OH 비율, FT-IR, 논문 outline/스토리라인.\n- [[PDRN]]: MD simulation 스터디·조건 최적화(w/ 태영), Figure 1 구상/스키매틱, Application 후보(implantable EMG, w/ 미도), 수처실 확정.\n- [[AutoPCB]] Track C 진행, Claude AI 스터디.\n- [[뇌선도 동물실험]]: 4/6 삼성서울병원(w/ 근영).\n- [[Neurostimulator]]: 뉴로칩 개발보드 코드 디버깅, 기존 자극 모듈과 자체 설계 모듈 파형 비교, Bluetooth 일체형 PCB.\n- [[수전사 프린팅 E-Tattoo]]: PVA sacrificial layer, LM Spray 입자 SEM, 수전사 LED 동작 실험(패턴 붕괴 해결 중).\n- [[뉴트리]]: 인증 측정 샘플 의뢰, LM paste conductivity(w/ 현지).\n- [[EXG Sensor]] 회로 재설계(w/ 현지) — FPCB ver. 설계 예정.\n\n## 특이사항\n- 웰라인 기술이전 발표자료(w/ 윤민, 근영).\n- 태영 선배 XPS 분석 지원. 종설 미팅 진행.\n\n## 관련\n[[LM팀]] · [[PDA-LM]] · [[PDRN]] · [[Neurostimulator]] · [[AutoPCB]] · [[뇌선도/BRL 신경자극기]]",
+      "tags": ["researcher", "LM팀", "PCB-design", "simulation", "materials"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "손가영 (Ga-Young Son)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]]\n**역할**: 지혈 하이드로겔·내시경 코팅·다수 공동연구 매니지먼트\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Hemostatic Hydrogel]]: **Nat. Commun. Accepted**(2026.03), 2차 프루프 제출 완료(4/5), 특허 미팅. Adv. Mater.·PVA/TA, Borax/SA-DOPA 시스템.\n- [[내시경 코팅제]] - 캡: **In peer review** (3/2 제출), Review due 4/21 리뷰탈 작성.\n- [[내시경 코팅제]] - 스왑 (w/ 예진): 임상 22번 완료, AI 도입·VS code 정리(w/ 김세근 박사님), 보라매 병원, 김서림/일렁거림 문제.\n- [[MXene Hydrogel]] (w/ 수아): drug releasing/전기자극, MXene-Mn·NIR·임피던스 모니터링 어플, 인트로 구상.\n- [[식물 생리학적 전극]] (w/ 지민): Advanced Science(2026) 논문 기반, 전극 모델 구상, Bio glue 제작.\n- [[Wound Healing Review]] / [[Burns & Trauma Review]] (w/ 수아): 3/31 재제출 완료, Materials Today Bio 포맷팅.\n- [[Robot Arm Review]]: 피겨 일러 드로잉.\n- 공동연구: 췌장 디바이스 membrane, C-line(아산병원 돼지 실험), 녹스디바이스 membrane/c-line 코팅, 생분해성 코팅(w/ 지민), PDMS curing(w/ Beibei), 나노소재 in vivo(KIST·아산병원), 인조피부 CA 측정.\n\n## 특이사항\n- 특허 미팅, 생체재료학회 포스터/참석.\n- 논문 3건 리뷰 코멘트 완료.\n- 후배(수아, 지민) 지도 및 실험 분담 주도.\n\n## 관련\n[[하이드로겔팀]] · [[Hemostatic Hydrogel]] · [[내시경 코팅제]] · [[MXene Hydrogel]] · [[식물 생리학적 전극]]",
+      "tags": ["researcher", "하이드로겔팀", "hydrogel", "clinical", "publication-lead"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "김미도 (Mi-Do Kim)",
+      "category": "person",
+      "content": "**소속 팀**: [[전자소자팀]] / [[LM팀]]\n**역할**: EMI 차폐·Stretchable RF·고속 회로 설계\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Stretchable RF]] / [[LM 고속 회로]]: 측정용 컴포넌트 구매, 유인상 교수님 자료·waveguide calibration 논문 서치, 등가회로 모델링, LM Paste/Spray 임피던스 측정 방법론. VNA 어댑터 이슈(대여 불가→구매).\n- [[EMI Shielding]]: 전파통신실험실 VNA 4포트 캘리브레이션, LM Paste 정성적 쉴딩(Al foil 유사), Waveguide 장비 부재 이슈, 8GHz 이하 대역 분석, ESP32 FPCB 설계.\n- [[EXG Pill]] / [[EXG sPCB 전극]] (w/ 근영): 투명 PDMS 기판 via 뚫기 최적화, 3.2mm×2.5mm 소형 설계, sPCB 제작 및 ECG/EMG 데이터, Biopac EMG 3~4가지 동작 구분 가능성 확인, MCU/BLE 통합, PPG 무선시스템 인수인계, 온도센서 추가.\n- [[Gesture Sensor]] (w/ 민경): EMG 신호 주파수 도메인(PSD), MATLAB 신호 분석, 하이드로겔 strain sensor 보조.\n- [[AutoPCB]] Track E, F 검증. [[PDRN]] implantable EMG 어플(w/ 찬수).\n- [[EMI]] 장비 교육(w/ 근영, 민병욱 교수님 연구실).\n\n## 특이사항\n- 전파실험실 정밀 장비 적극 활용.\n- Dektak·안전 교육 이수.\n- Nature Communications·Bioactive Materials 리뷰 코멘트(w/ 근영).\n- 시약 보유 리스트/MSDS 정리.\n\n## 관련\n[[전자소자팀]] · [[Stretchable RF]] · [[EMI Shielding]] · [[EXG Pill]] · [[AutoPCB]]",
+      "tags": ["researcher", "전자소자팀", "RF", "EMI", "PCB"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "장한빛 (Han-Bit Jang)",
+      "category": "person",
+      "content": "**소속 팀**: [[패키징팀]] / [[전자소자팀]]\n**역할**: LM Encapsulation·임베디드 시스템·PCB 설계\n\n## 연구 히스토리 / 담당 프로젝트\n- [[LM Encapsulation]] (w/ 유림): 제면기 압력 LM multilayer, 경희대 WVTR/OTR 의뢰, SEM/EDS LM penetration, PVB thin film transfer, PIB spray 최적화, PIB-LM-PIB-LM-PIB 다층, SEBS spray coating 두께(w/ 시연), 새 장비(0.0005 해상도) 사용 허가, 수분 무게 감소법, 습도 감응 film/beads.\n- [[Wearable TED]] & Embedded System (w/ 혜인): Peltier Array(전기전자종합설계), STM32(Stm32duino) Closed-loop 제어, EasyEDA FPCB 설계, Flexible PCB 동작 확인, Stretchable PCB, 멀티모달 온디바이스 AI 어플 구상.\n- [[Smart Stent]] / Electrochemical Sensor: Oxalic acid 검출, DPV Flexible Potentiostat 회로, Nature BME 논문 리뷰.\n- [[NCF]] (w/ 유림): Cu pillar 전기도금, 레이저 커터 대체.\n- [[AutoPCB]]: Track A (정답지 ver), Track B, Track D RHS2116 커스텀 심볼, Track E v.3, Claude AI 스터디, Output_V1.\n- [[PDRN]]: Schematic 작업(w/ 태영), 동물실험 계획서.\n- 뇌선도 생체전극 과제 샘플 제작(w/ 근영).\n\n## 특이사항\n- 학부 종합설계 → 대학원 STM32 정밀 임베디드 제어로 빠른 성장.\n- Dektak·동물실험 윤리·안전 교육 이수.\n- 4/28 예비군 훈련.\n\n## 관련\n[[패키징팀]] · [[LM Encapsulation]] · [[Wearable TED]] · [[Smart Stent]] · [[AutoPCB]]",
+      "tags": ["researcher", "패키징팀", "encapsulation", "embedded", "PCB"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "심현지 (Hyunji Shim)",
+      "category": "person",
+      "content": "**소속 팀**: [[전자소자팀]] (학부 연구생)\n**역할**: EXG pill 회로 설계 및 전극 구현\n\n## 연구 히스토리 / 담당 프로젝트\n- [[EXG Pill]]: Schematic 회로 재설계 후 PCB 주문 완료(gain, BPF cutoff frequency 재설정), Schematic 회로 분석, 소형 PCB 재설계(w/ 찬수), EMG 측정 및 아두이노 코드 수정.\n- [[sPCB 전극]]: LM 배선 mask AutoCad 제작, 전극부 mask laser cutting. PCB 도착 후 LM paste 도포 예정.\n- [[PEDOT:PSS 전극]] 샘플 제작 보조(w/ 지민): PDMS/PET 필름 스프레이 코팅 최적화.\n- [[CPU Thermal]] 실험(w/ 승완): thermal grease.\n- [[Soft Substrate]] 제작(PDMS, Ecoflex, w/ 찬수).\n- [[LED Mask]] 제작(w/ 승완). [[LM Paste]] 제조·전도도 측정(w/ 찬수).\n- [[EXG 전전종설]] 중간보고서. 논문 스터디: LM-based stretchable/soft electronics, LM 기반 thermal interface materials.\n\n## 특이사항\n- ECG 코드 Notch filter 수정 예정.\n- 3M 전극 대체 물질 리서치.\n\n## 관련\n[[전자소자팀]] · [[EXG Pill]] · [[PEDOT:PSS 전극]] · [[EXG 전전종설]]",
+      "tags": ["researcher", "undergraduate", "전자소자팀", "EXG", "PCB"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "XIA BEIBEI (하베이)",
+      "category": "person",
+      "content": "**소속 팀**: [[하이드로겔팀]] (외국인 연구원, 중국)\n**역할**: UV-curable PDMS 및 schematic drawing 지원\n\n## 연구 히스토리 / 담당 프로젝트\n- [[Hydrogen Project]] (w/ Soo A): Adobe Illustrator TOC graphic 제작 거의 완료.\n- [[UV-curable PDMS]]: 연구 제안서 작성 및 교수님 제출, 피드백 반영 수정, MPPDMS 100g 구매 완료(Beyotime, Shanghai), Plan B 선행연구 존재 여부·타당성 문헌조사, 실험 계획 수립.\n- [[Schematic Drawing]]: Adobe Illustrator 연습(w/ 수아 지도).\n- 공동: [[Bentonite Ionic Hydrogel]] Oxidized dextran 합성(w/ 수아), [[Exosome Carrier]] IBD 동물모델·수술(w/ 태영), PDMS curing 물성 최적화(w/ 가영).\n\n## 특이사항\n- 2025년 말~2026년 초 합류. 독립 연구 제안서 단계 진입.\n- 중국 재료 구매 루트 활용.\n\n## 관련\n[[하이드로겔팀]] · [[UV-curable PDMS]] · [[Hydrogen Project]] · [[Exosome Carrier]]",
+      "tags": ["researcher", "하이드로겔팀", "international", "PDMS"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "조동인",
+      "category": "person",
+      "content": "**소속 팀**: [[링크솔루텍]] 의료기기 개발/R&D\n**역할**: 코팅제 검증·의료기기 R&D·특허기반 사업 제안서\n\n## 연구 히스토리 / 담당 프로젝트\n- **TUA 친수성 코팅제**: 내부 검증 테스트 (내구성·내화학성·경화시간 조건 탐색), 성낙영 연구원 인수인계.\n- **태웅메디칼 검증실험**: Dip coating 후 SOP 재개정, 가공 전 500mm 스텐트 Dip coating 적용 검토, 미팅자료 작성 (26.03.24 화).\n- **봉합사 논문 Figure 제작**: 근막·FCI·링크봉합사 단순 인장 + 슬리브 활용 인장 테스트.\n- **누액누도 실리콘 튜브**: 피드백용 시제품 3set 제작 완료.\n- **S1100 코팅제 내구성 테스트**: 성형 열처리·초음파 세척 조건.\n- **해외**: 동경대(일본) 운송 및 보관 조건 자료 전달.\n- **제안서**: 2026년도 특허기반사업화 제안서 작성 및 제출 완료, 2026 특허기반 사업 RFP 제안서 작성 진행. 기술보증기금 투자기업동향 R&D파트.\n\n## 특이사항\n- 4/16 SBA 바이오 의료기술사업화 지원사업 발표평가 (10:30).\n- 4/21 태웅메디칼 & 장성일 교수님 미팅 (14:00).\n- 4/22 특허기반 사업화 R&D 지원사업 발표 (15:30).\n- 상반기 목표: 비뇨기과용 범용튜브카테터 설계문서 10%, 누액누도 실리콘튜브 설계문서 10%, 신규 코팅제 시장진입 라이브러리 구축 10%.\n\n## 관련\n[[링크솔루텍]] · [[TUA 코팅제]] · [[태웅메디칼]] · [[비뇨기과용 카테터]] · [[누액누도 실리콘튜브]]",
+      "tags": ["employee", "링크솔루텍", "R&D", "medical-device", "coating"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "링크솔루텍 경영관리팀",
+      "category": "general",
+      "content": "**소속**: [[링크솔루텍]] 경영관리 기능\n**역할**: 매출/재무, 투자사 대응, 과제 행정, 운영\n\n## 주요 업무 / 최근 진척\n- **매출/재무**: PSYS 키움페이 심사 승인 완료. 우리카드 한도 확인. 3월 결산자료 및 팀별 지출내역 정리·보고 완료. 국세·지방세 납부. 김대우 교수님 연구실 주문 건 입금.\n- **투자사 대응**: 주주총회 서류 보완 완료, 법무법인 우편 송부.\n- **과제 행정**: 연세대 1분기 자회사 현황조사 제출(4/7), 연세대 1분기 분기별 현황조사 제출(4/9), 기술보증기금 동향관리 서류 제출(~4/17), 1분기 부가세 신고 자료 송부(~4/16), 경북대 보완요청사항 처리.\n- **운영**: 마케팅팀 지원자 면접(4/6), 4/13-14 단기근로자 3명 채용 완료, KT 전화 회선 추가(5대), PSYS 카드매출 정산(22만원), 페이팔 해외결제 가맹점 등록, 법인 공인인증서 갱신, 이카운트 매출 등록.\n\n## 주요 일정\n- 4/16 SBA 바이오 의료기술사업화 지원사업 발표평가\n- 4월 중: 경북대 RLRC 과제 납부일정 안내\n- 4월 중: 연세대 RISE-Y 과제 납부일정 안내\n- 7월: 신진연구인력 변경 신청\n\n## 상반기 목표\n- 이카운트 활성화 — 달성률 5% (매출입력 완료, 재고 확인 완료, 우리카드 발급 후 지출내역 연동 예정)\n\n## 관련\n[[링크솔루텍]] · [[과제 행정]] · [[이카운트]]",
+      "tags": ["organization", "링크솔루텍", "operations", "finance"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "링크솔루텍 RA팀",
+      "category": "general",
+      "content": "**소속**: [[링크솔루텍]] Regulatory Affairs\n**역할**: 의료기기 인허가·품질관리(QMS)·임상시험·해외 유통\n\n## 주요 업무 / 최근 진척\n- **품질문서**: 2026 품질목표 및 실현 계획서(완료), 2025 품질목표 및 실현 보고서(완료), 2025 경영검토 회의록(완료). 품질경영시스템 위험관리 및 보고서, 클린룸 입퇴실 지침서 진행.\n- **비뇨기과용 카테터**: 설계 및 개발 문서 가이드라인 조사 → 설계 문서(계획/입력/출력) 작성. 생물학적 안전성 시험 완료(2/4), 멸균 밸리데이션 진행중(3/18~), 카테터 박스 도착(4/6), 생산(4/13-14) → 가속노화·운송 밸리데이션 → GMP 추가심사 ~9월 예상. 사용적합성 문서(엔지니어링 계획서, 형성평가 참여자용).\n- **비흡수성봉합사**: 임상시험계획 검토 진행중, 1차 보완 통보 4/24 전후 예상, GMP 인정서 4/24 발급 예정. 몽골 유통업 컨택(3/31~), 바늘 공급업체(중국) 컨택(4/13~).\n- **해외 인허가**: 몽골 대리점 유통업 메일. 홍콩 코히타 문의.\n- **전시회**: 4/9-10 CMEF 전시회 참석 완료.\n\n## 주요 일정\n- 4월 2회차 바이오버든 시험\n- 5월: 장비 검교정·ISO 13485 심사\n- 6월: 클린룸 밸리데이션(PQ)\n- 7월: 3회차 바이오버든·GMP 추가심사 준비\n\n## 상반기 목표\n- 카테터 인허가 시험·밸리데이션 — 20% (멸균 밸리데이션 진행중)\n- QMS 기반 품질 활동 — 5% (분기별 바이오버든·무균시험 1회차 진행)\n- 비흡수성봉합사 임상시험 — 10% (임상시험계획 승인 민원 신청 완료)\n\n## 관련\n[[링크솔루텍]] · [[비뇨기과용 카테터]] · [[비흡수성봉합사]] · [[QMS]] · [[GMP]]",
+      "tags": ["organization", "링크솔루텍", "regulatory", "QMS", "GMP"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "김성권",
+      "category": "person",
+      "content": "**소속 팀**: [[링크솔루텍]] 사업개발/브랜드\n**역할**: 화장품 브랜드 런칭·해외사업·대외홍보\n\n## 담당 프로젝트 / 최근 진척\n- **화장품 (소복 브랜드 런칭)**: 소복 기획안 검토 및 투두리스트 검토, 상표 출원(소복/소복 sobok/sobok), 베트남 상표 등록 가능 여부 확인(가능), 용기 업체 발굴, SNS 계정 생성, 콜마 2차 샘플 테스트·피드백, 코스맥스 3차 샘플 재배송, 신규 ODM(노디너리) 컨택, 유리 용기 업체 컨택, 연우 세일즈 담당자 미팅, 라벨 샘플북 확인, 제품별 원가 시뮬레이션, 한국패키징박람회 외근(4/3). 와이원글래스 미팅(4/13).\n- **대외홍보**: 홈페이지 업데이트(외주), 신규 뉴스 작성.\n- **기타**: 보스턴 의료기기 대리점 조사, 제노스 미팅, 해외(도쿄) 수입사 리마인드, 해외 바늘업체 문의 및 팔로업.\n\n## 주요 일정\n- 시범구매사업 수요조사: 2603~04 조달청 신청서 검토 및 선정, 260427 선정 공지, 2605 시범사용 수행계획서 및 업무협약서 제출, 2607~ 시범구매 진행.\n\n## 상반기 목표 진척\n- 혁신제품 시범구매→공공조달 반복매출 전환 — 50%\n- LYNKCOAT Anti-biofouling 브랜드 재정립/리드 생성 시스템 구축 — 10%\n- 화장품 브랜드 구축 + 베트남 수출 파일럿 매출 — 10%\n\n## 관련\n[[링크솔루텍]] · [[소복 화장품]] · [[LYNKCOAT]] · [[시범구매사업]]",
+      "tags": ["employee", "링크솔루텍", "business-development", "cosmetics", "branding"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    },
+    {
+      "title": "성미정",
+      "category": "person",
+      "content": "**소속 팀**: [[링크솔루텍]] (퇴사 — 2026.02.26 마지막 보고)\n**역할**: (전) 코팅제·화장품 ODM·의료기기 문서/RA\n\n## 담당 프로젝트 / 히스토리\n- **코팅제/분석**: 미국 TUA/Hydromer/AST 코팅제 컨택, TUA 코팅 업체(플로리다) 샘플 구매, 연세대 NMR 1·2차 분석 정리.\n- **화장품**: CTK 1·2제 용기 샘플 발송, 코스맥스 미백 앰플 샘플 수령·품평, 콜마 타겟샘플 전달, ODM 샘플링 진행.\n- **문서/교육**: 카테터 위험관리 문서 작성 및 RA 교육, 연구개발팀 설계 및 개발 이수·교육.\n- **의료기기**: 요로감염·가피 형성 억제 윤활팽윤코팅 요관스텐트 연구개발계획서 검토, 누용낭 허가절차 확인.\n- **IR/영업**: IR 자료(윤활방취제) 작성, 영업 유통업체 리스트, 케어캠프/위더스메디 자료.\n\n## 특이사항\n- **2026.02.26 퇴사 확인** — 마지막 주간보고.\n- **인수인계**: 화장품 관련(코스맥스·콜마·PNCLabs·CTK) → [[김성권]] 인계 완료. 의료기기 관련(TUA) → [[조동인]] 인계 완료.\n\n## 관련\n[[링크솔루텍]] · [[TUA 코팅제]] · [[화장품 ODM]] · [[김성권]] · [[조동인]]",
+      "tags": ["employee", "링크솔루텍", "former", "RA", "coating"],
+      "sources": [{ "type": "notion_page", "id": "person-page-311f9f17", "date": "2026-04-15" }]
+    }
+  ]
+}

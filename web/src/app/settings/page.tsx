@@ -307,11 +307,6 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
             {emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기'}
           </button>
         </div>
-        {!lab && (
-          <a href="/onboarding" className="inline-block px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
-            온보딩 시작
-          </a>
-        )}
       </section>
     </div>
   );
@@ -352,7 +347,7 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       <div className="bg-bg-card rounded-xl border border-border p-12 text-center">
         <FlaskConical className="w-12 h-12 text-text-muted/40 mx-auto mb-3" />
         <h3 className="text-lg font-semibold text-text-heading mb-2">연구실이 등록되지 않았습니다</h3>
-        <a href="/onboarding" className="inline-block px-6 py-3 bg-primary text-white rounded-lg font-medium mt-4">온보딩 시작</a>
+        <p className="text-sm text-text-muted mt-2">관리자에게 연구실 설정을 요청하세요.</p>
       </div>
     );
   }
@@ -438,7 +433,6 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
             <div><span className="text-text-muted">이름:</span> <span className="text-text-heading">{lab.name}</span></div>
             <div><span className="text-text-muted">기관:</span> <span className="text-text-heading">{lab.institution || '-'}</span></div>
             <div><span className="text-text-muted">학과:</span> <span className="text-text-heading">{lab.department || '-'}</span></div>
-            <div><span className="text-text-muted">온보딩:</span> <span className={lab.onboardingDone ? 'text-green-400' : 'text-amber-600'}>{lab.onboardingDone ? '완료' : '미완료'}</span></div>
           </div>
         )}
       </section>

@@ -1,0 +1,29 @@
+{
+  "_note": "Both source Notion pages contain inline H1/H2 sections per person rather than actual child_page blocks. No notion.so/ child page URLs were found beyond the pages themselves and their parents. Entries below reflect the inline sections; 'id' is empty because no per-person Notion page ID exists.",
+  "labMembers": [
+    {"id": "", "title": "김수아 (Soo A Kim)"},
+    {"id": "", "title": "김태영 박사 (Tae Young Kim)"},
+    {"id": "", "title": "강민경 (Min-Kyung Kang)"},
+    {"id": "", "title": "조예진 (Yejin Jo)"},
+    {"id": "", "title": "이유림 (Yurim Lee)"},
+    {"id": "", "title": "박시연 (Si-Yeon Park)"},
+    {"id": "", "title": "육근영 (Keun-Young Yook)"},
+    {"id": "", "title": "함혜의 (Hye-In Ham)"},
+    {"id": "", "title": "정윤민 (Yun-Min Jung)"},
+    {"id": "", "title": "박지민 (Jimin Park)"},
+    {"id": "", "title": "홍승완 (Seung-Wan Hong)"},
+    {"id": "", "title": "김찬수 (Chan-Su Kim)"},
+    {"id": "", "title": "손가영 (Ga-Young Son)"},
+    {"id": "", "title": "김미도 (Mi-Do Kim)"},
+    {"id": "", "title": "장한빛 (Han-Bit Jang)"},
+    {"id": "", "title": "심현지 (Hyunji Shim)"},
+    {"id": "", "title": "XIA BEIBEI (하베이)"}
+  ],
+  "companyEmployees": [
+    {"id": "", "title": "조동인"},
+    {"id": "", "title": "링크솔루텍 경영관리"},
+    {"id": "", "title": "링크솔루텍 RA"},
+    {"id": "", "title": "김성권"},
+    {"id": "", "title": "성미정"}
+  ]
+}

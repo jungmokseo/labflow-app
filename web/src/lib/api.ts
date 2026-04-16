@@ -727,18 +727,6 @@ export async function deleteKeyword(keyword: string) {
   return apiFetch<{ keywords: string[] }>(`/api/brain/settings/keyword/${encodeURIComponent(keyword)}`, { method: 'DELETE' });
 }
 
-export async function completeOnboarding(data: {
-  homepageUrl?: string;
-  keywords?: string[];
-  researchThemes?: Array<{ name: string; keywords: string[]; journals?: string[] }>;
-  emailAccounts?: Array<{ name: string; domains: string[]; emoji: string }>;
-}) {
-  return apiFetch<{ lab: LabProfile; extractedKeywords: string[] }>('/api/lab/onboarding', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
 export async function getLabCompleteness() {
   return apiFetch<{ completeness: number; missing: string[]; suggestions: string[] }>('/api/lab/completeness');
 }

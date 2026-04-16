@@ -1,0 +1,101 @@
+{
+  "articles": [
+    {
+      "title": "3/18 Packaging Team 미팅",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-18 / **유형**: 팀 / **참여**: [[이유림]], [[함혜인]], [[장한빛]], [[박시연]], [[조예진]]\n\n## 안건\n- PEDOT:PSS 시냅틱 트랜지스터 시뮬레이션\n- ACF 논문 및 In-vivo 테스트\n- LM+GelMA 하이드로겔 패터닝 최적화\n- TED 이중층 쿨링 효과\n- 신축성 전극 샘플 테스트\n- AutoPCB 피드백\n\n## 핵심 결정사항\n- PEDOT:PSS 신경망 시뮬레이션 91% 정확도 (784 입력/100 히든/50 에폭)\n- ACF 논문 및 Packaging 리뷰 논문 이번 주~다음 주 초 제출 목표\n- In-vivo 테스트 셋업 2주 소요\n- LMM 1.5~3.4wt% 농도에서 패터닝 해상도 확보, 광큐어링 5초·400-500W\n- TED 이중층: 공기면 SAP+LiCl, 피부면 PAS (ALN 첨가 효과 미미 → 미첨가 사용)\n- 신축성 전극 샘플 재제작 후 경희대 측정 (다음 주 목-금)\n- AutoPCB 3개 → 20개 회로 확대 예정\n\n## 액션 아이템\n- Packaging 리뷰 논문 제출\n- 400-500W 파워 조건 세분화 테스트\n- LiCl 농도 세분화 쿨링 실험, 20분 이상 장기 쿨링\n- 입도 분석 교육 후 소니케이션 타임별 입자 사이즈 확인\n- 샘플 재제작 후 경희대 측정\n- AutoPCB 피드백 자주 제공\n\n## 관련\n[[Packaging Team]], [[ACF 논문]], [[PEDOT:PSS 시냅틱 트랜지스터]], [[LM+GelMA 하이드로겔]], [[TED 쿨링 패치]], [[AutoPCB]]",
+      "tags": ["meeting", "Packaging Team", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "327f9f17-6cf4-81ec-805d-d6583ac944be", "date": "2026-03-18" }]
+    },
+    {
+      "title": "3/18 PDRN 미팅 (태영, 찬수)",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-18 / **유형**: 개별 / **참여**: [[김태영]], [[김찬수]]\n\n## 안건\n- PDRN Figure 2~5 데이터 정리 현황\n- 동물실험 Application 방향 논의\n- NG 시뮬레이션 진행 방식 결정\n\n## 핵심 결정사항\n- Figure 2 정리 완료 (Fabrication schematic, XPS, Contact Angle, Plasma protein adhesion)\n- 오토클레이브/EO gas/감마선 멸균 후 코팅 안정 확인\n- Application 옵션 1: 수술 부위 조직 재생, 옵션 2: 치과 임플란트 티타늄 코팅\n- 피부 외 application 탐색 필요 (봉합사·체내 삽입·당뇨 모델)\n- NG 시뮬레이션: 외부 의뢰 대신 직접 학습 3주 내 완료 결정\n- 민성진 교수와 한국연구재단(NRF) 과제 공동 진행 예정\n\n## 액션 아이템\n- Figure 1 스키매틱 작성\n- Figure A, C — XPS 데이터와 작용기 연계 보완\n- NG 시뮬레이션 직접 학습하여 3주 내 완료\n- 당뇨 모델 실험 관련 조교수님께 메일 발송\n- PDRN application 추가 탐색 (AI 활용)\n- 멀티채널 바이오센싱 파일럿 데이터 확보\n- 스테인리스 코팅 데이터 정리 (2주 내)\n\n## 관련\n[[LM Team]], [[PDRN 스텐트 코팅]], [[멀티채널 바이오센싱]]",
+      "tags": ["meeting", "LM Team", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "328f9f17-6cf4-806d-91dd-c3f532f869fc", "date": "2026-03-18" }]
+    },
+    {
+      "title": "3/19 김세근 박사 미팅 (Clean View)",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-19 / **유형**: 외부 / **참여**: [[김세근]], [[조예진]], [[서정목]]\n\n## 안건\n- Clean View 임상 데이터(20건+) AI 분석 방법론\n- 이미지 디텍션 모델 개발 협업\n- GPU 컴퓨팅 환경 확보\n- 향후 과제화 및 논문 계획\n\n## 핵심 결정사항\n- 부비동 수술 내시경 시야 저하 데이터 20건+ 수집 완료\n- 시야 상태 5단계 수동 분류의 객관성 한계 → 전체 데이터를 하나의 풀로 통합, 통계적 분석\n- 접근법: 김서림/혈액 부착 감지 이미지 디텍션 모델 개발, 프레임별 probability 실시간 계산\n- 비전 랭귀지 모델 불가 (퍼블릭 데이터 부족)\n- GPU: Google Cloud 활용 (연구비 처리 가능), IRB 업로드 조항 확인 필요\n- 환자 영상은 MP4·식별정보 없음·동의서 확보 → 긍정적\n- 논문은 학교-회사 공동, tenure 고려 교신저자 역할 중요\n- 미국 NIH 70% 삭감, 한국 피지컬 AI/의료영상 과제 탐색\n\n## 액션 아이템\n- IRB 클라우드 업로드 가능 여부 확인\n- GPU 환경 결정 (로컬 vs Google Cloud)\n- 비디오 레이블링+AI 모델 프로토타입 툴 제공\n- 5-6개 샘플 비디오로 프로토타입 테스트\n- 연구실 방문 및 외과 교수님 소개 일정 조율\n- 한국 과제 (피지컬 AI/의료영상 분석) 공모 탐색\n\n## 관련\n[[Clean View 내시경 코팅]], [[Hydrogel Team]], [[AI 이미지 디텍션]]",
+      "tags": ["meeting", "External", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "328f9f17-6cf4-81d7-86cc-daf9fae1d3c5", "date": "2026-03-19" }]
+    },
+    {
+      "title": "3/18 Hydrogel Team 미팅",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-18 / **유형**: 팀 / **참여**: [[김태영]], [[김수아]], [[손가영]], [[박지민]], [[강민경]]\n\n## 안건\n- 각 프로젝트 진행현황 공유\n- 식물 생리정보 센서 아이디어\n- 아이오닉 하이드로겔 화학 분석 방향\n- MXene 하이드로겔 리칭 문제\n\n## 핵심 결정사항\n- Zwitterion Hydrogel: UV 5mm 램프·5cm·20-50mW 타겟 (80-100mW 열 손상)\n- Salting-out Hydrogel (Adv. Healthc. Mater.) Peer review 중 (~2주 경과)\n- 내시경 코팅제 (ACS AMI) 3월 2일 Peer review 진입\n- 아산병원 협업: 나무 소재 과제 + C-line, 2주 1회 미팅\n- MXene 하이드로겔 리딩 과정 드럭 용출 우려 → 리칭 테스트(염료) 진행\n- 식물 센서: 세 접근법(마이크로 니들/줄기 임플란트/표면 부착) 중 표면 부착 중심\n- PDMS UV curing 원료 수급 문제 (수입 100만원+) → 프로토콜 대체 검토\n- 아이오닉 하이드로겔: PVA·벤토나이트·젤라틴·옥살산 베타인·LiCl, PDA 벤토나이트 코팅으로 LiCl 응집 방지\n\n## 액션 아이템\n- 내시경 디바이스 안정적 연결 재시도\n- Zwitterion Hydrogel 최적화 후 in vitro degradation\n- MXene 인트로/화학분석 및 리칭 테스트\n- 4시간 캠 논문 아웃라인\n- 아이오닉 하이드로겔 추가 화학 분석\n- 항균 테스트: 4월 한국 방문 연구자와 협업\n- Iontophoresis 사이즈 분석\n\n## 관련\n[[Hydrogel Team]], [[Salting-out Hydrogel]], [[Clean View 내시경 코팅]], [[Zwitterion Hydrogel]], [[MXene 하이드로겔]], [[식물 생리정보 센서]], [[아이오닉 하이드로겔]]",
+      "tags": ["meeting", "Hydrogel Team", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "327f9f17-6cf4-8165-ae72-ce606a6f85fd", "date": "2026-03-18" }]
+    },
+    {
+      "title": "3/26 중기부 글로벌 협력 R&D 과제 미팅",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-26 / **유형**: 외부 / **참여**: [[신수련]], [[김도환]], [[서정목]], [[김희철]]\n\n## 안건\n- 중기부 글로벌 협력 R&D 자유공모 과제 컨소시엄 구성\n- 과제 제목 및 기술 방향 확정\n- 하버드 참여의사 확인서 서명 요건\n- 하이드로겔 역할 및 플랫폼 구조\n\n## 핵심 결정사항\n- 과제명: \"지속 가능한 피부 인터페이스 소재·센서 통합형 스마트 LED 광치료 패치 플랫폼 개발\"\n- 예산/기간: 최대 3년 15억, 접수 마감 4월 24일\n- 컨소시엄: 뉴트리어드바이저(총괄) / 하버드(공동) / 연세대(위탁, 플렉서블 회로·BT·MCU) / 한양대(위탁, 비증발 하이드로겔)\n- 기술 방향 전환: 미용 → 당뇨/만성 창상 치료 (NIH 트렌드·미국 시장 수요)\n- 플랫폼 이중 레이어: 상층(하이드로겔+LED/PCB, pH·온도·임피던스 센싱) / 하층(소모성 패치)\n- 이온 전도도 ~30 mS/cm → 배선 간격 확보\n- 스마트폰 앱 연동 Close-loop\n- 선정 평가: 국제공동연구 필요성 20점, 선행연구 차별성 35점\n- TRL 7단계 이상은 과도\n\n## 액션 아이템\n- 간사(PM)에 하버드 참여의사 확인서 서명 요건 확인\n- 하버드 측 RFP 양식 전달\n- 카카오톡 단톡방 개설\n- IRIS 참여연구자 가입\n- 각 기관별 역할 및 선행연구 작성\n- 법무부 계약서 검토\n\n## 관련\n[[중기부 글로벌 협력 R&D]], [[LED 광치료 패치]], [[비증발 하이드로겔]], [[링크솔루텍]]",
+      "tags": ["meeting", "External", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "334f9f17-6cf4-8142-b505-d5b2c20b78e8", "date": "2026-03-26" }]
+    },
+    {
+      "title": "3/25 AutoPCB 미팅",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-25 / **유형**: 팀 / **참여**: [[장한빛]], [[박시연]], [[육근영]], [[이유림]], [[김찬수]], [[정윤민]], [[김미도]]\n\n## 안건\n- AutoPCB 프로젝트 전체 비전 및 현황\n- 반복 버그 원인 분석\n- 멀티 에이전트 AI 시스템 구조\n- 피드백 관리 전략\n\n## 핵심 결정사항\n- 3단계 로드맵: Phase 1 Rigid PCB (KiCad, 현재) → Phase 2 Flexible (Altium) → Phase 3 Stretchable\n- Claude Code 기반 멀티 에이전트, 3월 9일 시작, 14개 트랙(1인당 2-3개), ~20개 버전\n- 반복 버그 근본 원인 3가지: 컨텍스트 윈도우 제한 / 세션 간 수정사항 손실 / 지침 선택적 준수\n- 해결: 영구 기억 구조(레지스트리) + 지침 강제 실행 + 데이터시트 직접 PDF 제공\n- 즉시 반영 피드백: 핀 연결 오류, 부품 오류/단종, 불필요 헤더, 패드 누락, 소자 겹침\n- 보류: 패드 형상 최적화, 실크스크린, 보드 코팅/방수\n- 2개 핵심 트랙에 집중 검증\n\n## 액션 아이템\n- 논문 소자 데이터시트 PDF 확보\n- 소자 재고 현황 파악 및 대체품 검토\n- 2개 핵심 트랙 집중 피드백\n- 반복 오류 하나씩 순차적 정리\n- Claude Code 학습 (Pro 구독 지원)\n- 각 트랙 KiCad 파일 열림 여부 체크\n\n## 관련\n[[AutoPCB]], [[Stretchable PCB]], [[LM Team]], [[Packaging Team]]",
+      "tags": ["meeting", "AutoPCB", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "32ff9f17-6cf4-80a0-9e56-e3f1063f6378", "date": "2026-03-25" }]
+    },
+    {
+      "title": "3/18 LM Team 미팅",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-03-18 / **유형**: 팀 / **참여**: [[정윤민]], [[김찬수]], [[육근영]], [[김미도]], [[심현지]], [[홍승완]]\n\n## 안건\n- LM Paste 논문 스토리라인\n- Delamination 테스트 구조 (HBM)\n- LED 마스크 & SPCB 제작\n- AutoPCB 피드백\n- WPT 트랜스미터 개발\n- EMG 신호 분석\n\n## 핵심 결정사항\n- LM Paste 논문: Amplitude 서플먼터리 수준, 나노 파티클 포커스, 레올로지 키네틱 데이터 핵심\n- Concentration 5 vol% 기준 (conductivity 10^6 S/m)\n- 네트워크 구조: Oxide 사이사이 LM 연속상이 기존 대비 차별점\n- C-AFM 1-2μm 네트워크 확인\n- 패터닝 스크린 프린팅 30μm 한계 → 마이크로 스탬핑/펜 탐색\n- Delamination: 4인치 웨이퍼·100μm SU-8·갭 35~10μm (5μm 단위)\n- 써멀 사이클링: 알루미늄 히트싱크 LM 반응 → 대체 부품\n- WPT: Type A 작동 확인, 6.5턴 평평, 오실로스코프 725mV\n- EMG: 싱글 채널 4가지 동작 70-80% (SVM)\n\n## 액션 아이템\n- Amplitude 파일럿 테스트, GPC 나노 파티클 몰분포 측정\n- 퍼징 시스템 산소 분포 실험\n- 조승호 교수 레오미터 oscillatory shear 실험\n- AFM 이미지 스무딩\n- Delamination 테스트 구조 제작\n- 히트싱크 구매 후 써멀 사이클링\n- AutoPCB 피드백 줄글 전달\n- Tx PCB 2종 도착 후 테스트\n- EMG 4가지 동작 최적화\n\n## 관련\n[[LM Team]], [[LM Paste 논문]], [[HBM]], [[WPT Iontophoretic]], [[EMG 신호 분석]], [[AutoPCB]]",
+      "tags": ["meeting", "LM Team", "2026-03"],
+      "sources": [{ "type": "meeting", "id": "327f9f17-6cf4-8186-b65e-c583e021aba0", "date": "2026-03-18" }]
+    },
+    {
+      "title": "4/1 LM Paste 논문 피규어 검토",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-04-01 / **유형**: 개별 / **참여**: [[김미도]], [[육근영]]\n\n## 안건\n- LM Paste 논문 피규어 1-7 검토\n- 저널 타겟 논의 (Nature Materials vs Nature Electronics)\n- 갈륨-알루미늄 패드 상호작용 메커니즘\n\n## 핵심 결정사항\n- Figure 1 스키매틱·메커니즘 보완 필요 (결합 개선 위치, 소수성 결합)\n- XPS convolution 데이터 재분석\n- 크로스 섹션: 액체 갈륨 흐름 가능 → Cryo-FIB 필수 (연세대 공동기기원 없음 → 서울대/생명과학대 약 50만원)\n- Conductive AFM 제외 검토 (난이도·노이즈 관리 불가)\n- 갈륨-알루미늄 패드: 두 달 담가도 부식 없음 → 산화 알루미늄 5nm 보호막 추정 (정은용 교수 Science 논문 트랜스퍼 프린팅 참고)\n- 저널 타겟: Nature Electronics가 더 적합 (Nature Materials는 최근 3년 LM 인터커넥트 논문 거의 전무)\n- 절충안: 앞쪽 Nature Materials 스타일(물질 분석) + 뒤쪽 Nature Electronics 스타일(어플리케이션)\n- 어플리케이션: 60 마이크로 액티브 매트릭스 마이크로 LED 어레이 (솔더링 없이 지본딩)\n\n## 액션 아이템\n- 노션 페이지 스토리라인·메커니즘 추가\n- Cryo-FIB 실험 (서울대/생명과학대, 약 50만원)\n- 피규어 밀도 높이고 데이터셋 추가\n- 아산병원 스텐트 미팅 일정\n- 4월 13일 PDIA 미팅 참석\n\n## 관련\n[[LM Team]], [[LM Paste 논문]], [[마이크로 LED 어레이]], [[아산병원 스텐트]]",
+      "tags": ["meeting", "LM Team", "2026-04"],
+      "sources": [{ "type": "meeting", "id": "336f9f17-6cf4-81a9-a5f1-cbe19dd7f7ca", "date": "2026-04-01" }]
+    },
+    {
+      "title": "4/1 종합 미팅 (PDRN 스텐트 + 논문 피규어 + 디바이스 어레이 + AutoPCB)",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-04-01 / **유형**: 개별 / **참여**: [[김태영]], [[김찬수]], [[김미도]], [[육근영]], [[박시연]], [[장한빛]]\n\n## 안건\n- PDRN/스텐트 코팅 연구 진행\n- LM Paste 논문 피규어 검토\n- PEDOT:PSS 디바이스 어레이 제작\n- AutoPCB 알고리즘 개발\n\n## 핵심 결정사항\n- PDRN: A1 XPS 지저분 → 재분석. 오토클레이브·메커니컬 안정성 확보\n- MD 시뮬레이션 2-3주 내 산출, 이전 ATPS 분자 오류 수정\n- REDV 펩타이드: Endothelial cell 부착, SMC 억제. HUVEC/SMC 동시 배양 진행\n- PCR 실험 400만원 승인\n- 교수 채용 지원: 성균관대·서울과기대·동국대·숭실대·서울대 광교\n- LM Paste 저널 타겟 Nature Electronics 절충\n- Cryo-FIB 약 50만원, 60μm 마이크로 LED 어레이\n- PEDOT:PSS 어레이: 포토리소그래피 도입, SiO2 기판, PVA/SiO2 sacrificial layer\n- Au 증착: SiO2 끈적한 특성 활용, adhesion layer 없이 가능성 → 테이프 필링 검증\n- 귀금속(Au): 과제 제안서 사전 명시 없으면 구매 불가 (제도 변경)\n- AutoPCB V3 제안: 칩/기능만 주고 AI 자유롭게 I/O 연결, 미사용 핀 플로팅\n- 부품 배치 룰 3-4개: MCU 가운데 방사형 / 커넥터 바깥 / 비슷한 기능 근처\n- Ground Pour 클릭 하나로, Flexible은 그리드만 → Stretchable + LM 조합 2년 후 장기 과제\n\n## 액션 아이템\n- XPS 데이터 재분석, 타임포인트별 세포 사진 메인 데이터화\n- 크로스 컷 제거, 메인 데이터 전면 배치\n- 교수 채용 지원서·추천서 링크\n- 스토리라인+메커니즘 노션 작성, Cryo-FIB 실험\n- 포토리소그래피 어레이 제작, 테이프 필링 테스트\n- 핀 맵핑 테이블 프롬프트 작성·잔디 공유\n- 부품 배치 룰북 작성 (3-4개)\n\n## 관련\n[[LM Team]], [[Packaging Team]], [[PDRN 스텐트 코팅]], [[LM Paste 논문]], [[PEDOT:PSS 시냅틱 트랜지스터]], [[AutoPCB]]",
+      "tags": ["meeting", "Multi-team", "2026-04"],
+      "sources": [{ "type": "meeting", "id": "336f9f17-6cf4-80ee-9e6f-c59a4dabecfe", "date": "2026-04-01" }]
+    },
+    {
+      "title": "4/1 AutoPCB 알고리즘 개발",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-04-01 / **유형**: 개별 / **참여**: [[장한빛]]\n\n## 안건\n- PCB 자동화 알고리즘 V1/V2/V3 분석 및 개선\n- 핀 연결 오류 근본 원인\n- 중간 산출물 정의 및 모니터링\n- 부품 배치 룰북\n- GUI 개선\n- Ground Pour\n\n## 핵심 결정사항\n- V1 규칙 강화 → 복잡도·오류 상승\n- V2 LLM 레이어로 I/O 자유도 → 좌표 틀어짐 수정, 플로팅 조건 추가\n- V3 방향: 칩/기능만 주고 AI 자유롭게 I/O 연결, 미사용 핀 플로팅. JLCPCB 제한은 유지\n- 핀 연결 오류: 같은 기능 핀(3,4,5,6) 중 다른 번호 + 완전 다른 핀(12번) 혼재. AI가 논문 그림 핀 번호 못 읽음 + 플로팅 핀을 계속 연결(hallucination)\n- 중간 산출물(핀 맵핑 테이블): 데이터시트 핀 1~N + 논문 맵핑, 프롬프트 작성 후 잔디 공유\n- 부품 배치 룰 3-4개: MCU 가운데(방사형) / 커넥터 바깥 / 비슷한 기능 근처\n- 스케매틱→PCB: 전기 연결 검사 후 버튼 하나로 레이아웃, 기본 싱글 레이어\n- 하드웨어 검증: 브레드보드+LED로 기본 동작, 핀별 전기 신호 확인\n- GUI: KiCad 대신 웹 기반 GUI 검토 (회로에 대한 두려움이 진입 장벽)\n- Ground Pour: Flexible은 그리드만 가능 → Stretchable + LM 조합 2년 후 장기 과제 (온디바이스 AI용)\n\n## 액션 아이템\n- 핀 맵핑 테이블 생성 프롬프트 작성 및 잔디 공유\n- 중간 산출물 리스트 정리\n- 트랙 B 외 추가 트랙 데이터 확인\n- 부품 배치 룰북 작성 (3-4개)\n\n## 관련\n[[AutoPCB]], [[Stretchable PCB]], [[LM Team]], [[Packaging Team]]",
+      "tags": ["meeting", "AutoPCB", "2026-04"],
+      "sources": [{ "type": "meeting", "id": "336f9f17-6cf4-81e5-8778-c44ba71b8c6f", "date": "2026-04-01" }]
+    },
+    {
+      "title": "4/1 PEDOT:PSS 시냅틱 트랜지스터",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-04-01 / **유형**: 개별 / **참여**: [[박시연]]\n\n## 안건\n- 강준우 교수 협업 방향\n- 포토리소그래피 공정 어레이 제작\n- SiO2 기판 Au 증착 테스트\n- 귀금속(Au) 구매 및 예산\n\n## 핵심 결정사항\n- 강준우 교수 협업: 항암 환자 또는 일반 환자 대상 적용 검토\n- 현재 시뮬레이션 단계 → 실제 측정 진행 필요\n- 하이 임팩트 팩터 논문 위해 어레이 제작 필수\n- 포토리소그래피 공정 도입, SiO2 기판 사용, PR 패턴 테스트 완료\n- PVA와 SiO2를 Sacrificial layer로 활용\n- Au 증착: 금속 자체는 잘 됨, SiO2 끈적한 특성 활용으로 adhesion layer 없이 가능성 (Corning glass Au electrode 논문 참고)\n- 일반적으로 Ti/Au 사용, 테이프 필링 테스트로 접착력 검증 필요\n- Au는 과제 제안서 사전 명시 없으면 구매 불가 (제도 변경) → 식각 전극 제작용으로 협업 검토\n\n## 액션 아이템\n- 포토리소그래피 어레이 제작\n- SiO2 재료 증착 안정성 테스트 (테이프 필링)\n- 이전 Au 증착 경험 확인\n- 식각 전극 제작 통합 협업 검토\n\n## 관련\n[[Packaging Team]], [[PEDOT:PSS 시냅틱 트랜지스터]], [[강준우 협업]]",
+      "tags": ["meeting", "Packaging Team", "2026-04"],
+      "sources": [{ "type": "meeting", "id": "336f9f17-6cf4-8119-a525-f26d8aff2414", "date": "2026-04-01" }]
+    },
+    {
+      "title": "4/1 아산병원 스텐트 코팅 연구 (PDRN)",
+      "category": "meeting_thread",
+      "content": "**날짜**: 2026-04-01 / **유형**: 개별 / **참여**: [[김태영]], [[김찬수]]\n\n## 안건\n- PDRN/SPX 스텐트 코팅 Figure 데이터 정리\n- MD 시뮬레이션 진행 상황\n- 세포 실험 데이터 및 메커니즘 분석\n- 논문 구성 방향\n- 교수 채용 지원\n\n## 핵심 결정사항\n- Figure 2 정리 완료 (Fabrication schematic, XPS, Contact Angle, Plasma protein adhesion)\n- 오토클레이브/EO gas/감마선 멸균 안정성, 메커니컬 안정성 확보\n- A1 XPS 데이터 지저분 → 재분석 의뢰 중\n- MD 시뮬레이션 2-3주 내 산출, 이전 ATPS 분자 오류 수정\n- REDV 펩타이드: Endothelial cell 부착, SMC 부착 억제\n- Endothelial cell 증식 시 Angiokines 생성 → SMC 증식 억제\n- HUVEC/SMC 동시 배양 진행, FOX/AKT/ERK 분석 완료, ELISA 구매/분석 완료\n- 논문 구성: 메인 스토리라인 강화, 크로스 컷 그림 제거, 메인 데이터 전면 배치\n- PCR 실험 400만원 승인 (Primary cell 비용)\n- 교수 채용 지원: 성균관대(식품생명공학과 바이오센서), 서울과기대(바이오메디컬과), 동국대, 숭실대, 서울대 광교 (바이오메디컬 디바이스/센서). 세종대 영구중점 비정년제는 제외\n\n## 액션 아이템\n- XPS 데이터 재분석 의뢰\n- 타임포인트별 세포 사진 분석 (메인 데이터)\n- MD 시뮬레이션 2-3주 내 완료\n- 크로스 컷 제거, 메인 데이터 전면 배치\n- PCR 실험 지원 (400만원)\n- 교수 추천서 링크 전달\n- Angiogenesis 정량 키트 구매 또는 전문팀 의뢰\n\n## 관련\n[[LM Team]], [[PDRN 스텐트 코팅]], [[아산병원]]",
+      "tags": ["meeting", "LM Team", "2026-04"],
+      "sources": [{ "type": "meeting", "id": "336f9f17-6cf4-8123-9259-c7518aa7a7a5", "date": "2026-04-01" }]
+    }
+  ],
+  "skipped": [
+    { "title": "새 페이지 (2026-03-31 회의)", "reason": "empty-page-audio-only" },
+    { "title": "주간 상태 보고 @2026-03-21", "reason": "not-bliss-lab" },
+    { "title": "주간 상태 보고 @2026-03-14", "reason": "not-bliss-lab" },
+    { "title": "주간 상태 보고 @2026-04-15", "reason": "not-bliss-lab" },
+    { "title": "주간 상태 보고 @2026년 2월 28일", "reason": "not-bliss-lab" },
+    { "title": "주간 상태 보고 @2026년 3월 7일", "reason": "not-bliss-lab" },
+    { "title": "주간 프로젝트 업데이트 @2026년 2월 21일", "reason": "not-bliss-lab" },
+    { "title": "주간 프로젝트 업데이트 @2026년 2월 14일", "reason": "not-bliss-lab" },
+    { "title": "주간 프로젝트 업데이트 @2026년 2월 12일", "reason": "not-bliss-lab" },
+    { "title": "주간 프로젝트 업데이트 @2026년 2월 11일", "reason": "not-bliss-lab" },
+    { "title": "주간 프로젝트 업데이트 @2026년 2월 15일", "reason": "not-bliss-lab" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "children": [
+    {"id": "c2eeadfd525c4971a6cc849bdb8563fb", "title": "📝 BLISS Lab 미팅 노트", "type": "database"},
+    {"id": "a3de6ce65a434b7f9f4b30a286fae5a6", "title": "📅 휴가 관리", "type": "database"},
+    {"id": "316f9f176cf481e48238c3b2792cdb6e", "title": "BLISS 인턴 안내 자료", "type": "page"},
+    {"id": "311f9f176cf48086b90cf665a712a928", "title": "연구실 개인별 관리", "type": "page"},
+    {"id": "37e9d1e2155a4f1a8a17a12f271f8c7d", "title": "🔬 BLISS Lab 프로젝트", "type": "database"},
+    {"id": "495c03f911704fa09961f49bb5c8635c", "title": "🤖 연구실 FAQ", "type": "database"},
+    {"id": "32df9f176cf481eaa587e278f6489ebc", "title": "🤖 BLISS Lab 챗봇 v3.0 기술 문서", "type": "page"},
+    {"id": "341f9f176cf481b28aa9c16013fe6d01", "title": "BLISS Lab AI 챗봇 (blisslab-ai) — 사용 가이드", "type": "page"},
+    {"id": "341f9f176cf480f0b2b5f5ef771c089d", "title": "챗봇 질문 관리", "type": "page"}
+  ]
+}

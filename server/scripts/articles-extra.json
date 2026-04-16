@@ -1,0 +1,32 @@
+{
+  "articles": [
+    {
+      "title": "LM Team",
+      "category": "collaboration",
+      "content": "**팀 성격**: 액체금속(Liquid Metal) 기반 스트레처블 전자소자 개발 팀 — [[육근영]]이 대부분 프로젝트 공저로 hub 역할\n\n## 활동 프로젝트 (11)\n- [[LM Paste]] — 4. 그림/스토리, NRL, Nature Electronics 타겟\n- [[LM Paste for HBM]] — HBM 응용 분기\n- [[PDA-LM Sintering-Free Spray Ink]] — 2. 실험중\n- [[PDA-LM]] — 핵심 PDA 계열\n- [[LM Spray]] — spray 공정 파생\n- [[Stretchable LM Microstrip — Strain-Dependent RF Predictive Model]] — RF 분야\n- [[LM/Organic Hybrid Multilayer Encapsulation]] — 패키징 응용\n- [[EMI Shielding]] — LM 기반 EMI 차폐\n- [[Breathable Electronics]] — 통기성 LM 구조\n- [[뇌선도/BRL 신경자극기]] — 신경 자극 응용\n- [[AutoPCB]] — LM 회로 자동화 (cross-project)\n\n## 핵심 미팅\n- [[3/18 LM Team 미팅]]: LM Paste 스토리라인 + AutoPCB 피드백 + Wireless Power Transfer\n- [[4/1 LM Paste 논문 피규어 검토]]: Nature Electronics 방향 확정\n\n## 공통 기술 과제\n- Ga₂O₃ in-situ 형성 메커니즘 정량화 (amorphous vs crystalline)\n- LM-기판 계면 화학 분석 (Cryo-FIB, C-AFM 등 고난도 측정)\n- 패터닝 해상도 (스크린 30μm 한계 극복)\n- Microbump 솔더링 도입\n\n## 인력 구성\n- [[육근영]]: 팀 hub — LM Paste, PDA-LM, LM Microstrip 등 다수 공저\n- [[홍승완]]: Stretchable LED Array 서브 주도\n- [[김미도]]: LM Microstrip 주도 + EXG Bio-sensing Pill 서브\n- [[김찬수]]: PDA-LM 주도\n- [[장한빛]]: LM/Organic Encapsulation 주도\n\n## 외부 협업\n- 아산병원 스텐트 프로젝트\n- PDIA 협업 (4/13 시연 미팅)\n\n## 관련\n- [[LM Paste]] 팀 대표 페이퍼\n- [[Packaging Team]]과 LM/유기 패키징에서 연계 가능\n",
+      "tags": ["team", "liquid-metal", "NRL"],
+      "sources": [{"type": "aggregation", "id": "team-lm-full", "date": "2026-04-15"}]
+    },
+    {
+      "title": "Hydrogel Team",
+      "category": "collaboration",
+      "content": "**팀 성격**: 하이드로겔 기반 바이오메디컬 + 웨어러블 응용 팀 — 가장 다양한 응용 분야 커버\n\n## 활동 프로젝트 (16)\n### 바이오메디컬\n- [[Clean View (임상)]] — 내시경 코팅제, ACS AMI peer review\n- [[Anti-drying Hydrogel (인조피부)]]\n- [[Hemostatic Hydrogel (Nat. Com.)]]\n- [[Bentonite Ionic Hydrogel for Wound ES]] — 창상 전기자극\n- [[Bile Duct 스텐트]] — 아산병원 협업\n- [[췌장 디바이스]] — 아산병원 협업\n- [[Burns & Trauma Review]] — 리뷰\n- [[Robot-Arm Bioprinting Review]] — 리뷰\n\n### 웨어러블/센서\n- [[Hygroscopic Hydrogel-based Wearable TED]] — 국가아젠다 + NRL\n- [[Plant Electrophysiology — Leaf-Conformal Bio-Glue Multilayer Electrode]] — 신규 탐색\n- [[식물 전극]]\n- [[MXene Hydrogel]] — 리칭 문제 검증 중\n- [[Zwitterion Hydrogel]] — UV 경화 최적화\n\n### 기타\n- [[Iontophoretic Drug Delivery]]\n- [[Encapsulation (Encap)]]\n- [[UV-Curable Self-Healing PDMS Elastomer]]\n\n## 핵심 미팅\n- [[3/18 Hydrogel Team 미팅]]: 식물 센서 + Zwitterion UV 최적화 + MXene 리칭\n\n## 진행 중 외부 페이퍼\n- Salting-out Hydrogel (Adv. Healthc. Mater.) — Peer review 중\n- 내시경 코팅제 (ACS AMI) — Peer review 진입 (2026-03-02)\n\n## 공통 기술 과제\n- Zwitterion UV 경화 (5cm/20-50mW, 80+는 손상)\n- PDMS 원료 국내 수급 문제 (미국/중국 수입 100만원+)\n- 식물 컨포멀 부착 (잎 솜털, 환경 내구성)\n- 드럭 리칭 검증 프로토콜\n\n## 인력 구성\n- [[함혜인]], [[이유림]] — TED + ACA 페어\n- [[김수아]], [[조예진]] — Bioprinting Review\n- [[손가영]], [[박지민]] — Plant Electrophysiology\n\n## 외부 협업\n- 아산병원 (나무 소재, C-line 병리, 스텐트, 췌장)\n- 김세근 박사 (AI 활용)\n- 한양대 (인조피부 하이드로겔 — 글로벌 R&D 과제)\n\n## 관련\n- [[글로벌 협력 R&D — 스마트 LED 광치료 패치 (중기부)]] 인조피부 라인업 연계\n- [[Packaging Team]] 광패터닝 하이드로겔 연계\n",
+      "tags": ["team", "hydrogel", "biomedical", "bioprinting"],
+      "sources": [{"type": "aggregation", "id": "team-hydrogel-full", "date": "2026-04-15"}]
+    },
+    {
+      "title": "Packaging Team",
+      "category": "collaboration",
+      "content": "**팀 성격**: 전자소자 패키징 / 접착제 / 광패터닝 소재 개발 팀\n\n## 활동 프로젝트 (3)\n- [[Photo-patternable Hydrogel ACA]] — Adv. Funct. Mater. 1순위, Nature Electronics 도전\n- [[ACF (Anisotropic Conductive Film)]] — 이방성 전도 필름\n- [[Photo-adhesive]] — 광경화 접착제\n\n## 협업 라인\n- [[이유림]], [[함혜인]] 페어 공동 작업\n- [[Hydrogel Team]] ([[Hygroscopic Hydrogel-based Wearable TED]])과 동일 페어 → 인력 시너지\n\n## 기술 포커스\n- 광패터닝 하이드로겔 기반 ACA — 등방성/비등방성 전도 제어\n- 미세 회로 본딩 (chip bonding, ECG array 등)\n- 소재 내구성 + 재현성\n\n## 향후 확장\n- [[LM Team]] [[LM/Organic Hybrid Multilayer Encapsulation]]과 결합 시 패키징 통합 라인 형성 가능\n- 브리지 프로젝트: [[LM Paste]] HBM 응용\n",
+      "tags": ["team", "packaging", "adhesive", "photo-patternable"],
+      "sources": [{"type": "aggregation", "id": "team-packaging-full", "date": "2026-04-15"}]
+    },
+    {
+      "title": "연구동향 — 2026년 4월 1주차 종합",
+      "category": "research_trend",
+      "content": "**기간**: 2026-04-06 ~ 2026-04-12 / **수집**: 14개 주요 저널 RSS / **편수**: 900편 → 34편 선별\n\n## 5대 테마 모니터링\n1. 하이드로겔 (21편, 이번 주 최다)\n2. Neuromorphic Device (7편)\n3. Liquid Metal (6편)\n4. Antifouling Coating (1편)\n5. 이종소재 접착제\n\n## ★★★ 직접 관련 (최우선)\n**On-Demand Operando Embolization by Rapid Sonodynamic Gelation of Liquid Metal-Embedded Hydrogels** (Adv. Mater.)\n- LM + 하이드로겔 멀티테마 교차 — 우리 [[LM Team]] + [[Hydrogel Team]] cross-team 통합 응용 가능성 시사\n- 종양 TAE 색전술 응용\n\n## Liquid Metal 주요 논문 (우리 관련 강함)\n- **Programmable Milli-Microfluidics via Oxide-Mediated Electrowetting** (Adv. Mater., ★★) — Ga₂O₃ 산화막 활용, [[LM Paste]] amorphous oxide 메커니즘과 직접 비교 대상\n- **Liquid Metal Microrobots for Magnetically Guided Transvascular Navigation** (Adv. Mater., ★★) — Ga-In + Fe NPs\n- **Lignocellulosic-Encapsulated Liquid Metal** (Adv. Funct. Mater., ★★) — 친환경 thermal interface → [[LM/Organic Hybrid Multilayer Encapsulation]]과 비교 대상\n- **Implantable Epiretinal Device** (Nat. Electron., ★★) — LM interconnect\n\n## 하이드로겔 주요 논문 (우리 관련 강함)\n- **Tissue-Conforming Organoselenium Hydrogel for Diabetic Wound Healing** (Adv. Mater., ★★) — AGE-RAGE 억제, microphase 가교 — [[글로벌 협력 R&D — 스마트 LED 광치료 패치 (중기부)]] 당뇨 창상 응용과 일치\n- **Tough and Rapidly Relaxing Hydrogel** (Adv. Mater., ★★) — programmable 가교 동역학 → [[Hygroscopic Hydrogel-based Wearable TED]] 흡습 사이클 응용 가능\n- **Mechanical Interlocking Solid-Solid Bicontinuous** (Adv. Funct. Mater., ★★) → [[Photo-patternable Hydrogel ACA]] 광패터닝 + bicontinuous 결합 검토\n\n## 전략 시사점\n- LM 분야: oxide-mediated 메커니즘이 트렌드 → [[LM Paste]] amorphous Ga₂O₃ **차별화 포인트 강조 필요** (vs crystalline oxide)\n- 하이드로겔 분야: 창상 치유 + 기능성 전자 통합이 대세 → BLISS Lab 라인업([[Plant Electrophysiology — Leaf-Conformal Bio-Glue Multilayer Electrode]], TED, ACA, Bioprinting) 트렌드 부합\n- 멀티테마 교차 논문 증가 → [[LM Team]]-[[Hydrogel Team]] 공동 응용 기회 탐색\n\n## 모니터링 저널 (14)\nNature, Science, Nat. Mater., Nat. Nanotechnol., Nat. Biomed. Eng., Nat. Electron., Sci. Adv., Sci. Robot., Adv. Mater., Adv. Funct. Mater., Nat. Sensors, Nat. Chem. Eng., ACS Nano, ACS Sensors\n",
+      "tags": ["research-trend", "summary", "2026-04", "paper-monitoring"],
+      "sources": [{"type": "paper_alert", "id": "trend-summary-2026-04w1-full", "date": "2026-04-12"}]
+    }
+  ]
+}

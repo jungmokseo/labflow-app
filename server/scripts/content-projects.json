@@ -1,0 +1,634 @@
+{
+  "projects": [
+    {
+      "id": "328f9f17-6cf4-814a-9852-ccd59466b1ad",
+      "title": "PEDOT:PSS Synaptic Transistor",
+      "props": {
+        "상태": "3. 결과논의/가이드",
+        "담당자": ["박시연"],
+        "팀": "기타",
+        "관련 과제": ["RISE-Y"],
+        "타겟 저널": "ACS Nano / Advanced Functional Materials",
+        "유형": "연구논문",
+        "프로젝트명": "PEDOT:PSS Synaptic Transistor",
+        "완료?": "__NO__",
+        "메모": "[3/29] 경쟁논문 4편 SI 분석 완료. 실험 벤치마크 레퍼런스 정리. [3/27] 워크시트 온보딩+딥리서치 완료. AFM 우선 타겟. 인터페이스 엔지니어링 메커니즘 증거 확보가 핵심 과제."
+      },
+      "body": "# Feedback (03/27) — 워크시트 온보딩 심층분석\n\n전체적으로 연구 주제(신축성 시냅스 트랜지스터)의 방향은 좋음. 재료 시스템(PEDOT:PSS + PAAm-gel IPN)과 공정(전체 용액공정, UV 가교)이 잘 설계되어 있음. 핵심 셀링포인트가 경쟁 논문 대비 불명확하고, 인터페이스 엔지니어링의 메커니즘 증거가 부족한 점이 가장 큰 약점. 50% strain은 Huang(Nat.Commun.2025)·Zhang(Nat.Electron.2024)이 이미 달성한 수준. 차별점을 '인터페이스 엔지니어링으로 strain 하에서 시냅스 특성 보존하는 메커니즘'으로 재프레이밍 필요.\n\n## 우선순위 액션 아이템\n1. Raman spectroscopy (IPN 전후 PEDOT:PSS) — Fig 2\n2. XPS analysis (인터페이스 도핑 상태) — Fig 2\n3. PPF/STM→LTM under strain (0% vs 50%) — Fig 3\n4. Transfer curve under strain 완료\n5. EPSC/PSC 체계적 데이터 확보\n6. Array uniformity 통계 정리\n7. Fig 5 응용 방향 결정 (reservoir vs wearable EMG/ECG)\n\n교수 코멘트(4/15): Confounded variables 문제 있음. XPS 조건 A/B/C/D 4개로 확장 필요. GCIB 또는 ARXPS+TOF-SIMS 조합 권장. LTP/LTD 3-parameter sweep 권장. 50% strain × 1000 cycles 이중 전략. 95-96% MNIST 현실적. On-body EMG/ECG 실측 필요.\n\n## Figure Set\n- Fig 1: Concept schematic (IPN + device + application preview)\n- Fig 2 main 6패널: IPN schematic, TOF-SIMS depth, Raman, XPS S 2p, AFM phase, EIS Nyquist\n- Fig 3: EPSC, PPF, LTP/LTD, STM→LTM, PPF vs strain, asymmetry summary\n- Fig 4: 5×5 array, Vth/gm/Ion/Ioff 분포, MNIST 신경망\n- Fig 5: ECG arrhythmia 또는 EMG gesture + reservoir computing\n\n## 경쟁논문\n- Huang NC 2025: all-gel OECT, 50% strain, gm 86.4 mS, 10K cycles\n- AllPolymer ACS Mat. Lett. 2025: 200% strain, MNIST 90.8%\n- Zhou ACS Nano 2025: CNT, 40% strain, On/off 10⁶\n- Zhang Nat.Electron. 2024: PEDOT:PSS >50% strain, closed-loop",
+      "bodyLength": 41000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-813c-9f22-df546a0b63c2",
+      "title": "LM Paste",
+      "props": {
+        "상태": "4. 그림/스토리",
+        "담당자": ["홍승완", "육근영"],
+        "팀": "LM Team",
+        "관련 과제": ["NRL"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "LM Paste",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "[3/22] In-situ XRD/TEM SAED 분석 완료, micro LED 시연, fig3-6 정리중, 레올로지 예정"
+      },
+      "body": "## 현재 액션 아이템\n- 계면 에너지/메커니즘 공부 및 데이터 정리\n- 비정질 갈륨옥사이드 In-situ XRD 진행\n- Fig4-6 데이터 정리(w/미도,승완)\n- 4x4 LED 어레이 마무리 단계\n- CPU 분해 및 조립 실험 진행\n- 투명 PDMS 기판 사진 촬영용 via 최적화 (EXG Bio-sensing Pill)\n- 3.2mm×2.5mm 소형 EXG 설계 완료\n- EMG 신호 분석 및 제스처 인식\n\n## 서브 프로젝트\n- Stretchable LED Array (홍승완): Chip bonding 개선, 4x4 stretching 성공, CPU 분해/조립\n- EXG Bio-sensing Pill (김미도, 육근영): 투명 PDMS via 최적화, 소형 센서(3.2×2.5mm) 설계\n\n## 타임라인\n- 03/18 미팅: 스토리라인 나노파티클 네트워크 포커스, 레올로지 키네틱 핵심, oscillatory shear 회복실험 필요, C-AFM 스무딩 후 활용\n- 2026.02: Figure set 재정리, 4x4 stretching 성공, LM 기반 ECG 회로 제작\n- 2025.12-2026.01: Microbump 솔더링, EMI 쉴딩 다층구조, 4x4 다층 LED 어레이 성공\n- 2025.10-11: PPG/EMG/ECG 앱 개발, 4x4 LED 어레이 초기 제작\n\n## 마일스톤: Figure 2~6 정리, 논문 마무리, Micro LED 시연, 4x4 재현성 고도화, CPU 통합 시스템, 소형 EXG 센서\n\n## 관련 child pages\n- LM Paste 논문 전략 Q&A (2026.03.23)\n- LM Paste 핵심 키워드 & 스토리라인 (2026.03.23)\n- LM Thermal Paste 워크시트 분석 + 딥리서치 (2026.04.06)",
+      "bodyLength": 2800,
+      "childPages": [
+        {
+          "id": "32cf9f17-6cf4-81e9-b630-f213252f420a",
+          "title": "LM Paste 논문 전략 — 학생 Q&A + 교수 코멘트 (2026.03.23)",
+          "body": "pmLMP 논문에서 했던 것처럼 Nature Materials급 끌어올리기. Adhesion 메커니즘 5가지 기판 분류와 amorphous vs crystalline 비교 논리가 잘 짜여져 있음. 데이터 정량화 미비와 논리 뒷받침 실험 빠진 부분 보완 필요.\n\n## 즉시 조치 사항 (우선순위)\n1. Kinetics 데이터 재측정 (시간 vs oxide content) — Fig.2 backbone\n2. Rheology 측정 세트 (amplitude/frequency sweep, thixotropy)\n3. 기판별 adhesion force 정량 측정\n4. 단순 파티클 혼합 대조군 전도도 측정 (in situ 우위 증명)\n5. C-AFM 국소 전류 매핑\n\n## 주요 주제\n- Ga₂O₃ 나노입자 생성 메커니즘: 초음파 캐비테이션으로 산화막 파괴 → 신선 Ga 표면 산화 → amorphous Ga₂O₃ NP\n- Biphasic a-Ga₂O₃/EGaIn: 연속상(EGaIn) + 분산상(a-Ga₂O₃ NP network)\n- Triple adhesion: Skeleton + Mechanical Interlocking + Chemical Bonding\n- 5가지 기판 분류: 친수성/거침 → 소수성/매끈(PDMS) → 소수성/거침(sanded PI) → 친수성/매끈 → 소수성/매끈(PTFE)\n- Amorphous 장점: grain boundary 취성 없음, 표면 -OH 결함 풍부, stretching 유리\n- 셀링포인트: Option A + biphasic amorphous a-Ga₂O₃/EGaIn — 초음파 one-step in situ 생성",
+          "bodyLength": 18000
+        },
+        {
+          "id": "32df9f17-6cf4-8176-ad6c-d3677e7465d5",
+          "title": "🎯 LM Paste 논문 전략 — 핵심 키워드 & 스토리라인 (2026.03.23)",
+          "body": "## Title Keyword Chain\nCavitation-Induced In Situ Oxidation → Amorphous Oxide Percolation → Biphasic Rheological Transformation → Universal Self-Adhesion + Extreme-Strain Tolerance\n\n## 핵심 용어\n1. Cavitation-Induced In Situ Oxidation\n2. Amorphous Ga₂O₃ Nanoparticles (a-Ga₂O₃ NP)\n3. Rheological Percolation Threshold\n4. Biphasic a-Ga₂O₃/EGaIn Composite\n5. Triple Adhesion Mechanism\n6. Percolation-Enabled Extreme Stretchability (1000%)\n7. One-Step In Situ Processing\n\n## Mechanistic Sequence\n- Stage 1 (0-1 min): Oxide Shell Disruption\n- Stage 2 (1-3 min): In Situ Amorphous Nanoparticle Genesis\n- Stage 3 (3-5 min): Percolation Threshold, Rheological Transition\n- Stage 4 (5-10+ min): Biphasic Composite Maturation\n\n## Selling Points\n1. In Situ Amorphous Oxide Formation\n2. Amorphous vs Crystalline 차별성\n3. Rheological Percolation Control\n4. Universal Substrate Adhesion (Glass, PDMS, PI, Paper, Fabric)\n5. Extreme Stretchability (1000%)\n6. Long-term Stability (2+ years)\n7. One-Step Processing\n\n## Nature Electronics 전환 전략\nNat Mat → Nat Elec: '소재 발견' → '신축성 전자소자 제작 플랫폼'\n- Multi-modal printable platform (inkjet/stencil/DIW/dispensing)\n- Substrate-universal circuit fabrication\n- Strain-invariant system integration (sensing + actuation + communication)\n- 2026 Robotics = Technology of the Year → 소프트 로봇 통합 데모 킬러\n\n## 타이틀 후보\n- 'A Universal Liquid Metal Paste for Substrate-Agnostic Stretchable Circuit Fabrication'\n- 'Printable Liquid Metal Paste with Amorphous Oxide Percolation for Integrated Stretchable Electronics and Soft Robotics'\n\n## 추가 필요 실험 (Nat Elec)\n- Multi-component 회로 통합 (LED + 저항 + 커패시터)\n- Multi-channel sensor array (strain/temp/pressure)\n- 소프트 로봇 통합 데모\n- 무선 기능 (NFC/BLE 안테나)\n- Fabric washable 전자소자\n- 대면적/대량 제조",
+          "bodyLength": 14000
+        },
+        {
+          "id": "33af9f17-6cf4-81fa-a4ee-cfe7b3a0dab1",
+          "title": "📝 LM Thermal Paste 워크시트 분석 + 딥리서치 온보딩 (2026.04.06)",
+          "body": "## 스토리라인\n'EGaIn sonication → Ga₂O₃ 나노입자 생성 → 점도 증가 → leakage-free paste → TIM 응용'. 논리 장점 있으나 Figure Plan 없음, 경쟁 논문 3편에 불과함, 메커니즘 규명 핵심.\n\n## 즉시 조치\n1. Figure Plan 작성 (Fig.1-6)\n2. Rheology 체계적 측정 (viscosity vs shear rate, sonication time, oscillatory)\n3. Ga₂O₃ 나노입자 TEM/SEM, XRD (비정질 vs 결정질)\n4. 경쟁 논문 8-10편 확대 (Cheng Nat.Comm.2025, Huang RSC 2020, Jiang ACS AMI 2025 + NC 2026 H-bonding, Zhang Adv.Mater.Interfaces 2025 Ga/Cu IMC, Luo Rare Metals 2024 등)\n5. 타겟 저널: ACS AMI (1순위), AFM (상향), Nat.Comm. (최상향)\n\n## 목표 수치\n- Thermal conductivity: ≥25 W/m·K (Pure EGaIn: 25-28, Kryonaut: 12.5)\n- Thermal resistance: <0.2 mm²K/W\n- BLT: 10-50 μm\n- Leakage test: 48h 0%\n- Thermal cycling: 300 cycle 후 <20% 저하\n- Viscosity: 80-150 mPa·s (RT)\n\n## 이론적 토대\n- Effective Medium Theory: Oxide는 k 높이는 게 아니라 점도 높이는 역할\n- R_total = R_bulk + 2×R_contact\n- Ga/Cu reactive wetting, CuGa₂ IMC 형성\n- Ga의 Al 부식 (LME) — Cu heatsink 사용 권장\n- Oxide shell 이중 구조 (Ga³⁺ Ga₂O₃ 외부 / Ga¹⁺ Ga₂O 중간 / EGaIn 내부)\n\n## Figure Plan 제안\n- Fig.1: Concept & Fabrication\n- Fig.2: Material Characterization (TEM/XRD/SEM-EDS/입자크기)\n- Fig.3: Rheology (viscosity vs shear rate/sonication time, oscillatory, recovery)\n- Fig.4: Thermal Performance (k, R_contact, BLT, CPU 테스트)\n- Fig.5: Leakage Prevention (delamination gap, 수직 기판 leakage, vibration)\n- Fig.6: Long-term Reliability (thermal cycling 300+, aging, viscosity 변화)",
+          "bodyLength": 13500
+        }
+      ]
+    },
+    {
+      "id": "328f9f17-6cf4-8199-9119-c2b3c66d5b29",
+      "title": "ACF (Anisotropic Conductive Film)",
+      "props": {
+        "상태": "5. 초안작성",
+        "담당자": ["조예진", "이유림"],
+        "팀": "Packaging Team",
+        "관련 과제": ["글로벌혁신인재"],
+        "타겟 저널": "Nature Electronics",
+        "유형": "연구논문",
+        "프로젝트명": "ACF (Anisotropic Conductive Film)",
+        "우선순위": "🔴 긴급",
+        "완료?": "__NO__",
+        "메모": "[3/27] 워크시트 심층 분석 + Deep Research 완료. 50mΩ contact resistance 최강점, PVA/TA ACF 최초 도입 리프레이밍, 64-ch interconnect 혁신 강조, Fig 5-6 없이 NE 투고 불가, 온습도/장기안정성 SI 추가 필요."
+      },
+      "body": "## Feedback (03/27)\n워크시트 완성도 높음. Fig 1-4까지 재료/기계 특성 데이터 탄탄. 셀링포인트 좋음. Nature Electronics급 되려면 in-vivo 뇌파 계측 데이터(Fig 5-6) 절대 필요. 박막형 전극과 낮은 통전 성공률이 핵심 병목. 2026 POSTECH Choi AFM UV-crosslinkable S-ACF 후속 논문 추가 대응 필요.\n\n## 즉시 조치 (우선순위)\n1. 박막형 전극 통전 성공률 개선 (Fig 3h/5/6 블로킹)\n2. In-vivo 뇌파 계측 (Fig 5) — 64-ch 마취동물\n3. 64-ch 고해상도 brain mapping (Fig 6) — Close-loop BCI\n4. MD simulation 완료 (Fig 2a-c)\n5. Choi 2026 AFM 논문 분석 및 차별점 보강\n\n## 주요 셀링포인트\n- H-ACF 크랙 네트워크 구조 → 이방성 전도 + 200%+ 신축성 + 50μm 피치 고집적\n- 범용(universal) + 전처리 불필요(pretreatment-free)\n- Contact R 50mΩ @ 500×500μm² (Jeong S-ACF 2021 190mΩ 대비 3.8배 우수)\n- 1000-pin 100% yield\n\n## Deep Research 주요 발견\n- Zhuang 2024 Nat.Elec.: breathable+1500% strain+VIA 이미 달성 → 차별화 전면 재검토\n- Choi AFM 2026: UV-crosslinkable S-ACF → SEBS 한정, neural/in-vivo 없음 → 우리 우위\n- O'Neill Sci.Adv. 2024: dynamic covalent 1500% stretchability\n- 채널 수 경쟁 탈피 → interconnect 혁신 프레이밍\n\n## Figure Set\n- Fig 1: H-ACF 개요 (BCI 시스템 패널, radar chart 검토)\n- Fig 2: Material Characterization (MD sim 진행 중, 나머지 완료)\n- Fig 3: 전기적 이방성 (3a-g 완료, 3h 박막 전극 이슈)\n- Fig 4: 신축성 (완료, FEM + SEM + 실험 삼각 검증)\n- Fig 5: In-vivo 뇌파 (미완)\n- Fig 6: 64-ch brain mapping + close-loop BCI (미완)\n\n## SI 필요: 온습도 85°C/85%RH, 37°C PBS 침지, contact R batch-to-batch 재현성",
+      "bodyLength": 22000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-8109-afd6-cb80a6f816d1",
+      "title": "LM Spray",
+      "props": {
+        "상태": "8. Under Review",
+        "담당자": ["김태영", "육근영"],
+        "팀": "LM Team",
+        "타겟 저널": "Nature Communications",
+        "유형": "연구논문",
+        "프로젝트명": "LM Spray",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "[3/22] Nat. Com. manuscript under consideration"
+      },
+      "body": "## 액션 아이템\n- Advanced Materials under review 상태 추적\n- 인트로 및 피겨 3, 4 최종화\n- 리뷰어 피드백 대응 준비\n- LM DOPA 미팅 진행 (김찬수, 육근영)\n- 핵심 메커니즘 증명 추가 실험 (PDA-LM)\n\n## 서브 프로젝트\n- LM DOPA: 진행 관리\n- PDA-LM: 찬수 협업, 핵심 메커니즘 증명 추가 실험, figure outline 작성\n\n## 마일스톤: Advanced Materials 제출 완료, 인트로 Fig 3/4 작성 완료, 리뷰어 피드백 대응 예정",
+      "bodyLength": 900,
+      "childPages": []
+    },
+    {
+      "id": "341f9f17-6cf4-811e-a4e3-c703f3e76d6e",
+      "title": "PDA-LM Sintering-Free Spray Ink",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["김찬수", "육근영"],
+        "팀": "LM Team",
+        "타겟 저널": "ACS Nano / Advanced Functional Materials",
+        "유형": "연구논문",
+        "프로젝트명": "PDA-LM Sintering-Free Spray Ink",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "PmLMP 후속 — dopamine-catechol 기반 산화막 두께 제어로 sintering-free 전도성 구현. 초기 실험 단계."
+      },
+      "body": "## Feedback (04/13)\n스토리라인 전반 잘 구성됨. Adhesion-cohesion vs sintering tradeoff 문제의식 좋음. DA-HCl을 pH 조절 + catechol-Ga³⁺ 배위결합 + PDA 접착의 삼중 기능 프레임워크 논리적. 현재 셀링 포인트 확립 안 됨 — 'antioxidation'은 commoditized, reframing 필요.\n\n## 제안 셀링포인트\n'Molecularly-Designed Shell with Programmable Fracture Threshold' — Dopamine-catechol의 Ga³⁺ 이온 특이적 배위결합을 통해 산화막 성장 kinetics를 분자 수준 제어, PDA 중합 시간 조절로 shell 기계적 파괴 임계력 프로그래밍.\n\n## 즉시 조치\n1. 셀링 포인트 방향 확정\n2. AR-XPS + ICP-MS 실험 설계 (DI-LM/HCl-LM/DA-LM/PDA-LM 4조건 + acetic/citric acid controls)\n3. AFM force-distance curve 프로토콜 확립 (shell fracture threshold 정량화)\n4. 경쟁 논문 확대 (STAR ink Sci.Adv.2025, ligand-bound LMP NC 2025 등 6편)\n5. DFT 계획 구체화 (catechol-Ga³⁺ binding)\n\n## 이론적 토대\n- Ga³⁺ Lewis acid + catechol bidentate chelation (pGa 21-24)\n- Ga₂O₃ Pourbaix diagram: pH 3-10 안정 → pH 5에서 catechol kinetic 억제\n- PDA 중합 두께: 1h ~1-2nm, 4h ~3-5nm, 24h ~20-30nm\n- Hertz contact mechanics: shell fracture threshold 측정\n\n## Figure Set\n- Fig.1: Concept & Schematic\n- Fig.2: Material Characterization (TEM 4조건×n≥30, AR-XPS, ICP-MS 6조건, UV-Vis LMCT)\n- Fig.3: Shell Fracture Mechanics (AFM F-D, C-AFM fracture + current onset, thin shell buckling model fitting)\n- Fig.4: Electro-mechanical (strain-conductivity, 1000+ cycles)\n- Fig.5: Application (biocompatibility, 5종 기판 spray, wearable demo)\n\n## 경쟁 논문\n- STAR Ink Sci.Adv.2025 (2.27×10⁶ S/m)\n- Ligand-Bound LMP NC 2025 (1200% stretch)\n- Qi ACSAMI 2023 (우리와 동일 PDA-LM but 보호 vs 파괴 철학)\n- Self-Assembled Aqueous LM Inks npj 2025",
+      "bodyLength": 28000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-8179-ada0-c7f63d34896d",
+      "title": "EMI Shielding",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["육근영", "김미도"],
+        "팀": "LM Team",
+        "관련 과제": ["NRL"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "EMI Shielding",
+        "완료?": "__NO__",
+        "메모": "[3/22] 민병욱 교수님 연구실 장비 교육 예정(w/미도)"
+      },
+      "body": "## 액션 아이템\n- EMI 쉴딩 다층 구조 설계\n- 민병욱 교수님 연구실 장비 교육\n- VNA 측정용 어댑터 구매 (Stretchable RF Shielding)\n- Stretchable RF 특성 측정\n\n## 서브 프로젝트\n- Stretchable RF Shielding (김미도, 육근영): RF 측정 장비 확보, 신축성 RF 회로 설계\n\n## 타임라인\n- 03/18: 심현지 EMG 싱글채널 3가지 동작 70-80% 분류 성공 (SVM), 4가지 최적화 재진행, 시계 적용 검토\n- 03/15: 유인상 교수 자료 공부, waveguide calibration 서치\n- 2026.02: 신축성 고속 디지털/RF 회로 등가회로 계산 모델링\n- 2025.10: VNA 4포트 캘리브레이션, LM Paste 정성적 쉴딩 효과 확인",
+      "bodyLength": 1000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-810f-9be4-c1fcb8a2ef9d",
+      "title": "Clean View (임상)",
+      "props": {
+        "상태": "3. 결과논의/가이드",
+        "담당자": ["조예진", "손가영"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Clean View (임상)",
+        "완료?": "__NO__",
+        "메모": "[3/22] 임상 20번 완료, AI·VS code 도입 정리 중, IRB 변경 심의 필요(보라매), 김세근 박사 AI 데이터 논의"
+      },
+      "body": "## 액션 아이템\n- 임상 20번 정리 완료\n- 김세근 박사 AI 기반 데이터 논의\n- 내시경 스왑 Endoscope Swab: AI·VS code 도입 정리, 논문 투고 준비\n- 내시경 코팅제 Endoscope Cap: 3/2 제출 완료 (Editor review)\n\n## 서브 프로젝트\n- 내시경 스왑 (손가영, 조예진): 임상 20회 완료, AI 기반 데이터 정리, 논문 투고 준비\n- 내시경 코팅제 (손가영): 논문 제출 완료(3/2), 피어 리뷰 진행 중\n\n## 타임라인\n- 03/18: 4시간 캠 논문 아웃라인 작성 중, 내시경 리드와이어 수정, 김세근 박사 AI 미팅\n- 2026.02: 원고 마무리, 임상 3-5건 정리, 이정승 교수 피드백 반영\n- 2026.01: 17회 달성\n- 2025.11: Fig 4 작성\n- 2025.10: 5회 완수",
+      "bodyLength": 1100,
+      "childPages": []
+    },
+    {
+      "id": "335f9f17-6cf4-81ee-97eb-d4b9c35ff696",
+      "title": "Photo-patternable Hydrogel ACA",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["이유림", "함혜인"],
+        "팀": "Packaging Team",
+        "타겟 저널": "Advanced Functional Materials (1순위) / Nature Electronics (도전)",
+        "유형": "연구논문",
+        "프로젝트명": "Photo-patternable Hydrogel ACA",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "GelMA+TA+LM 기반 photo-patternable hydrogel ACA for site-selective micro-device bonding. 실험 초기 단계."
+      },
+      "body": "## Feedback (04/06)\n학생 04/01 질문 26개 답변 완료. 주요 업데이트:\n\n### 설계 변경\n- TA mix-in → GelMA 패터닝 후 spray 코팅 (라디칼 소거 근본 해결)\n- Cable 구조 통전 확인 완료\n- FPCB 50μm pitch 단락 없음 확인\n- CEED litho 박막 전극 제작 착수\n\n### 재포지셔닝\n- '5s photopatterning': ACF 전체 2min이므로 'patterning step throughput'\n- 'fine-pitch': 'chip-scale site-selective bonding'\n- Figure 7개 → 6개\n\n### 우선 착수\n1. Cross-section SEM + 압력-저항 곡선 (Fig.4)\n2. TA spray parameter 최적화 (Fig.3)\n3. LM vol% 4-in-1 map (시그니처 데이터)\n4. Lap-shear 기판 매트릭스 (1-2주 내)\n5. Hyperelastic FEA with Nastran\n6. CEED photolith 박막 전극 (6월 중순)\n7. Serpentine 전극 dual-track\n\n### 새로운 독립 연구 포인트\n- 박막 vs 전기도금 전극에서 LM squeeze/short mechanism → methodological contribution\n\n## 주요 경쟁 논문\n- Hong Nat.Electron. 2024 (dipping site-selective)\n- Kim npj Flex.Elec. 2025 (LM-PSA, 1.5mΩ @ 64wt%)\n- Choi AFM 2026 (UV-crosslinked azide) — 가장 직접 경쟁자\n- Choi Sci.Adv. 2021 S-ACF (0.2Ω, 70% biaxial) — 벤치마크\n\n## Figure Set\n- Fig.1: Schematic + 3 panel\n- Fig.2: Photopatterning resolution (LM photo absorber, DLS, UV-Vis, L&S+Siemens star, hollow)\n- Fig.3: Adhesion (TA spray 공정, FTIR amide I, photo-rheology, lap-shear)\n- Fig.4: Electrical (cross-section SEM, 4-wire Kelvin + chip contact R, pitch series test)\n- Fig.5: Site-selective stretchability (Nastran Mooney-Rivlin FEA, cyclic 30%×1000)\n- Fig.6: Application (stretchable LED array 4×4-8×8 + MCU bonding)",
+      "bodyLength": 42000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81c9-a2cb-d2bda962fea5",
+      "title": "Anti-drying Hydrogel (인조피부)",
+      "props": {
+        "상태": "3. 결과논의/가이드",
+        "담당자": ["강민경", "김수아"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["시장대응형"],
+        "타겟 저널": "ACS Nano / Adv. Funct. Mater. (권장)",
+        "유형": "연구논문",
+        "프로젝트명": "Anti-drying Hydrogel (인조피부)",
+        "우선순위": "🟢 보통",
+        "완료?": "__NO__",
+        "메모": "[3/29] 워크시트 온보딩 완료. Fig2-3 부분완료, Fig4-5 대부분 미완. Anti-drying mechanism 규명(LF-NMR, DSC)이 핵심 과제"
+      },
+      "body": "## Feedback (03/29)\n스토리라인 뼈대 있으나 'solvent-polymer interaction' 메커니즘 증거 치명적 부족. LF-NMR, DSC, WVTR 모두 예정 상태. Fig 4(PPG/SpO2) Fig 5(ML gesture) Application 거의 전무가 가장 큰 병목. 단순 'anti-drying + sensor' 조합은 이미 포화 (ACSAPM 2023 PA hydrogel + gesture recognition 선례). 시스템 통합 관점 차별화 핵심.\n\n## 즉시 조치\n1. LF-NMR + DSC 측정 (bound/free water 정량)\n2. WVTR 측정 (hydrogel vs elastomer)\n3. Adhesion force 정량 (SEBS, silicone 대비)\n4. PPG 무선 시스템 + SpO2\n5. CNN 모델 선정 (1D-CNN, 98-100% accuracy 벤치마크)\n\n## 수정 셀링포인트\n'Anti-drying hydrogel을 encapsulation layer로 사용 + multilayer 구조 + full-stack wearable system (PPG/SpO2 + Strain/EMG + CNN)'\n\n## 경쟁 논문 (딥리서치)\n- Hu Mater.Horiz. 2020: polymer-polymer H-bond\n- Long AFM 2023: glycol-water binary organogel + TENG\n- Wu AFM 2025: Zwitterionic intrinsic anti-dehydration (190°C까지) — 가장 강력\n- Sci.Adv. 2024: Supramolecular multilayer hydrogel electronics (>1500% strain)\n- ACSAPM 2023: PA hydrogel anti-dehydration >30일 + ML gesture — 가장 직접 경쟁\n\n## Figure Set (권장)\n- Fig 2 (6패널): FT-IR, LF-NMR T₂, weight ratio, DSC, WVTR, rheology\n- Fig 3 (6패널): stress-strain, tensile, cyclic, adhesion force, Live/Dead, cell viability\n- Fig 4 (5-6패널): PPG/SpO2 + w/o anti-drying 저항 안정성 비교 (핵심), commercial oximeter 대비\n- Fig 5 (6패널): strain sensor + w/o anti-drying 장기 안정성 비교 (핵심), CNN + confusion matrix",
+      "bodyLength": 28000,
+      "childPages": []
+    },
+    {
+      "id": "331f9f17-6cf4-815f-b646-f2344fc22e4f",
+      "title": "UV-Curable Self-Healing PDMS Elastomer",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["Beibei Xia"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["독립연구"],
+        "타겟 저널": "미정 (ACS Appl. Mater. Interfaces / Composites Part B 권장)",
+        "유형": "연구논문",
+        "프로젝트명": "UV-Curable Self-Healing PDMS Elastomer",
+        "우선순위": "🟢 보통",
+        "완료?": "__NO__",
+        "메모": "UV thiol-ene + UPy + IU 삼중 동적 네트워크 PDMS. 공동지도(Yunlong 교수). 3/22 피드백 후 수정 워크시트 3/25 제출."
+      },
+      "body": "## 합성 경로 딥리서치 (03/27)\n합성 경로 전반적 타당. 실현 가능성과 성능 목표 주의.\n\n### 검증됨\n- Thiol-ene UV curing PDMS 성숙 기술\n- IU-UPy 올리고머 합성 화학적 가능\n- UV경화 + triple network 희귀 → 신규성 충분\n- Thiol-ene PDMS tensile: 0.74-2.65 MPa (목표 0.5-1.2 달성 가능)\n\n### 위험\n- NCO 삼량화: 저온(≤5°C), 건조, 촉매 제어\n- 습도 감수성: 무수 DMF + N₂\n- 올리고머 안정성: 1-2주 냉동, 즉시 사용\n- TPO-L + UPy N-H 상호작용 선행 실험\n\n### 성능 목표 재설정\n- 1차: tensile 1.5-2.5 MPa, elongation 200-500%, healing 70-85%\n- 2차: tensile 3-5 MPa, healing 90-95%\n\n## Feedback (03/27)\nNovelty claim 위험 (Zheng Small 2024, Zou Adv.Sci. 2026 이미 유사). UV-curing 공정 장점으로 재포지셔닝 필요. 성능 목표가 2018 Kang Adv.Mater. 대비 현저히 낮음. Thiol 배분 비율 (IPDI vs thiol-ene) 정량 설계 누락.\n\n### 즉시 조치\n1. Thiol 배분 비율 계산서\n2. 성능 목표 상향 (tensile ≥2-3 MPa, elongation ≥800%, healing ≥80%)\n3. Novelty UV-curing 공정 중심 재정립\n4. Figure Plan 작성\n\n## 분석 누락\n- FT-IR, DMA (Tg, modulus), Rheology (frequency sweep, stress relaxation), Variable-temp FT-IR, SAXS/WAXS/AFM, TGA, gel fraction, optical time-lapse\n- DMA와 rheology 필수\n\n## Plan B (PDMS-Se-Se)는 별개 프로젝트 → 보류, Plan A 집중\n\n## Figure Set\n- Fig.1: Material design\n- Fig.2: UV optimization (gel fraction, photo-DSC, DMA)\n- Fig.3: Mechanical (stress-strain, cyclic, Ashby)\n- Fig.4: Self-healing (time-lapse, healing efficiency)\n- Fig.5: Water resistance\n- Fig.6: Application (patterning/3D printing, strain sensor)\n\n## 관련 child page\n- Beibei guide EN/CN version",
+      "bodyLength": 15000,
+      "childPages": [
+        {
+          "id": "331f9f17-6cf4-8168-a072-e73c2cecfc4c",
+          "title": "📋 For Beibei — UV-PDMS Project Guide (EN/CN 英中版)",
+          "body": "영어/중국어 가이드 버전. Beibei가 직접 업데이트. 한국어 버전은 교수님용.\n\n## Synthesis Deep Research (03/27)\nVerified: Thiol-ene UV curing mature, IU-UPy oligomer feasible, UV+triple network rare (novelty sufficient).\n\nCritical Risks: NCO trimerization, moisture sensitivity, oligomer shelf life (1-2 weeks), TPO-L + UPy interaction.\n\nRevised targets: Stage 1 tensile 1.5-2.5 MPa, Stage 2 3-5 MPa.\n\n## Feedback (03/27)\nBeibei의 수정 워크시트 3/22 대비 개선 (문헌 12편, 합성 단계별 조건, Plan A/B). 하지만 critical gaps: unclear novelty claim, performance targets far below SOTA (Kang 2018 tensile 6-8 MPa), no Figure Plan, missing quantitative design rationale.\n\n### Priority\n1. Thiol allocation ratio\n2. Raise performance targets (min tensile ≥2-3 MPa, elongation ≥800%, healing ≥80%)\n3. Redefine novelty (UV-curing process focus)\n4. Write Figure Plan\n\n## Beibei의 답변\n- Previous 'first combination' statement 지원 부족 인정, 수정\n- Patterning으로 UV-curing advantage 강조 계획\n- 3×3 matrix UV optimization (300/500/800 mW × 60/180/300s), photo-DSC 추가\n- Sylgard 184 Part A 사용 이유는 Jamison 2025 논문 2:1 비율 참고, Pt 촉매 thiol-ene 간섭 우려로 재평가 중\n- Plan B 폐지 이유: MPPDMS 구매 어려워서 -NH2 PDMS 대안으로 만들었음\n- Additional literature: 'Wavelength-Dependent Dynamic Behavior in Thiol-Ene Networks Based on Disulfide Exchange'\n\n## Key Benchmark Papers\n- Kang Adv.Mater. 2018 (MPU-IU dual H-bond PDMS underwater)\n- Dai Mater.Horiz. 2025 (Te-Te + H-bond visible-light healing)\n- Zou Adv.Sci. 2026 (UPy supramolecular PU)\n- Jamison Soft Matter 2025 (UV-set PDMS)\n- Zheng Small 2024 (Multi-scale H-bond 31.8 kJ/m²)\n- Yang Mater.Horiz. 2024 (99% healing)",
+          "bodyLength": 16000
+        }
+      ]
+    },
+    {
+      "id": "328f9f17-6cf4-81b1-be61-ed988c954f5d",
+      "title": "LM Paste for HBM",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["육근영", "홍승완"],
+        "팀": "LM Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "LM Paste for HBM",
+        "완료?": "__NO__",
+        "메모": "[3/22] 진동실험용 wafer 주문 완료, 커팅/클리닝 교육"
+      },
+      "body": "## 액션 아이템\n- 진동실험용 soft litho wafer 설계·주문\n- 열관리 시스템 설계 및 성능 평가 (LM TIM)\n\n## 서브 프로젝트\n- LM TIM (홍승완, 육근영): 성능 최적화, 열전도도 측정\n\n## 타임라인\n- 03/18: Delamination 테스트 구조 확정 (4인치 웨이퍼, SU-8 100um, 35-10um 갭). 알루미늄 히트싱크 대체 부품 구매 필요\n- 2026.02: 한국기술교육대학교 Thermal Conductivity 측정\n- 2026.01: Soft Robotics 열관리 논문 스터디\n- 2025.12: 소니케이션 시간별 점도 TIM 샘플 설계",
+      "bodyLength": 900,
+      "childPages": []
+    },
+    {
+      "id": "32cf9f17-6cf4-814f-b3e7-c8446aef9f04",
+      "title": "Breathable Electronics",
+      "props": {
+        "상태": "4. 그림/스토리",
+        "담당자": ["강민경", "김수아"],
+        "팀": "LM Team",
+        "관련 과제": ["시장대응형"],
+        "타겟 저널": "AFM / ACS Nano (대안: Adv. Healthcare Mater.)",
+        "유형": "연구논문",
+        "프로젝트명": "Breathable Electronics",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "[3/27] 딥 리서치 검증 완료. Zhuang 2024(Nat.Elec.)가 breathable+1500%+VIA 이미 달성 → 차별화 전략 재검토. Screen printing scalability + Bioimpedance app 진정한 셀링포인트."
+      },
+      "body": "## 딥 리서치 검증 (03/27)\n중대한 오류 수정: Zhuang 2024 (Nat.Elec.) breathable + 1500% strain + VIA 이미 달성 확인 → 성능 수치만으로 차별화 불가. Screen printing scalability + Bioimpedance가 진정한 셀링포인트.\n\n## 셀링포인트 (수정)\n'Scalable screen-printable approach to breathable multilayer electronics — rapid pattern reconfiguration + wearable bioimpedance monitoring + single-step ambient process'\n\n### 차별화 축\n1. Scalability & Reconfigurability — mask만 바꾸면 패턴 전환\n2. Single-step ambient process\n3. Unique application: wearable bioimpedance spectroscopy (경쟁 논문들 EMG/제스처/LED에 치중)\n\n## 타겟 저널\n- 전략 A: AFM/ACS Nano (1순위, manufacturing scalability + bioimpedance)\n- 전략 B: Adv.Healthcare Mater. / Biosensors & Bioelectronics\n- 전략 C: Small / Adv.Mater.Tech. (fallback)\n\n## 즉시 조치\n1. 임피던스 디바이스 제작 (Fig.5c)\n2. 인바디 대비 임피던스 비교 (Fig.5g)\n3. 사지전극 기반 임피던스 측정 (Fig.5h)\n4. XPS/Rheometer 완료 (Fig.2)\n5. 다양한 기판 통기성 비교 (Fig.4i)\n6. 피부 감작성 실험 (PDMS vs mesh)\n7. 다중채널 임피던스\n\n## 경쟁 논문 6편\n- Zhuang Nat.Elec. 2024 (hLM solder, breathable 1500% VIA)\n- Zheng Nat.Elec. 2024 (50μm, 30K cycles@100%)\n- Wang NML 2025 (SEBS nanofiber, 750% strain, 32500 cycles)\n- Wang ACS Nano 2021 (TPU nanofiber stencil)\n- Ma Nat.Mater. 2021 (LM fiber mat, 1800% strain)\n- npj Flex.Elec. 2025 (screen printed LM multilayer) — 직접 경쟁\n\n## Figure Set\n- Fig 1: Schematic\n- Fig 2: Fabrication & Material (11 → 6-8 패널로 축소)\n- Fig 3: Electrical (10 패널, VIA 전/후, 1500% strain)\n- Fig 4A/B: Permeability + Biocompatibility (분리)\n- Fig 5: Impedance sensing (6-7 패널로 압축)",
+      "bodyLength": 30000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-813f-8840-e8a15ae4b6c8",
+      "title": "Encapsulation (Encap)",
+      "props": {
+        "상태": "7. 투고완료",
+        "담당자": ["조예진"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Encapsulation (Encap)",
+        "완료?": "__NO__",
+        "메모": "[3/22] 교수님 피드백 반영 수정 진행 중"
+      },
+      "body": "## 액션 아이템\n- 기준 박사 피드백 반영\n- 월요일 최종 피드백 후 교수 전달\n- WVTR 측정 진행 (경희대 의뢰, TFT/DLOE Encap)\n- Bare/SLPL/DLOE 비교 분석 피겨 촬영 및 샘플 제작\n\n## 서브 프로젝트\n- TFT/DLOE Encapsulation (정윤민): WVTR 측정, Bare/SLPL/DLOE 비교, 클린룸 공정, Sputter/Parylene C 코터 인수인계\n\n## 타임라인\n- 2026.02: 초안 완성, 기준 박사 피드백 대기\n- 2026.01-02: WVTR 경희대 의뢰\n- 2025.12: 인트로 및 Fig 1-2\n- 2025.10-12: Sputter, Parylene C 코터 등 인수인계 완료",
+      "bodyLength": 1100,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-8160-ae7a-d51513fb430d",
+      "title": "Iontophoretic Drug Delivery",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["김수아"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["SBA"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Iontophoretic Drug Delivery",
+        "완료?": "__NO__",
+        "메모": "[3/22] GelMA 합성 중, microgel 농도별 최적화 예정, drug 서치, Wireless system(w/윤민) 연동"
+      },
+      "body": "## 액션 아이템\n- GelMA (gelatin type B) 합성\n- GelMA·GelTA zeta potential 측정\n- Wireless 시스템 개선 (전력 전달/ADC)\n- Rigid Tx → Soft Rx 무선전력전송 성공\n- 공진주파수 최적화, AC-DC 컨버터 빵판 제작\n\n## 서브 프로젝트\n- Wireless Power Transfer (정윤민): Rigid Tx → Soft Rx 성공, 효율/거리 최적화, PCB Tx 설계\n\n## 타임라인\n- 03/18 LM 미팅: WPT Tx Type A 작동확인 725mV, 센터탭 PCB 2종 배송중\n- 03/18 Hydrogel 미팅: Iontophoresis 시스템 제작 성공, 이미지 촬영 완료, 액티브 배터리 고민\n- 2026.02: 자기 공명 결합 심화 스터디, 무선 시스템 연동 준비\n- 2025.12: VNA 장비 Rx 공진 주파수 확인, MATLAB 시뮬레이션, PVA/Gelatin/O-dex 최적화\n- 2025.10: 인플란트 안테나 스터디, LM 프린팅 Spiral 안테나",
+      "bodyLength": 1700,
+      "childPages": []
+    },
+    {
+      "id": "341f9f17-6cf4-8155-ae98-ee23adc846a3",
+      "title": "Stretchable LM Microstrip — Strain-Dependent RF Predictive Model",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["김미도", "육근영"],
+        "팀": "LM Team",
+        "관련 과제": ["독립연구"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Stretchable LM Microstrip — Strain-Dependent RF Predictive Model",
+        "완료?": "__NO__",
+        "메모": "LM 기반 스트레처블 마이크로스트립 전송선의 strain-dependent RF 성능 예측 모델 구축. 초기 실험 단계."
+      },
+      "body": "## Feedback (04/13)\n초기 단계. 이론 토대 → 재료 선정 → 측정 방법론 순서로 초기 방향 잡기. RF/마이크로파 공학 + 연성 전자소자 교차 영역.\n\n## 즉시 조치\n1. Hammerstad-Jensen 공식 완전 습득 (effective dielectric constant, Z₀)\n2. 도체/유전체 RF 물성 정리 (EGaIn σ=3.4×10⁶, PDMS εᵣ 2.7-2.9, tan δ 0.01-0.04)\n3. VNA 측정 + TRL 캘리브레이션 공부\n4. 경쟁 논문 추가 (Nature 2024 strain-invariant, Rahman 2025 review)\n5. Figure Plan 세부화\n\n## 이론\n- Quasi-TEM mode, εeff, Z₀ Hammerstad-Jensen\n- Strain + Poisson ratio 0.5: W/h 비불변, εᵣ strain에 미세 변화\n- S-parameter: S11 Return Loss, S21 Insertion Loss\n- ABCD matrix for cascade\n- Conductor loss (αc ∝ Rs/(W·Z₀), EGaIn skin depth 1 GHz ≈ 8.6 μm vs Cu 2.1 μm)\n- Dielectric loss αd = (πf√εeff·tan δ)/c\n\n## 모델 접근\nSemi-empirical: analytical base (Hammerstad-Jensen + ABCD) + strain-dependent 재료 물성 실험 보정\n\n## 경쟁 논문\n- Watson 2022 Adv.Eng.Mater. (LMEE 마이크로스트립, 40% strain, 사후 보고)\n- Zhou 2025 IEEE (AgNP + CST, 사후 설명)\n- Lee 2024 ACS AMI (serpentine Cu, ~40 GHz, strain-insensitive)\n- Bao 2024 Nature (dielectro-elastic, strain-invariant) — 가장 강력\n- Rahman 2025 Adv.Electron.Mater. review\n\n## 포지셔닝: 일반적 엘라스토머에서 예측 모델 + strain-aware design (vs strain-invariant)\n\n## Figure Set\n- Fig.1: Overview / Schematic\n- Fig.2: Material RF Characterization (σ, εᵣ, tan δ vs strain/frequency)\n- Fig.3: Microstrip fabrication + S-parameter\n- Fig.4: Strain-dependent RF model (error map)\n- Fig.5: Validation — λ/4 impedance transformer + Wilkinson power divider",
+      "bodyLength": 28000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81de-94eb-e95ab6766d9c",
+      "title": "난소암 치료제",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["조예진"],
+        "팀": "공동연구",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "난소암 치료제",
+        "완료?": "__NO__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- 신수련 교수 미팅\n- 실험 방향 논의\n\n## 타임라인\n- 03/15: 신수련 교수 미팅, 실험 방향 논의\n- 03/08: 난소암 cisplatin release test 및 SEM\n- 2026.02: Cisplatin 로딩 양 확인 및 파티클 코팅 샘플 전달",
+      "bodyLength": 400,
+      "childPages": []
+    },
+    {
+      "id": "333f9f17-6cf4-814a-9970-ca684f2e31fb",
+      "title": "Bentonite Ionic Hydrogel for Wound ES",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["김수아", "조예진"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "ACS Applied Materials & Interfaces / Advanced Healthcare Materials",
+        "유형": "연구논문",
+        "프로젝트명": "Bentonite Ionic Hydrogel for Wound ES",
+        "우선순위": "🟢 보통",
+        "완료?": "__NO__",
+        "메모": "Bentonite-PVA intercalation + double dynamic network (PVA-borax + gelatin-O-dex Schiff base) + LiCl internal doping → 고이온 환경에서 ionic conductivity + mechanical stability + self-healing 동시 구현. Wound ES biointerface 타겟."
+      },
+      "body": "## Feedback (03/29)\n스토리라인 양호. 'trade-off 동시 해결' 명확. Bentonite-PVA intercalation 재응집 방지 전략 차별성 있음. '처음으로 구현' claim 과도 → '고이온 wound 환경 구조적 안정성 최초 통합' 재프레이밍. Fig.2-3 대부분 미확보, Application ES 실험 계획 누락.\n\n## 즉시 조치\n1. XRD 측정 → intercalation 직접 증명 (d001 shift)\n2. Rheology + Mechanical (amplitude/frequency sweep, step-strain recovery, tensile)\n3. LiCl 농도 최적화 (0/0.5/1/2/3M conductivity vs mechanical trade-off)\n4. ES 관련 실험 (cell migration under E-field, 전압 0.5-3V, DC vs low-freq AC)\n\n## 수정 셀링포인트\n'Clay-polymer interfacial confinement + dual dynamic crosslinking → 고이온 wound 환경에서 ionic conductivity-mechanical integrity-self-healing 삼중 trade-off 극복'\n\n## 경쟁 논문\n- Wang Nat.Commun. 2022 (cellulose-bentonite 3.2 MPa)\n- Li ACS AMI 2024 (self-healing + photothermal wound)\n- Li Polym.Adv.Technol. 2024 (borate ester + Schiff base MXene)\n- Hou Adv.Mater.Interfaces 2025 (GelMA/AgNWs + ES)\n- Chem.Mater. 2019 (imine + borate ester DN)\n\n## Figure Set\n- Fig.1: Overall schematic\n- Fig.2: Intercalation (XRD, Zeta/DLS, SEM, FT-IR, TGA)\n- Fig.3: Hydrogel (Schiff base FT-IR, rheology, mechanical, adhesion, EIS conductivity)\n- Fig.4: In vitro (biocompatibility + ES scratch assay)\n- Fig.5: In vivo wound healing",
+      "bodyLength": 18000,
+      "childPages": []
+    },
+    {
+      "id": "333f9f17-6cf4-810d-bc4a-e4f5edb0abba",
+      "title": "Robot-Arm Bioprinting Review",
+      "props": {
+        "상태": "4. 그림/스토리",
+        "담당자": ["김수아", "조예진"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "미정 (Prog. Mater. Sci. / Adv. Mater. / Bioactive Materials 추천)",
+        "유형": "리뷰논문",
+        "프로젝트명": "Robot-Arm Bioprinting Review",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "AI-assisted robot-arm bioprinting 리뷰. 김수아·박기준·조예진 공동 1저자. Figure plan 11개 구성 완료, 초안 작성 전 단계."
+      },
+      "body": "## Feedback (03/29)\n리뷰 뼈대 잘 잡힘. 'Conventional → In situ → Robot-assisted → AI-enabled' 진화 서사 설득력 있음. 문제: 경쟁 리뷰(Kamaraj 2025 Adv.Mater.Tech.) scope 겹침, 2025-2026 최신(self-driving labs, soft robotics MIB 등) 미반영, Fig 5 누락, bioink-robot-AI 축 연결 약함.\n\n## 즉시 조치\n1. 경쟁 리뷰 8-10편 확대 매핑\n2. Fig 5 누락 해결 (In situ 분류 체계 삽입 권장)\n3. 타겟 저널 결정 (Bioactive Materials 1순위)\n4. 'Triple integration (bioink × robot × AI)' 프레임워크 재정립\n\n## 타겟 저널\n- Tier 1: Prog.Mater.Sci. (IF 33), Adv.Mater. (IF 29)\n- Tier 2: Bioactive Materials (IF 18) ← 1순위 추천, Biomaterials (IF 14)\n- Tier 3: Adv.Mater.Technol., Int.J.Bioprinting\n\n## 추가 경쟁 논문\n- Vu Adv.Sci. 2025 (soft robotics MIB)\n- Self-driving bioprinting laboratories (PMC 2025)\n- Kelly AFM 2025 (CNN autonomous extrusion)\n- Conformal path planning Bio-Design & Manufacturing 2025\n- IMAGObot multi-material platform 2025\n- Kamaraj 2025, Almeida Adv.Mater.Tech. 2025\n\n## Figure Set\n- Fig 1: Concept + paradigm shift\n- Fig 2: Bioink (in situ-specific 요건)\n- Fig 3-4: Evolution + conventional (통합 검토)\n- Fig 5: In situ bioprinting 분류/비교 (추가)\n- Fig 6-7: Handheld + geometry-aware\n- Fig 8-9: Robot-assisted + soft robotics/MIB\n- Fig 10: AI (CV/ML/RL/DL 분류)\n- Fig 11: Self-driving lab, digital twin, outlook\n- 비교 테이블 3개 (Conventional/In situ/Robot, robot-arm 종합, AI 기법별)",
+      "bodyLength": 16000,
+      "childPages": []
+    },
+    {
+      "id": "33af9f17-6cf4-812a-bc15-c9b779a6f4c2",
+      "title": "Plant Electrophysiology — Leaf-Conformal Bio-Glue Multilayer Electrode",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["손가영", "박지민"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["독립연구"],
+        "타겟 저널": "Science Advances / Nature Communications",
+        "유형": "연구논문",
+        "프로젝트명": "Plant Electrophysiology — Leaf-Conformal Bio-Glue Multilayer Electrode",
+        "우선순위": "🟢 보통",
+        "완료?": "__NO__",
+        "메모": "식물 전기생리 장기 모니터링용 다층 잎 전극. MC/glycerol bio-glue + BNC buffer + CNT/graphene 전극. 초기 단계 — 워크시트 온보딩 완료 (2026.04.06)"
+      },
+      "body": "## Feedback (04/06)\n스토리라인 체계적. 문제 정의 명확 (wound artifact, drying, growth adaptability, field deployability). 다층 구조 설계 논리 합리적. 'Electrical biography' — 단일 개체 전 생애 전기생리 연속 추적 개념 강력한 셀링포인트. 실험 데이터 전무. Hori et al. (Adv.Sci. 2026) pierceable CNT nanofilm 70nm 2개월 측정 — 가장 직접 경쟁자 누락.\n\n## 즉시 조치\n1. 경쟁 논문 추가 (Hori 2026 Adv.Sci.)\n2. MC/glycerol bio-glue 잎 표면 conformal adhesion proof-of-concept\n3. Figure Plan 작성 (6-7 Fig)\n4. 식물 전기생리 기초 (AP/VP/SP 메커니즘)\n\n## 수정 셀링포인트\n'Paste-on multilayer leaf bioelectrode for wound-free, growth-adaptive, continuous electrophysiological tracking across plant's entire life cycle'\n\n## Hori et al. 대비 차별화\n1. Bio-glue adhesion (vs van der Waals) → 다양한 잎 종류 범용\n2. Growth adaptability (serpentine) → 잎 성장 시 유지\n3. Field applicability (paste-on) → 별도 장비 없이 즉시 도포\n4. Breathable buffer layer (BNC)\n\n## Figure Plan 제안\n- Fig.1: Concept & Design Rationale\n- Fig.2: Bio-Glue Layer (MC/glycerol rheology, 인장, anti-drying, 잎 표면 cross-section SEM, adhesion force, chlorophyll fluorescence)\n- Fig.3: Multilayer Integration (cross-section SEM, PVA vs BNC WVTR, CNT/graphene sheet R, EIS, stomatal conductance)\n- Fig.4: EP signal acquisition (AP 측정, Ag/AgCl 비교, 장기 안정성 28일)\n- Fig.5: Growth adaptability & long-term monitoring\n- Fig.6: Stress detection (drought, salt, light)",
+      "bodyLength": 28000,
+      "childPages": []
+    },
+    {
+      "id": "335f9f17-6cf4-81c5-8861-ccfea636e1e7",
+      "title": "Hygroscopic Hydrogel-based Wearable TED",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["함혜인", "이유림"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["국가아젠다", "NRL"],
+        "타겟 저널": "Advanced Energy Materials / Nano Energy",
+        "유형": "연구논문",
+        "프로젝트명": "Hygroscopic Hydrogel-based Wearable TED",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "흡습성 하이드로겔 기반 soft thermal interface를 도입한 웨어러블 열전소자. 수분 흡착/증발 메커니즘으로 thermal gradient 유지 + serpentine 구조로 신축성 확보. 실험 초기 단계."
+      },
+      "body": "## Feedback (04/01)\n컨셉 명확. 이중층 설계 (피부면 PAAS + 공기면 SAP+LiCl+LM) 구조 유리. 데이터 거의 없음 (하이드로겔 최적화 일부만). Ni et al. Adv.Mater. 2021 선행연구 대비 '피부면에도 하이드로겔 적용'만으로는 novelty 약함. Arya 2026 (wind-enhanced hybrid) 이미 발표. Radiative cooling 추가 여부 전략적 분기점.\n\n## 즉시 조치\n1. 하이드로겔 이중층 합성 및 기본 물성 (SAP+LiCl, PAAS 층 각각)\n2. Ni 2021 대비 차별점 확립 (이중층 synergy 정량 입증)\n3. RC 추가 여부 결정\n4. Serpentine TED 기판 제작\n5. 경쟁 논문 추가 (Arya 2026, Li 2025 Water-Thermal Self-Cycling)\n\n## 셀링포인트 (방향 B)\n'Fully integrated wearable thermoelectric system with self-sustaining evaporative cooling + stretchable architecture for bidirectional personal thermal regulation'\n\n## 경쟁 논문\n- Huang npj Flex.Elec. 2025 (microfluidic double-layer 3D TED)\n- Huo ACS AMI 2023 (PCM + semi-LM)\n- Ni Adv.Mater. 2021 (hygroscopic ionogel) — 직접 선행\n- Hong Sci.Adv. 2019 (Cu trace armband)\n- Wu AFM 2024 (bio-inspired soft-rigid)\n- Arya 2026 (wind-enhanced hydrogel-TED) 신규 경쟁자\n- Li Adv.Energy Mater. 2025 (13°C ΔT, 1500분 지속)\n- Nat.Commun. 2023 (PAAS/LiCl hydrogel)\n\n## Figure Set (권장 순서)\n- Fig 1: Schematic + 이중층 메커니즘\n- Fig 2: Hydrogel (이중층 interface cross-section, LiCl 농도/두께/수분 parametric, 열전도율, rheology, RC)\n- Fig 3: TED structure + FEA serpentine 응력, bending/stretching R\n- Fig 4: Thermoelectric 성능 (Top/bottom 온도, switching, cycling)\n- Fig 5: Personal thermal regulation + closed-loop feedback + LED demo\n- Fig 6: 재검토 (thermal camouflage → 다양한 환경 장기 안정성)",
+      "bodyLength": 30000,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81cb-8d3d-dedff802360d",
+      "title": "식물 전극",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["손가영", "박지민"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "식물 전극",
+        "완료?": "__NO__",
+        "메모": "[3/22] Advanced Science(2026) 논문 기반 공부 및 아이디어 구상(w/지민)"
+      },
+      "body": "## 액션 아이템\n- Advanced Science (2026) 논문 기반 공부\n- 아이디어 구상\n\n## 타임라인\n- 03/15: Advanced Science 2026 논문 스터디\n- 03/08: 생분해 코팅 진행",
+      "bodyLength": 250,
+      "childPages": []
+    },
+    {
+      "id": "335f9f17-6cf4-8115-b23a-fc529226aa8f",
+      "title": "LM/Organic Hybrid Multilayer Encapsulation",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["장한빛", "이유림"],
+        "팀": "LM Team",
+        "타겟 저널": "Advanced Functional Materials / ACS Nano (후보)",
+        "유형": "연구논문",
+        "프로젝트명": "LM/Organic Hybrid Multilayer Encapsulation",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "Spray printing 기반 PDA-LMP/organic hybrid multilayer stretchable hermetic encapsulation. 워크시트 온보딩 완료 (04/01)."
+      },
+      "body": "## Feedback (04/01)\nIntroduction 흐름 잘 구성 (inorganic/organic hybrid → LM 대체 → bulk LM 한계 → LMP spray → PDA 해결). Sintering을 전도성이 아닌 barrier 형성 관점 재해석 참신. 약점: WVTR/OTR 핵심 데이터 미확보, Figure Plan 전무, 셀링포인트 '공정 단순화' 수준. Nat.Commun. 2025 self-packaging LMP, npj Flex.Elec. 2025 water-spray 경쟁자 출현.\n\n## 즉시 조치\n1. WVTR/OTR 정밀 측정 (multilayer 1L/3L/5L/7L)\n2. Figure Plan 작성\n3. 셀링포인트 강화 (PDA 계면 화학 + tortuous path design)\n4. 경쟁 논문 정밀 분석 (Shen Science 2023, Xia Nat.Mater. 2025)\n5. 타겟 저널 확정\n\n## 벤치마크\n- Shen Science 2023: 9.09×10⁻²⁰ m²/(Pa·s) @ 50% strain, 1.6mm 두께\n- OLED 산업: ~10⁻⁶ g/(m²·day)\n- Wearable: 10⁻⁴~10⁻⁵ g/(m²·day)\n\n## 차별화 전략\n축 1: 소재 혁신 (PDA-elastomer 계면 화학결합 XPS/FT-IR)\n축 2: 구조 설계 (multilayer 수 exponential WVTR 감소, tortuous path)\n우리 강점: 1.6mm → <200μm 두께, single spray process, scalability\n\n## Figure Set 제안\n- Fig.1: Concept & Fabrication\n- Fig.2: Barrier performance (multilayer 1-7L WVTR/OTR, strain-dependent, cyclic, Ashby plot)\n- Fig.3: LM layer characterization (PDA-LMP TEM, sintering cross-section SEM, XPS, conductivity)\n- Fig.4: Organic layer & interface (spray coating uniformity, FT-IR, adhesion peel test)\n- Fig.5: Device application (stretchable battery / LED array / OPV / biosensor)",
+      "bodyLength": 18000,
+      "childPages": []
+    },
+    {
+      "id": "32cf9f17-6cf4-8144-bae5-e6f5b4703716",
+      "title": "PDA-LM",
+      "props": {
+        "상태": "3. 결과논의/가이드",
+        "담당자": ["육근영", "김찬수"],
+        "팀": "LM Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "PDA-LM",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": "[3/22] TEM 측정 완료 분석 중, 핵심 메커니즘 증명 추가 실험 계획"
+      },
+      "body": "(Page is blank — no body content)",
+      "bodyLength": 0,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81f4-a732-eb78c52a4194",
+      "title": "뇌선도/BRL 신경자극기",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["육근영", "정윤민", "김찬수"],
+        "팀": "LM Team",
+        "관련 과제": ["뇌선도"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "뇌선도/BRL 신경자극기",
+        "우선순위": "🟡 높음",
+        "완료?": "__NO__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- LM paste 배선/전극 임피던스 측정\n- 카이스트 요구 스펙 전극 제작\n\n## 타임라인\n- 03/15: LM paste 배선/전극 임피던스 측정, 카이스트 스펙 전극 제작\n- 03/08: 동일 작업\n\n## 마일스톤: 전극 특성화 및 임피던스 측정, 카이스트 스펙 기반 전극 설계",
+      "bodyLength": 300,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81e9-a8ff-d0d5b4fc7352",
+      "title": "Photo-adhesive",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["이유림", "함혜인"],
+        "팀": "Packaging Team",
+        "관련 과제": ["국가아젠다"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Photo-adhesive",
+        "완료?": "__NO__",
+        "메모": "[3/22] 큐어링 파워·시간별 통전 확률 확인, 젤마 추가 제작(w/유림,혜인)"
+      },
+      "body": "## 액션 아이템\n- LM 농도별 패터닝 해상도 데이터 확보\n- 컨택 저항 측정 (통전 성공률 개선)\n- 젤마 추가 제작\n\n## 타임라인\n- 03/15: LM 농도별 패터닝 해상도, 컨택 저항, 젤마 추가\n- 03/08: Photo-adhesive LM 농도별 패터닝·컨택 저항 샘플 완료\n- 03/01: 아웃라인 작성\n- 2026.02: Liquid Metal + GelMA 패터닝 조건 및 전기적 연결 테스트\n- 2025.10-11: PAAS 하이드로겔 및 GelMA 제작, 기판 부착력 개선",
+      "bodyLength": 500,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-816f-a4f3-cb703e3ee1bf",
+      "title": "AutoPCB",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["김찬수", "장한빛"],
+        "팀": "LM Team",
+        "관련 과제": ["독립연구"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "AutoPCB",
+        "완료?": "__NO__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- Track A, B 진행을 위한 환경 셋업\n\n## 타임라인\n- 03/18 LM 미팅 (찬수): 거버파일 프리라우팅 미작동, Schematic 정보 누락. 줄글로 문제 정리 지속 피드백\n- 03/18 Pkg 미팅 (예진): 첫 피드백 반영 확인, 소자 누락 해결, 팀맵 연결시 라우팅 미작동, 3→20 회로 확대 예정\n- 03/15: AutoPCB Track A, B 환경 셋업\n\n## 관련 child page\n- AutoPCB v3 파이프라인 결과 (2026-04-06)",
+      "bodyLength": 500,
+      "childPages": [
+        {
+          "id": "33af9f17-6cf4-812d-a35b-f091c6d998d0",
+          "title": "AutoPCB v3 파이프라인 결과 + 학생 미반영 사항 (2026-04-06)",
+          "body": "## 개요\nv3.4 파이프라인으로 14개 Track 전체 스키매틱 재생성 완료. 핵심 수정: `_pin_world()` 이중 오프셋 버그 — 와이어가 핀 연결점에서 2.54mm 떨어지던 문제 해결.\n\n## 전체 Track 결과 (14/14 PASS)\n- A(장한빛): 5IC/10P/31W/40L\n- B(장한빛): 4IC/23P/80W/102L\n- C(김찬수): 3IC/6P/18W/25L\n- D(장한빛): 4IC/12P/34W/64L\n- E(김미도): 4IC/8P/23W/46L\n- F(김미도): 4IC/16P/40W/53L\n- G(박시연): 6IC/11P/36W/69L\n- H(박시연): 4IC/11P/36W/61L\n- I(이유림): 3IC/10P/30W/73L\n- J(이유림): 3IC/7P/21W/40L\n- K(정윤민): 6IC/19P/60W/91L\n- L(정윤민): 3IC/10P/22W/36L\n- M(함혜인): 6IC/9P/43W/81L\n- N(함혜인): 5IC/11P/28W/55L\n\n## Track B 논문 검증: CONDITIONAL PASS\nHuang 2025 PID 온도 제어 시스템 (TED 구동). 4개 핵심 IC 일치. TB6612FNG PWMB(pin 15) 미연결 — 채널 A 단독 H-bridge 가능.\n\n## 학생 미반영 사항\n- PCB 커넥터 내부 배치 (가장자리 이동 필요) HIGH\n- MCU 중앙 배치 개선 MEDIUM\n- SPI/I2C GPIO fallback (D, F, J, K, N) MEDIUM\n\n## 학생 액션\n- 전원 네트 연결 확인 (KiCad)\n- SPI/I2C 센서↔MCU 데이터시트 대조\n- 커넥터 보드 가장자리 확인\n- DRC 실행 에러 0건\n\n## v3.4 변경: _pin_world() 이중 오프셋 수정",
+          "bodyLength": 4000
+        }
+      ]
+    },
+    {
+      "id": "328f9f17-6cf4-8159-910e-ca7eaca41479",
+      "title": "강주훈 교수님 공동연구",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["박시연"],
+        "팀": "공동연구",
+        "타겟 저널": "",
+        "유형": "공동연구",
+        "프로젝트명": "강주훈 교수님 공동연구",
+        "완료?": "__NO__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- 논문 스터디\n- Ferroelectric dielectric 물질 탐색\n- Soft high-k dielectric 논문 스터디\n\n## 타임라인\n- 03/15: Synaptic transistor 논문 스터디\n- 03/08: Ferroelectric dielectric 및 soft high-k 스터디\n- 2026.02: Au 전극과 LM Paste 동시 사용 테스트\n- 2025.10-11: 2D 물질 + 소프트 폴리머 협업 아이디어",
+      "bodyLength": 400,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-8190-a276-d8b9c0eb63c0",
+      "title": "MXene Hydrogel",
+      "props": {
+        "상태": "1. 아이디어",
+        "담당자": ["김수아", "손가영", "박지민"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["나노소재"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "MXene Hydrogel",
+        "완료?": "__NO__",
+        "메모": "[3/22] drug releasing 방향 아이디어·인트로 구상, 프린팅 가능여부 파악 예정(w/수아)"
+      },
+      "body": "## 액션 아이템\n- MXene 하이드로겔 논문 주제 논의\n- MXene chemical 분석\n- MXene 측정\n\n## 타임라인\n- 03/18 미팅: drug releasing 방향, 리칭 우려 논의, 염료 사용 리칭 테스트 진행 예정, 3D 프린팅 적용 검토\n- 03/15: MXene hydrogel 주제 논의, chemical 분석\n- 2026.01-02: MXene 하이드로겔 종류 및 연구 동향 스터디",
+      "bodyLength": 400,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-8149-a708-cb362b551bee",
+      "title": "Zwitterion Hydrogel",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["박지민", "손가영"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["나노소재"],
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "Zwitterion Hydrogel",
+        "우선순위": "🟢 보통",
+        "완료?": "__NO__",
+        "메모": "[3/22] 산화문제 해결 완료, in vitro degradation 동결건조 진행 중, tensile test 예정"
+      },
+      "body": "## 액션 아이템\n- 프로토콜 최적화\n- UV 거리 조사량 최적화\n- Tensile test 및 PBS degradation\n\n## 타임라인\n- 03/15: UV 최적화, tensile test, PBS degradation\n- 03/08: 동일 작업\n- 2026.02: 쯔비터이온 하이드로겔 최적화",
+      "bodyLength": 300,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81f8-b860-e6b5c84ec01c",
+      "title": "Hemostatic Hydrogel (Nat. Com.)",
+      "props": {
+        "상태": "10. 프루프",
+        "담당자": ["김태영", "손가영"],
+        "팀": "Hydrogel Team",
+        "관련 과제": ["독립연구"],
+        "타겟 저널": "Nature Communications",
+        "유형": "연구논문",
+        "프로젝트명": "Hemostatic Hydrogel (Nat. Com.)",
+        "우선순위": "🔴 긴급",
+        "완료?": "__NO__",
+        "메모": "[3/22] Nat. Com. Accepted! 사사 재정리 및 전체 파일 준비(author checklist, 포맷). 특허 미팅 예정."
+      },
+      "body": "## 액션 아이템\n- 2차 리비전 제출 완료 → 결과 대기\n- 특허 미팅 예정\n\n## 타임라인\n- 03/15: 2차 리비전 제출 완료, 특허 미팅 예정\n- 03/08: Nat.Com. revision 준비 및 제출\n- 2026.01-02: Rebuttal 초안 작성\n- 2025.12: 토끼/마우스 실험 수행\n\n## 마일스톤: 2차 리비전 ✅, 특허 출원 예정",
+      "bodyLength": 400,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-811b-a4fc-d6c22b0436f2",
+      "title": "Burns & Trauma Review",
+      "props": {
+        "상태": "7. 투고완료",
+        "담당자": ["김수아", "손가영"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "Materials Today Bio",
+        "유형": "리뷰논문",
+        "프로젝트명": "Burns & Trauma Review",
+        "완료?": "__NO__",
+        "메모": "[3/22] 논문 전체 수정 예정 (w/수아)"
+      },
+      "body": "## 액션 아이템\n- Burns & Trauma 재제출 준비\n- 논문 리뷰 및 데이터 정리\n\n## 타임라인\n- 03/15: 재제출 준비\n- 03/08: 재제출 준비\n- 2026.02: Materials today bio 포맷팅 완료\n- 2026.01: 아웃라인 재구성 및 인트로 작성",
+      "bodyLength": 300,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-818e-9fcc-c4248b05e84a",
+      "title": "췌장 디바이스",
+      "props": {
+        "상태": "2. 실험중",
+        "담당자": ["조예진"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "",
+        "유형": "연구논문",
+        "프로젝트명": "췌장 디바이스",
+        "완료?": "__NO__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- 재료 배송 완료 후 실험 예정\n- 실험 계획 수립\n\n## 타임라인\n- 03/15: 재료 배송 완료, 실험 예정\n- 03/08: 재료 발송",
+      "bodyLength": 200,
+      "childPages": []
+    },
+    {
+      "id": "328f9f17-6cf4-81a8-9d46-df1d3d109193",
+      "title": "Bile Duct 스텐트",
+      "props": {
+        "상태": "11. 게재완료",
+        "담당자": ["김태영"],
+        "팀": "Hydrogel Team",
+        "타겟 저널": "Bioactive Materials",
+        "유형": "연구논문",
+        "프로젝트명": "Bile Duct 스텐트",
+        "우선순위": "⚪ 낮음",
+        "완료?": "__YES__",
+        "메모": ""
+      },
+      "body": "## 액션 아이템\n- 논문 논의 및 데이터 정리\n\n## 타임라인\n- 2026.02: Bioactive Materials 리비전 대응. 담도 상피세포 추가 실험 및 스텐트 표면 SEM-EDS 분석 완료. Rebuttal 제출\n- 2025.10-11: Nature BME 제출 → AM(With editor) 거쳐 Bioactive Materials로 투고",
+      "bodyLength": 300,
+      "childPages": []
+    }
+  ],
+  "errors": []
+}

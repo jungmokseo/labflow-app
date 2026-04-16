@@ -178,3 +178,58 @@ ${insightsText || '(없음)'}`;
     },
   };
 }
+
+/**
+ * 주간 브리핑 자동 스케줄러
+ *
+ * 조건: 매주 월요일 오전 9시(KST, UTC+9) 이후 첫 체크에서 실행
+ * 중복 방지: 오늘 날짜로 이미 생성된 브리핑 article이 있으면 skip
+ * 대상: 전체 Lab (owner의 userId 사용)
+ *
+ * 서버 재시작 시에도 안전 (DB에 오늘자 브리핑 존재 여부로 판단).
+ */
+export function startWeeklyBriefingCron(): void {
+  const CHECK_INTERVAL_MS = 60_000; // 1분마다 체크 (Date 비교만이라 가벼움)
+
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      // KST 시각 계산 (서버가 UTC든 KST든 무관)
+      const kstMs = now.getTime() + 9 * 60 * 60 * 1000;
+      const kst = new Date(kstMs);
+      const dow = kst.getUTCDay();   // 0=일, 1=월
+      const hour = kst.getUTCHours();
+      const minute = kst.getUTCMinutes();
+
+      // 월요일 09:00~09:05 사이만 실행 시도
+      if (dow !== 1 || hour !== 9 || minute > 5) return;
+
+      const labs = await prisma.lab.findMany({
+        select: { id: true, ownerId: true, name: true },
+      });
+
+      for (const lab of labs) {
+        const today = kst.toISOString().slice(0, 10);
+        const todayTitle = `📬 주간 브리핑 @${today}`;
+
+        const existing = await prisma.wikiArticle.findFirst({
+          where: { labId: lab.id, title: todayTitle },
+          select: { id: true },
+        });
+        if (existing) continue; // 오늘자 브리핑 이미 생성됨
+
+        try {
+          const result = await generateWeeklyBriefing(lab.id, lab.ownerId, 7);
+          console.log(`[weekly-briefing-cron] ✓ ${lab.name} — "${result.savedArticleTitle}" (${result.stats.historyCount}건 변경)`);
+        } catch (err: any) {
+          console.error(`[weekly-briefing-cron] ${lab.name} 실패:`, err?.message ?? err);
+          logError('background', `[weekly-briefing-cron] lab ${lab.id} 실패`, { labId: lab.id })(err);
+        }
+      }
+    } catch (err: any) {
+      console.error('[weekly-briefing-cron] 체크 루프 에러:', err?.message ?? err);
+    }
+  }, CHECK_INTERVAL_MS);
+
+  console.log('[weekly-briefing-cron] 시작됨 — 매주 월요일 09:00 KST 자동 실행');
+}
