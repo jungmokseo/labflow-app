@@ -425,6 +425,7 @@ export default function WikiPage() {
             {ingestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             Ingest
           </button>
+          {/* 딥 리뷰 버튼 — 위키가 더 성숙한 후 복구. 엔드포인트(/api/wiki/synthesis)는 유지.
           <button
             onClick={handleSynthesis}
             disabled={synthLoading}
@@ -433,6 +434,7 @@ export default function WikiPage() {
             {synthLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             딥 리뷰
           </button>
+          */}
           <button
             onClick={handleWeeklyBriefing}
             disabled={briefingLoading}
