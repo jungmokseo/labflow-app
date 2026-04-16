@@ -680,6 +680,25 @@ model WikiRawQueue {
   @@map("wiki_raw_queue")
 }
 
+// ── Wiki Article History (변경 이력 — 주간 브리핑 기반) ────
+model WikiArticleHistory {
+  id            String   @id @default(cuid())
+  articleId     String   @map("article_id")
+  labId         String   @map("lab_id")
+  title         String
+  category      String
+  version       Int                              // 이 스냅샷의 version 번호
+  changeType    String   @map("change_type")      // 'create' | 'update' | 'delete'
+  contentBefore String?  @map("content_before")   // update 시 이전 content
+  contentAfter  String?  @map("content_after")    // update/create 후 content
+  diffSummary   String?  @map("diff_summary")     // 사람이 읽기 쉬운 diff 요약
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([labId, createdAt(sort: Desc)])
+  @@index([articleId])
+  @@map("wiki_article_history")
+}
+
 // ── GDrive 동기화 로그 ──────────────────────────────────────
 model GdriveSyncLog {
   id        String   @id @default(cuid())

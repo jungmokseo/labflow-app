@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   getWikiArticles, getWikiArticle, getWikiStatus, updateWikiArticle,
-  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue, diagnoseNotion, getIngestLog,
+  deleteWikiArticle, triggerWikiIngest, triggerWikiSynthesis, resetWikiNotionQueue, diagnoseNotion, getIngestLog, generateWeeklyBriefing,
   type WikiArticle, type WikiStatus, type IngestLogEvent,
 } from '@/lib/api';
 import {
@@ -355,6 +355,25 @@ export default function WikiPage() {
     }
   }
 
+  const [briefingLoading, setBriefingLoading] = useState(false);
+  async function handleWeeklyBriefing() {
+    if (briefingLoading) return;
+    setBriefingLoading(true);
+    try {
+      showToast('주간 브리핑 생성 중... (최대 1분)');
+      const res = await generateWeeklyBriefing(7);
+      showToast(`브리핑 완료 — "${res.title}"`);
+      await loadArticles();
+      // 자동으로 방금 생성된 브리핑 article로 이동
+      const newArt = (await getWikiArticles({ category: 'insight', limit: 10 })).articles?.find(a => a.title === res.title);
+      if (newArt) await loadDetail(newArt.id);
+    } catch (err: any) {
+      showToast('브리핑 실패: ' + (err?.message ?? '오류'), 'err');
+    } finally {
+      setBriefingLoading(false);
+    }
+  }
+
   const filtered = articles.filter(a => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -413,6 +432,15 @@ export default function WikiPage() {
           >
             {synthLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             딥 리뷰
+          </button>
+          <button
+            onClick={handleWeeklyBriefing}
+            disabled={briefingLoading}
+            title="지난 7일 변경 사항 요약 브리핑 생성"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '📬'}
+            주간 브리핑
           </button>
           <button
             onClick={() => setLogOpen(!logOpen)}

@@ -1103,6 +1103,16 @@ export async function resetWikiNotionQueue() {
   return apiFetch<{ message: string; deleted: number }>('/api/wiki/reset-notion', { method: 'POST' }, 0, 30000);
 }
 
+export async function generateWeeklyBriefing(days?: number) {
+  const q = days ? `?days=${days}` : '';
+  return apiFetch<{
+    message: string;
+    title: string;
+    stats: { historyCount: number; newMeetings: number; newInsights: number; createdArticles: number; updatedArticles: number };
+    briefing: string;
+  }>(`/api/wiki/weekly-briefing${q}`, { method: 'POST' }, 0, 120000);
+}
+
 export interface IngestLogEvent {
   ts: number;
   level: 'info' | 'warn' | 'error' | 'progress';

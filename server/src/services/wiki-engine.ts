@@ -907,6 +907,12 @@ ${queueText}`;
   for (const article of articles) {
     if (!article.title || !article.category || !article.content) continue;
     try {
+      // 이전 상태 조회 (history 기록용)
+      const existing = await prisma.wikiArticle.findFirst({
+        where: { labId, title: article.title },
+        select: { id: true, content: true },
+      });
+
       await prisma.$executeRawUnsafe(
         `INSERT INTO wiki_articles (id, lab_id, title, category, content, tags, sources, version, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, 1, $8, $8)
@@ -929,6 +935,29 @@ ${queueText}`;
       );
       updatedTitles.push(article.title);
       logIngestEvent(labId, 'progress', `아티클 저장: ${article.title} (${article.category})`);
+
+      // History 기록 (비동기 — 실패해도 메인 흐름 유지)
+      setImmediate(async () => {
+        try {
+          const saved = await prisma.wikiArticle.findFirst({
+            where: { labId, title: article.title },
+            select: { id: true, version: true },
+          });
+          if (!saved) return;
+          await prisma.wikiArticleHistory.create({
+            data: {
+              articleId: saved.id,
+              labId,
+              title: article.title,
+              category: article.category,
+              version: saved.version,
+              changeType: existing ? 'update' : 'create',
+              contentBefore: existing?.content ?? null,
+              contentAfter: article.content,
+            },
+          });
+        } catch { /* history 실패는 조용히 무시 */ }
+      });
     } catch (err) {
       logIngestEvent(labId, 'error', `아티클 저장 실패: ${article.title}`);
       logError('background', `[wiki-engine] 아티클 upsert 실패: ${article.title}`, { labId })(err);

@@ -18,6 +18,7 @@ import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { logError } from '../services/error-logger.js';
 import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus, diagnoseNotion, logIngestEvent, getIngestLogs, clearIngestLogs } from '../services/wiki-engine.js';
+import { generateWeeklyBriefing } from '../services/weekly-briefing.js';
 
 // labId별 ingest 실행 락 — 동일 lab 중복 실행 방지
 // (Railway는 단일 컨테이너 기준. 멀티 인스턴스면 DB 락 필요)
@@ -220,6 +221,32 @@ export async function wikiRoutes(app: FastifyInstance) {
     } catch (err) {
       logError('background', 'POST /api/wiki/reset-notion 실패', { labId })(err);
       return reply.code(500).send({ error: 'Notion 큐 초기화 실패' });
+    }
+  });
+
+  // ── POST /api/wiki/weekly-briefing — 주간 브리핑 생성 (OWNER만) ─
+  app.post('/api/wiki/weekly-briefing', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.userId!;
+    const labId = await resolveLabId(userId);
+    if (!labId) return reply.code(400).send({ error: '연구실이 설정되지 않았습니다' });
+    if (!(await isLabOwner(userId, labId))) {
+      return reply.code(403).send({ error: 'OWNER 권한이 필요합니다' });
+    }
+
+    const query = request.query as Record<string, string>;
+    const days = query.days ? Math.max(1, Math.min(30, parseInt(query.days, 10))) : 7;
+
+    try {
+      const result = await generateWeeklyBriefing(labId, userId, days);
+      return reply.send({
+        message: `주간 브리핑 생성 완료 — "${result.savedArticleTitle}"`,
+        title: result.savedArticleTitle,
+        stats: result.stats,
+        briefing: result.briefingMarkdown,
+      });
+    } catch (err: any) {
+      logError('background', 'POST /api/wiki/weekly-briefing 실패', { labId })(err);
+      return reply.code(500).send({ error: `브리핑 생성 실패: ${err.message}` });
     }
   });
 
