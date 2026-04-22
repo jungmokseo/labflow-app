@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Wait for Render deploy (3 min)
+      - name: Wait for Railway deploy (3 min)
         run: sleep 180
 
       - name: Healthcheck

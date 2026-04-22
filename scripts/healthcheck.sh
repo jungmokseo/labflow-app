@@ -1,8 +1,8 @@
 #!/bin/bash
 # LabFlow API Post-Deploy Healthcheck
-# Checks critical endpoints after Render deployment
+# Checks critical endpoints after Railway deployment
 
-API_URL="https://labflow-api.onrender.com"
+API_URL="https://labflow-app-production.up.railway.app"
 FAIL=0
 
 check() {
