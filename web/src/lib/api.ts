@@ -64,10 +64,73 @@ export function clearTokenCache() {
   tokenExpiresAt = 0;
 }
 
+// Offline queue replay가 사용할 최신 헤더 생성기 (Authorization 포함)
+export function getAuthHeadersForReplay(): Promise<Record<string, string>> {
+  return getAuthHeaders();
+}
+
+// Offline queue에 담지 않을 경로 (SSE 스트리밍, 파일 업로드 등)
+const OFFLINE_QUEUE_BLOCKLIST = [
+  '/api/brain/chat',      // SSE 스트리밍
+  '/api/brain/upload',    // FormData
+  '/api/meetings',        // FormData (POST /api/meetings — 파일 업로드 경로)
+  '/api/papers/upload',   // FormData
+  '/api/email/auth',      // OAuth 흐름
+  '/api/wiki/ingest',     // 장기 작업
+  '/api/wiki/synthesis',
+  '/api/wiki/weekly-briefing',
+  '/api/papers/alerts/run',
+];
+
+function shouldQueueOffline(path: string, method: string, body: unknown): boolean {
+  if (method === 'GET') return false;
+  if (typeof body !== 'string') return false; // FormData/Blob 큐잉 불가
+  // POST /api/meetings는 파일 업로드이지만 PATCH/DELETE는 JSON — method도 함께 판단
+  if (method === 'POST' && path === '/api/meetings') return false;
+  return !OFFLINE_QUEUE_BLOCKLIST.some((p) => path.startsWith(p));
+}
+
+// Online 복귀 시 자동 flush (모듈 로드 시 1회 등록)
+if (typeof window !== 'undefined') {
+  const trigger = () => {
+    import('./offline-queue').then((m) => {
+      m.flushOfflineQueue(getAuthHeaders).catch(() => {});
+    });
+  };
+  window.addEventListener('online', trigger);
+  // 초기 로드 시에도 시도 (페이지 열 때 이미 online인 경우)
+  if (navigator.onLine) setTimeout(trigger, 1500);
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}, retries = 2, timeoutMs = 30000): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const authHeaders = await getAuthHeaders();
+  const method = (options.method || 'GET').toUpperCase();
 
+  // 오프라인 + 큐잉 가능 요청 → IndexedDB 큐에 저장하고 성공 응답 유사 객체 반환
+  if (
+    typeof window !== 'undefined' &&
+    !navigator.onLine &&
+    shouldQueueOffline(path, method, options.body)
+  ) {
+    const { enqueueOfflineRequest } = await import('./offline-queue');
+    const body = typeof options.body === 'string' ? options.body : undefined;
+    const entry = await enqueueOfflineRequest({
+      method,
+      url: path,
+      body,
+      contentType: 'application/json',
+      label: `${method} ${path}`,
+    });
+    return {
+      success: true,
+      _queued: true,
+      _queueId: entry.id,
+      data: null,
+      message: '오프라인 상태입니다. 온라인 복귀 시 자동 동기화됩니다.',
+    } as unknown as T;
+  }
+
+  const authHeaders = await getAuthHeaders();
   const headers = { ...authHeaders, ...options.headers } as Record<string, string>;
   if (!options.body && headers['Content-Type'] === 'application/json') {
     delete headers['Content-Type'];

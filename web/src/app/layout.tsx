@@ -9,6 +9,8 @@ import { ToastProvider } from '@/components/Toast';
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { TokenHealthCheck } from '@/components/TokenHealthCheck';
 import { QuickCapture } from '@/components/QuickCapture';
+import { OfflineStatusBadge } from '@/components/OfflineStatusBadge';
+import { SWRProvider } from '@/lib/swr-provider';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
 
 export const viewport: Viewport = {
@@ -58,29 +60,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         `}} />
       </head>
       <body className="min-h-screen bg-bg text-text-main antialiased">
-        <ToastProvider>
-          <KeyboardShortcuts />
-          <AuthInit />
-          <ServiceWorkerRegister />
-          <DataPrefetch />
-          <TokenHealthCheck />
-          {showAuthenticatedUI ? (
-            <div className="flex h-dvh">
-              <Sidebar />
-              <main className="flex-1 overflow-auto pt-14 md:pt-0 bg-bg">
-                <div className="min-h-full bg-bg-card md:m-3 md:rounded-2xl md:shadow-card">
-                  {children}
-                </div>
-              </main>
-              {/* 빠른 캡처 FAB — 모든 페이지에서 접근 가능 */}
-              <Suspense fallback={null}>
-                <QuickCapture />
-              </Suspense>
-            </div>
-          ) : (
-            children
-          )}
-        </ToastProvider>
+        <SWRProvider>
+          <ToastProvider>
+            <KeyboardShortcuts />
+            <AuthInit />
+            <ServiceWorkerRegister />
+            <DataPrefetch />
+            <TokenHealthCheck />
+            {showAuthenticatedUI ? (
+              <div className="flex h-dvh">
+                <Sidebar />
+                <main className="flex-1 overflow-auto pt-14 md:pt-0 bg-bg">
+                  <div className="min-h-full bg-bg-card md:m-3 md:rounded-2xl md:shadow-card">
+                    {children}
+                  </div>
+                </main>
+                {/* 빠른 캡처 FAB — 모든 페이지에서 접근 가능 */}
+                <Suspense fallback={null}>
+                  <QuickCapture />
+                </Suspense>
+              </div>
+            ) : (
+              children
+            )}
+            <OfflineStatusBadge />
+          </ToastProvider>
+        </SWRProvider>
       </body>
     </html>
   );

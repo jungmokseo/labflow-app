@@ -8,7 +8,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PUBLIC_ROUTES = ['/sign-in', '/sign-up', '/legal', '/auth/callback'];
+const PUBLIC_ROUTES = ['/sign-in', '/sign-up', '/legal', '/auth/callback', '/offline'];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
