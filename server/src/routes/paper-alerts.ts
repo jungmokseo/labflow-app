@@ -465,32 +465,41 @@ async function generateWeeklyInsight(
   papers: Array<{ title: string; journal: string; stars: number; matchedThemes: string[]; description: string }>,
   journals: string[],
   themes: ResearchTheme[],
+  totalFetched: number,
 ): Promise<string> {
   const themeNames = themes.map(t => t.name);
-  // 테마별 통계
+
+  // ★ 등급별 분리
+  const coreStar2Plus = papers.filter(p => p.stars >= 2);
+  const referenceStar1 = papers.filter(p => p.stars === 1);
+
+  // 테마별 통계 — ★2 이상(핵심)만 카운트 (테마별 분포는 핵심 논문 기준)
   const themeCount: Record<string, number> = {};
-  for (const p of papers) {
+  for (const p of coreStar2Plus) {
     for (const t of p.matchedThemes) {
       themeCount[t] = (themeCount[t] || 0) + 1;
     }
   }
-  const themeStats = Object.entries(themeCount).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}(${c}편)`).join(', ');
+  const themeStats = Object.entries(themeCount).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}(${c}편)`).join(', ') || '(없음)';
 
   // 핵심 논문 목록 (★★★, ★★)
-  const topPapers = papers.filter(p => p.stars >= 2).slice(0, 10);
+  const topPapers = coreStar2Plus.slice(0, 10);
   const paperList = topPapers.map(p =>
     `- [★${'★'.repeat(p.stars - 1)}] ${p.title} (${p.journal}) — 테마: ${p.matchedThemes.join(', ')}`
-  ).join('\n');
+  ).join('\n') || '(없음)';
 
   const prompt = `당신은 바이오센서/유연전자소자 연구 분야의 전문 분석가입니다.
 
-### 이번 주 수집 통계 (사실 — 이 숫자만 사용)
+### 이번 주 수집 통계 (사실 — 정확히 이 숫자만 사용)
 - 저널 수: ${journals.length}개
-- 관련 논문 총계: ${papers.length}편
-- 테마별 분포: ${themeStats}
-- 연구실 5대 테마: ${themeNames.join(', ')}
+- RSS 총 수집량: ${totalFetched.toLocaleString()}편 (raw)
+- 키워드 매칭 후 관련 논문: ${papers.length}편
+  - 핵심 ★2 이상: ${coreStar2Plus.length}편 (단일 또는 복수 테마 직접 매칭)
+  - 참고 ★1: ${referenceStar1.length}편 (일반 키워드만 매칭, 관련도 낮음)
+- 핵심 테마별 분포 (★2+ 기준): ${themeStats}
+- 연구실 5대 테마 목록: ${themeNames.join(', ')}
 
-### 주요 논문 목록
+### 핵심 논문 목록 (★2 이상)
 ${paperList}
 
 위 내용을 바탕으로 이번 주 연구 동향 시사점을 3~5문장의 전문 분석으로 작성하세요.
@@ -502,7 +511,11 @@ ${paperList}
 4. "~편이 수집되었습니다" 같은 단순 나열 대신 "왜 이것이 중요한지" 분석 관점
 5. 이모지 사용 금지. 전문적이고 간결한 한국어로 작성.
 6. 마크다운 볼드(**키워드**)를 적극 활용하여 핵심 포인트를 강조.
-7. **숫자 사용 규칙 (절대 준수)**: 편수/개수를 언급할 때는 반드시 위 "이번 주 수집 통계" 섹션의 숫자만 그대로 사용하세요. 거기 없는 숫자(예: "36편", "20편" 등)를 절대 추정·추가·hallucinate하지 마세요. 편수 언급이 꼭 필요하지 않으면 아예 생략하고 정성적 분석에 집중하세요.
+7. **숫자 사용 규칙 (절대 준수)**:
+   - 편수/개수를 언급할 때는 반드시 위 "이번 주 수집 통계" 섹션의 정확한 숫자만 사용하세요.
+   - 예시 허용: "하이드로겔 ${themeCount['하이드로겔'] || 0}편", "핵심 ${coreStar2Plus.length}편", "총 ${papers.length}편 관련"
+   - 예시 금지: "하이드로겔 19편", "20편" 등 통계 섹션에 없는 숫자는 절대 만들어내지 마세요.
+   - 편수 언급이 꼭 필요하지 않으면 아예 생략하고 정성적 분석에 집중하세요.
 
 시사점:`;
 
@@ -690,7 +703,7 @@ export async function runPaperCrawl(
   let weeklyInsight = '';
   if (scored.length > 0) {
     try {
-      weeklyInsight = await generateWeeklyInsight(scored, feeds.map(f => f.name), themes);
+      weeklyInsight = await generateWeeklyInsight(scored, feeds.map(f => f.name), themes, allItems.length);
     } catch (err) {
       console.warn('Weekly insight generation failed:', err);
     }

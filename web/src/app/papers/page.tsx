@@ -513,12 +513,16 @@ export default function PapersPage() {
             <div className="text-sm text-text-muted space-y-1">
               <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
               <p>
-                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서{week.totalFetched ? <> 총 <strong className="text-text-heading">{week.totalFetched.toLocaleString()}편</strong> 수집,</> : ''} <strong className="text-primary">{week.papers.length}편</strong> 관련 논문 선별
+                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서
+                {week.totalFetched ? <> 총 <strong className="text-text-heading">{week.totalFetched.toLocaleString()}편</strong> 수집 →</> : ''}{' '}
+                <strong className="text-primary">{week.papers.length + week.otherPapers.length}편</strong> 관련
+                {' ('}핵심 <strong className="text-primary">{week.papers.length}편</strong>
+                {week.otherPapers.length > 0 && <> + 참고 <strong>{week.otherPapers.length}편</strong></>}
+                {')'}
                 {Array.from(week.themes.entries()).length > 0 && <>
-                  {' · 테마별: '}
+                  {' · 핵심 테마별: '}
                   {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
                 </>}
-                {week.otherPapers.length > 0 && <>, 기타({week.otherPapers.length})</>}
               </p>
             </div>
             {/* AI 생성 핵심 시사점 (서버에서 생성) */}
