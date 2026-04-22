@@ -104,7 +104,10 @@ async function executeSearchLabData(
   ctx.sendProgress(`"${(query || '').slice(0, 30)}" ${typeLabel} 검색 중...`);
   const searchAll = types.includes('all');
 
-  const [members, projects, publications, memos, captures, acknowledgments, memberInfos] = await Promise.all([
+  // 참여율 관련 질의 감지 — "참여율" / "월별" / "%" 가 포함되면 참여율 전용 memo를 별도 조회
+  const isParticipationQuery = /참여율|월별|월간.*과제|과제.*월간/.test(query);
+
+  const [members, projects, publications, memos, participationMemos, captures, acknowledgments, memberInfos] = await Promise.all([
     (searchAll || types.includes('member'))
       ? prisma.labMember.findMany({ where: { labId: ctx.labId, active: true } })
       : Promise.resolve([]),
@@ -123,6 +126,24 @@ async function executeSearchLabData(
           where: { OR: [{ userId: ctx.userId }, { labId: ctx.labId }] },
           orderBy: { createdAt: 'desc' },
           take: 50,
+        })
+      : Promise.resolve([]),
+    // 참여율 질의일 때만: 태그/source 기반으로 참여율 memo를 take-limit 없이 전부 조회
+    // (참여율 memo는 자주 업데이트되지 않아 최근 50건에 안 들어갈 수 있음 — 별도 조회로 누락 방지)
+    (isParticipationQuery && (searchAll || types.includes('memo')))
+      ? prisma.memo.findMany({
+          where: {
+            OR: [{ userId: ctx.userId }, { labId: ctx.labId }],
+            AND: {
+              OR: [
+                { tags: { has: '참여율' } },
+                { tags: { has: 'participation_rate' } },
+                { source: 'participation_rate' },
+                { title: { contains: '참여율' } },
+              ],
+            },
+          },
+          orderBy: { createdAt: 'desc' },
         })
       : Promise.resolve([]),
     (searchAll || types.includes('memo'))
@@ -333,16 +354,37 @@ async function executeSearchLabData(
   }
 
   // 메모 매칭
-  if (memos.length > 0) {
+  if (memos.length > 0 || participationMemos.length > 0) {
     const matched = memos.filter(m =>
       words.some(w =>
         (m.title && fuzzy(m.title, w)) || fuzzy(m.content, w)
       )
     );
+
+    // 참여율 질의: 별도 조회한 참여율 memo를 앞쪽에 배치 (중복 제거)
+    // 참여율 memo는 content를 잘리지 않게 1200자까지 노출
+    if (participationMemos.length > 0) {
+      const existingIds = new Set(matched.map(m => m.id));
+      const partLines = participationMemos
+        .filter(m => !existingIds.has(m.id))
+        .map(m => `- [참여율] **${m.title || '(제목없음)'}**\n  ${m.content.substring(0, 1200)}`);
+      if (partLines.length > 0) {
+        results.push('[메모 — 참여율 데이터 (우선)]\n' + partLines.join('\n\n'));
+      }
+    }
+
     if (matched.length > 0) {
-      results.push('[메모]\n' + matched.slice(0, 5).map(m =>
-        `- [${m.source || '메모'}] **${m.title || '(제목없음)'}**\n  ${m.content.substring(0, 300)}`
-      ).join('\n'));
+      // 참여율 태그가 있는 memo는 최상단으로 정렬 + 참여율 memo만 content 길게
+      matched.sort((a, b) => {
+        const aP = a.tags?.some(t => ['참여율', 'participation_rate'].includes(t)) ? 0 : 1;
+        const bP = b.tags?.some(t => ['참여율', 'participation_rate'].includes(t)) ? 0 : 1;
+        return aP - bP;
+      });
+      results.push('[메모]\n' + matched.slice(0, 5).map(m => {
+        const isPart = m.tags?.some(t => ['참여율', 'participation_rate'].includes(t));
+        const snippet = m.content.substring(0, isPart ? 1200 : 300);
+        return `- [${m.source || '메모'}] **${m.title || '(제목없음)'}**\n  ${snippet}`;
+      }).join('\n'));
     }
   }
 
