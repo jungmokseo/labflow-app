@@ -677,10 +677,10 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) saveEdit(); if (e.key === 'Escape') setEditingIndex(null); }}
-                  className="flex-1 text-sm bg-surface-card border border-primary rounded px-2 py-1 text-text-body outline-none"
+                  className="flex-1 text-sm bg-surface-card border border-primary rounded px-2 py-1 text-text-main outline-none"
                 />
                 <button onClick={saveEdit} className="text-xs text-green-400 hover:text-green-300 px-1">저장</button>
-                <button onClick={() => setEditingIndex(null)} className="text-xs text-text-muted hover:text-text-body px-1">취소</button>
+                <button onClick={() => setEditingIndex(null)} className="text-xs text-text-muted hover:text-text-main px-1">취소</button>
               </div>
             );
           }
@@ -698,7 +698,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
                     <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm3.78-9.72a.75.75 0 0 0-1.06-1.06L6.75 9.19 5.28 7.72a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l4.5-4.5z" /></svg>
                   )}
                 </span>
-                <span className={`text-sm transition-all ${done ? 'line-through text-text-muted' : 'text-text-body'}`}>
+                <span className={`text-sm transition-all ${done ? 'line-through text-text-muted' : 'text-text-main'}`}>
                   {label}
                 </span>
               </button>
@@ -722,7 +722,7 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
           onChange={(e) => setNewItemText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addItem(); }}
           placeholder="새 액션 아이템 추가..."
-          className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary px-1 py-1 text-text-body placeholder:text-text-muted/50 outline-none transition-colors"
+          className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary px-1 py-1 text-text-main placeholder:text-text-muted/50 outline-none transition-colors"
         />
         <button
           onClick={addItem}

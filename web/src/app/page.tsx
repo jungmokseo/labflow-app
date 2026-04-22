@@ -158,7 +158,7 @@ export default function DashboardPage() {
                       return (
                         <div key={service}>
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-text-body">{label[service] || service}</span>
+                            <span className="text-text-main">{label[service] || service}</span>
                             <span className="text-text-muted">${data.cost.toFixed(4)} ({data.calls}회)</span>
                           </div>
                           <div className="w-full h-1.5 bg-bg-hover rounded-full mt-1">

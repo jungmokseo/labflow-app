@@ -335,6 +335,8 @@ export default function BrainPage() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // 사용자 명시적 중단(Stop 버튼 or steering) 여부 — true면 recovery/polling 시도 안 함
+  const userAbortRef = useRef(false);
   const dragCounter = useRef(0);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [lastUserInput, setLastUserInput] = useState<string>('');
@@ -596,11 +598,14 @@ export default function BrainPage() {
     const msgText = (overrideMsg ?? input).trim();
     if (!msgText) return;
 
-    // 생성 중이면 큐에 저장 → 완료 후 자동 전송
+    // 생성 중에 새 질문 → Steering: 현재 스트림 즉시 중단 + 큐에 저장
+    // finally 블록이 queuedInput을 감지해 새 질문을 자동으로 이어서 전송한다.
     if (loading) {
       setQueuedInput(msgText);
       setInput('');
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      userAbortRef.current = true;
+      abortControllerRef.current?.abort();
       return;
     }
     const msg = msgText;
@@ -671,6 +676,14 @@ export default function BrainPage() {
           abortCtrl.signal,
         );
       } catch (streamErr: any) {
+        // 사용자 명시 중단 (Stop 버튼 / steering) → recovery/polling 건너뛰고 바로 정리
+        if (userAbortRef.current) {
+          userAbortRef.current = false;
+          setThinkingSteps([]);
+          setStreamingContent('');
+          setIsTokenStreaming(false);
+          return;
+        }
         // SSE 끊김 (모바일 화면 sleep 등) → polling으로 복구 시도
         // 서버는 try/catch 안에서 끝까지 처리하고 메시지를 DB에 저장하므로,
         // 채널 메시지를 polling하면 결과를 가져올 수 있다.
@@ -912,6 +925,7 @@ export default function BrainPage() {
   }
 
   function handleStopGenerating() {
+    userAbortRef.current = true;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
   }
@@ -1322,7 +1336,7 @@ export default function BrainPage() {
                     value={input}
                     onChange={handleTextareaChange}
                     onKeyDown={handleTextareaKeyDown}
-                    placeholder={loading && !queuedInput ? "다음 질문을 입력하면 완료 후 자동으로 전송됩니다..." : "메시지를 입력하세요..."}
+                    placeholder={loading && !queuedInput ? "새 질문을 입력하면 현재 답변을 중단하고 이어서 전송됩니다..." : "메시지를 입력하세요..."}
                     rows={2}
                     className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[52px] max-h-[120px] md:max-h-[200px]"
                   />

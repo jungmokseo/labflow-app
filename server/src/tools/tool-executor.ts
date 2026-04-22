@@ -1207,6 +1207,8 @@ async function executeImportStructuredData(
       // 규정, 참여율, 사사문구 → 구조화된 메모로 저장
       const typeLabelMap: Record<string, string> = { regulation: '규정', participation_rate: '참여율', acknowledgment: '사사문구' };
       const typeLabel = typeLabelMap[data_type] || data_type;
+      // 영문 키와 한글 라벨 모두 태그로 추가 → 검색 hit 률 향상 (한글/영문 어느 쪽 질의에도 매칭)
+      const baseTags = [data_type, typeLabel];
       let created = 0;
       for (const item of items) {
         const title = item.title || item['제목'] || item['항목'] || `${typeLabel} #${created + 1}`;
@@ -1217,7 +1219,7 @@ async function executeImportStructuredData(
             labId,
             title,
             content,
-            tags: [data_type, ...(item.tags || [])],
+            tags: [...baseTags, ...(item.tags || [])],
             source: data_type,
           },
         });

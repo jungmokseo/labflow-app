@@ -483,39 +483,54 @@ export async function brainChatStream(
   const reader = res.body?.getReader();
   if (!reader) throw new Error('ReadableStream not supported');
 
+  // 외부 abort signal과 reader 연결 — signal.abort() → reader.cancel()
+  // (fetch signal만으로는 stream reader가 즉시 중단되지 않는 브라우저가 있음)
+  const onAbort = () => { reader.cancel().catch(() => {}); };
+  externalSignal?.addEventListener('abort', onAbort, { once: true });
+
   const decoder = new TextDecoder();
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      // 루프 진입 전 abort 체크 — reader.read()가 resolve되기 전에 즉시 빠져나감
+      if (externalSignal?.aborted) {
+        await reader.cancel().catch(() => {});
+        throw new Error('사용자가 생성을 중단했습니다.');
+      }
 
-    buffer += decoder.decode(value, { stream: true });
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    // Parse SSE events from buffer
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';   // keep incomplete line in buffer
+      buffer += decoder.decode(value, { stream: true });
 
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      try {
-        const event = JSON.parse(line.slice(6));
-        if (event.type === 'progress') {
-          onProgress(event.step);
-        } else if (event.type === 'token') {
-          onToken?.(event.content);
-        } else if (event.type === 'action') {
-          onAction?.(event.action);
-        } else if (event.type === 'done') {
-          return event as BrainChatResult;
-        } else if (event.type === 'error') {
-          throw new Error(event.error || '처리 중 오류가 발생했습니다');
+      // Parse SSE events from buffer
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';   // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          if (event.type === 'progress') {
+            onProgress(event.step);
+          } else if (event.type === 'token') {
+            onToken?.(event.content);
+          } else if (event.type === 'action') {
+            onAction?.(event.action);
+          } else if (event.type === 'done') {
+            return event as BrainChatResult;
+          } else if (event.type === 'error') {
+            throw new Error(event.error || '처리 중 오류가 발생했습니다');
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) continue;   // partial JSON, skip
+          throw e;
         }
-      } catch (e) {
-        if (e instanceof SyntaxError) continue;   // partial JSON, skip
-        throw e;
       }
     }
+  } finally {
+    externalSignal?.removeEventListener('abort', onAbort);
   }
 
   throw new Error('스트림이 예기치 않게 종료되었습니다');

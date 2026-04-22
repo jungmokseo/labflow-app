@@ -265,7 +265,19 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   },
   {
     name: 'import_structured_data',
-    description: '업로드된 엑셀/문서에서 파싱된 데이터를 DB에 저장합니다. 과제, 구성원, 논문, 참여율, 규정 등을 자동 분류하여 적절한 테이블에 저장합니다. 사용자가 파일을 업로드한 후 "저장해줘"라고 하면 사용하세요.',
+    description: `업로드된 엑셀/문서에서 파싱된 데이터를 DB에 저장합니다. 사용자가 파일을 업로드한 후 "저장해줘"라고 하면 사용하세요.
+
+## data_type 분류 가이드 (정확히 선택 — 오분류 시 나중에 검색 안 됨)
+
+- **'participation_rate'**: "참여율", "과제별 월별 %", "매월 X%" 등 **PI 또는 구성원의 과제 참여율 수치**. 예: "뇌선도 5%, BRL 20%", "2026년 월간 참여율".
+- **'regulation'**: 여비규정, 연구비 매뉴얼, 출장비 기준, 윤리 지침 등 **규정/매뉴얼 문서**. **참여율은 절대 regulation이 아님**.
+- **'acknowledgment'**: 논문 사사문구 ("This work was supported by..."), 과제별 감사 표기.
+- **'project'**: 과제 정보 (제목, 기간, 금액, 담당자).
+- **'member'**: 구성원 정보 (이름, 학번, 연구자번호, 이메일).
+- **'publication'**: 논문 정보 (제목, 저자, 저널, 연도, DOI).
+- **'auto'**: 위 구분이 애매할 때만. auto로 저장하면 추후 검색 성능이 떨어지니 가급적 명시 지정 권장.
+
+판별 힌트: 문서 제목/내용에 "참여율", "%", "매월", "월별"이 같이 나오면 거의 항상 participation_rate.`,
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -273,7 +285,7 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         data_type: {
           type: 'string',
           enum: ['project', 'member', 'publication', 'regulation', 'participation_rate', 'acknowledgment', 'auto'],
-          description: '데이터 유형. auto면 AI가 자동 판별.',
+          description: '데이터 유형. 위 가이드에 따라 정확히 선택.',
         },
         items: {
           type: 'array',
