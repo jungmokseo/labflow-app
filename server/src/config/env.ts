@@ -21,6 +21,7 @@ const envSchema = z.object({
   GDRIVE_FILE_ACKNOWLEDGMENT: z.string().optional(), // 과제 사사 스프레드시트 ID
   GDRIVE_FILE_MEMBER_INFO: z.string().optional(),    // 인적사항 파일 ID (xlsx 또는 Sheets)
   LAB_ID: z.string().optional(),                     // 자동 동기화용 Lab ID
+  SLACK_BOT_TOKEN: z.string().optional(),             // Slack DM 발송용 Bot token
   FRONTEND_URL: z.string().default('https://labflow-web.vercel.app'), // Vercel 프로젝트: labflow-web
   PORT: z.coerce.number().default(3001),
   HOST: z.string().default('0.0.0.0'),

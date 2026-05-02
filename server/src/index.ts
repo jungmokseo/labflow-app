@@ -28,6 +28,7 @@ import { calendarRoutes } from './routes/calendar.js';
 import { errorRoutes } from './routes/errors.js';
 import { wikiRoutes } from './routes/wiki.js';
 import { syncRoutes } from './routes/sync.js';
+import { blissTasksRoutes } from './routes/bliss-tasks.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -99,6 +100,7 @@ async function buildApp() {
     await app.register(errorRoutes);
     await app.register(wikiRoutes);
     await app.register(syncRoutes);
+    await app.register(blissTasksRoutes);
 
   return app;
 }

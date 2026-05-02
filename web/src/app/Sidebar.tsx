@@ -14,7 +14,7 @@ import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
-  PanelLeftClose, PanelLeft, LogOut, Network, BookMarked,
+  PanelLeftClose, PanelLeft, LogOut, Network, BookMarked, Inbox,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -26,6 +26,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
     mutate('captures-all-active', () => getCaptures({ completed: 'false', sort: 'newest', limit: 100 }), { revalidate: false });
     mutate('captures-all-completed', () => getCaptures({ completed: 'true', sort: 'newest', limit: 20 }), { revalidate: false });
   },
+  '/tasks/review': () => {},
   '/brain': () => mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : []), { revalidate: false }),
   '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
   { href: '/brain', icon: Brain, label: 'Brain' },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
+  { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
   { href: '/papers', icon: BookOpen, label: '연구동향' },
   { href: '/meetings', icon: Mic, label: '회의 노트' },
   { href: '/wiki', icon: BookMarked, label: '지식 위키' },
@@ -162,7 +164,11 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
 
       <nav className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => {
-          const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          const active = item.href === '/'
+            ? pathname === '/'
+            : item.href === '/tasks'
+              ? pathname === '/tasks'
+              : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

@@ -239,6 +239,59 @@ export async function deleteCompletedCaptures() {
   return apiFetch<{ success: boolean; deletedCount: number }>('/api/captures/completed', { method: 'DELETE' });
 }
 
+// ── BLISS 검토 대기 큐 ─────────────────────────────
+export type BlissTaskPriority = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface BlissTaskSource {
+  sourceChannel?: string;
+  slackPermalink?: string;
+  slackUserId?: string;
+  requesterName?: string;
+}
+
+export interface BlissTaskMetadata {
+  blissSource?: BlissTaskSource;
+  heldAt?: string;
+  notifiedAt?: string;
+  assignedOwner?: string;
+  [key: string]: unknown;
+}
+
+export interface BlissTaskReviewItem {
+  id: string;
+  title: string;
+  content: string;
+  metadata: BlissTaskMetadata | null;
+  createdAt: string;
+}
+
+export async function getBlissTaskReviewQueue() {
+  return apiFetch<BlissTaskReviewItem[]>('/api/bliss-tasks/review-queue');
+}
+
+export async function confirmBlissTask(
+  id: string,
+  data: {
+    actionDate: string;
+    ownerName: string;
+    priority?: BlissTaskPriority;
+    memo?: string;
+  },
+) {
+  return apiFetch<{ success: boolean; notified: boolean; error?: string }>(`/api/bliss-tasks/${id}/confirm`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function holdBlissTask(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/bliss-tasks/${id}/hold`, { method: 'PATCH' });
+}
+
+export async function archiveBlissTask(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/bliss-tasks/${id}/archive`, { method: 'PATCH' });
+}
+
 // ── 이메일 브리핑 ──────────────────────────────────
 export interface EmailBriefingItem {
   sender: string;
@@ -809,8 +862,17 @@ export async function getLabCompleteness() {
   return apiFetch<{ completeness: number; missing: string[]; suggestions: string[] }>('/api/lab/completeness');
 }
 
+export interface LabMemberOption {
+  id: string;
+  name: string;
+  role: string;
+  email?: string | null;
+  phone?: string | null;
+  team?: string | null;
+}
+
 export async function getLabMembers() {
-  return apiFetch<Array<{ id: string; name: string; role: string; email: string; phone: string }>>('/api/lab/members');
+  return apiFetch<LabMemberOption[]>('/api/lab/members');
 }
 
 export async function addLabMember(data: { name: string; nameEn?: string; email?: string; role?: string; phone?: string }) {
