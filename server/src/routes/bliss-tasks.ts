@@ -91,11 +91,11 @@ function formatReviewItem(capture: Pick<Capture, 'id' | 'summary' | 'content' | 
   };
 }
 
-async function findReviewCapture(id: string, userId: string) {
+async function findReviewCapture(id: string, _userId: string) {
+  // BLISS Lab은 단일 PI 환경 — userId 매칭 제거. blissSource로 자동 식별.
   return prisma.capture.findFirst({
     where: {
       id,
-      userId,
       category: 'TASK',
       status: 'active',
       metadata: { path: ['blissSource'], not: Prisma.JsonNull },
@@ -141,10 +141,12 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     return reply.code(201).send({ success: true, captureId: capture.id });
   });
 
-  app.get('/api/bliss-tasks/review-queue', { preHandler: authMiddleware }, async (request) => {
+  app.get('/api/bliss-tasks/review-queue', { preHandler: authMiddleware }, async (_request) => {
+    // BLISS Lab 단일 PI 환경 — userId 매칭 제거.
+    // BLISS Slack에서 들어온 task는 항상 dev-user-seo / LAB_OWNER_CLERK_ID로 저장되지만
+    // web 로그인한 Clerk userId와 다를 수 있어 매칭 실패. blissSource 메타로 식별.
     const captures = await prisma.capture.findMany({
       where: {
-        userId: request.userId!,
         reviewed: false,
         category: 'TASK',
         status: 'active',
