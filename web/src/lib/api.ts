@@ -249,8 +249,14 @@ export interface BlissTaskSource {
   requesterName?: string;
 }
 
+export interface BlissTaskDirect {
+  assignedOwner?: string;
+  notifiedAt?: string;
+}
+
 export interface BlissTaskMetadata {
   blissSource?: BlissTaskSource;
+  blissDirect?: BlissTaskDirect;
   heldAt?: string;
   notifiedAt?: string;
   assignedOwner?: string;
@@ -290,6 +296,45 @@ export async function holdBlissTask(id: string) {
 
 export async function archiveBlissTask(id: string) {
   return apiFetch<{ success: boolean }>(`/api/bliss-tasks/${id}/archive`, { method: 'PATCH' });
+}
+
+// 직접 추가 (검토 단계 건너뛰고 즉시 학생 알림)
+export async function createBlissTaskDirect(data: {
+  title: string;
+  content?: string;
+  actionDate: string;
+  ownerName: string;
+  priority?: BlissTaskPriority;
+  memo?: string;
+}) {
+  return apiFetch<{ success: boolean; captureId: string; notified: boolean; error?: string }>(
+    '/api/bliss-tasks/direct-create',
+    { method: 'POST', body: JSON.stringify(data) },
+  );
+}
+
+// 진행 중 task 목록
+export interface BlissTaskActiveItem {
+  id: string;
+  title: string;
+  content: string;
+  metadata: BlissTaskMetadata | null;
+  actionDate: string | null;
+  priority: BlissTaskPriority;
+  completed: boolean;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export async function getBlissActiveTasks() {
+  return apiFetch<BlissTaskActiveItem[]>('/api/bliss-tasks/active');
+}
+
+export async function completeBlissTask(id: string, done = true) {
+  return apiFetch<{ success: boolean; completed: boolean }>(`/api/bliss-tasks/${id}/complete`, {
+    method: 'PATCH',
+    body: JSON.stringify({ done }),
+  });
 }
 
 // ── 이메일 브리핑 ──────────────────────────────────

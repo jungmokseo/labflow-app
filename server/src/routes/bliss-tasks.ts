@@ -22,6 +22,19 @@ const confirmSchema = z.object({
   memo: z.string().max(2000).optional(),
 });
 
+const directCreateSchema = z.object({
+  title: z.string().min(1).max(300),
+  content: z.string().max(5000).optional(),
+  actionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  ownerName: z.string().min(1).max(120),
+  priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+  memo: z.string().max(2000).optional(),
+});
+
+const completeSchema = z.object({
+  done: z.boolean().optional(),
+});
+
 type BlissSource = {
   sourceChannel?: string;
   slackPermalink?: string;
@@ -235,5 +248,123 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     });
 
     return { success: true };
+  });
+
+  // 교수가 web에서 직접 task 추가 (검토 단계 건너뛰고 즉시 학생 알림)
+  app.post('/api/bliss-tasks/direct-create', { preHandler: authMiddleware }, async (request) => {
+    const body = directCreateSchema.parse(request.body);
+    const { user, labId } = await resolveOwner();
+
+    const actionDate = parseDateOnly(body.actionDate);
+    const notifiedAt = new Date().toISOString();
+
+    const capture = await prisma.capture.create({
+      data: {
+        userId: user.id,
+        labId,
+        content: appendMemo(body.content || body.title, body.memo),
+        summary: body.title.slice(0, 200),
+        category: 'TASK',
+        tags: ['bliss-direct'],
+        priority: (body.priority || 'MEDIUM') as Priority,
+        confidence: 1.0,
+        modelUsed: 'bliss-direct-create',
+        sourceType: 'manual',
+        reviewed: true,
+        status: 'active',
+        actionDate,
+        metadata: {
+          blissDirect: {
+            assignedOwner: body.ownerName,
+            notifiedAt,
+          },
+          capturedAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const notifyResult = await notifyStudentTaskAssigned({
+      ownerName: body.ownerName,
+      taskTitle: body.title,
+      actionDate,
+      memo: body.memo,
+    });
+
+    return {
+      success: true,
+      captureId: capture.id,
+      notified: notifyResult.ok,
+      ...(notifyResult.ok ? {} : { error: notifyResult.error }),
+    };
+  });
+
+  // 진행 중 task 목록 (확정된 것 + 직접 추가한 것 모두)
+  app.get('/api/bliss-tasks/active', { preHandler: authMiddleware }, async () => {
+    const captures = await prisma.capture.findMany({
+      where: {
+        category: 'TASK',
+        status: 'active',
+        reviewed: true,
+        OR: [
+          { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
+          { metadata: { path: ['blissDirect'], not: Prisma.JsonNull } },
+        ],
+      },
+      select: {
+        id: true,
+        summary: true,
+        content: true,
+        metadata: true,
+        actionDate: true,
+        priority: true,
+        completed: true,
+        completedAt: true,
+        createdAt: true,
+      },
+      orderBy: [{ actionDate: 'asc' }, { createdAt: 'desc' }],
+      take: 100,
+    });
+
+    return captures.map((c) => ({
+      id: c.id,
+      title: c.summary,
+      content: c.content,
+      metadata: c.metadata,
+      actionDate: c.actionDate,
+      priority: c.priority,
+      completed: c.completed,
+      completedAt: c.completedAt,
+      createdAt: c.createdAt,
+    }));
+  });
+
+  // task 완료 토글
+  app.patch('/api/bliss-tasks/:id/complete', { preHandler: authMiddleware }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = completeSchema.parse(request.body || {});
+    const done = body.done !== false; // 기본 true
+
+    const capture = await prisma.capture.findFirst({
+      where: {
+        id,
+        category: 'TASK',
+        OR: [
+          { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
+          { metadata: { path: ['blissDirect'], not: Prisma.JsonNull } },
+        ],
+      },
+    });
+    if (!capture) return reply.code(404).send({ error: 'Task를 찾을 수 없습니다' });
+
+    await prisma.capture.update({
+      where: { id: capture.id },
+      data: {
+        completed: done,
+        completedAt: done ? new Date() : null,
+        status: done ? 'completed' : 'active',
+      },
+    });
+
+    return { success: true, completed: done };
   });
 }
