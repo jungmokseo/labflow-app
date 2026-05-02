@@ -26,6 +26,10 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGINS: z.string().default('http://localhost:8081,http://localhost:3000,https://labflow-web.vercel.app'),
+  // 외부 워커 → server-to-server sync (bliss-slack-worker → /api/sync/bliss-task)
+  LABFLOW_SYNC_TOKEN: z.string().optional(),
+  LAB_OWNER_CLERK_ID: z.string().optional(),  // Capture 소유자 결정 (default: dev-user-seo)
+  LAB_OWNER_EMAIL: z.string().optional(),
 });
 
 function loadEnv(): z.infer<typeof envSchema> {
