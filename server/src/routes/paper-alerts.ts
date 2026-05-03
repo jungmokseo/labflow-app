@@ -293,17 +293,92 @@ function describePaperFetchRange(tLast: Date, isFirstRun: boolean): string | nul
 // ── Theme scoring ───────────────────────────────────
 interface ResearchTheme { name: string; keywords: string[]; }
 
+/**
+ * 텍스트 정규화 — 키워드 매칭 false negative 축소.
+ * - 하이픈/언더스코어를 공백으로 (anti-fouling ↔ anti fouling ↔ antifouling)
+ * - 연속 공백을 1개로
+ * - 소문자 변환
+ */
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * 더 관대한 키워드 매칭 — 5가지 변형 시도:
+ * 1. 정확 substring (기존 동작 유지)
+ * 2. 정규화 substring (하이픈/공백 무시)
+ * 3. 공백 제거 매칭 (biosensor ↔ bio sensor)
+ * 4. 단어 경계 + 어형 변형 (hydrogel → hydrogels, hydrogel-based)
+ * 5. 다단어 키워드는 모든 단어가 가까이 등장하면 매칭 (50자 이내)
+ */
+function matchKeyword(text: string, keyword: string): boolean {
+  const lowerText = text.toLowerCase();
+  const lowerKw = keyword.toLowerCase();
+  if (lowerText.includes(lowerKw)) return true;
+
+  const normText = normalizeText(text);
+  const normKw = normalizeText(keyword);
+  if (normText.includes(normKw)) return true;
+
+  // 공백 제거 매칭 (biosensor ↔ bio sensor)
+  const compactKw = normKw.replace(/\s/g, '');
+  if (compactKw.length >= 5 && normText.replace(/\s/g, '').includes(compactKw)) return true;
+
+  // 단어 경계 + 어형 변형 (단일 단어 키워드만)
+  if (!normKw.includes(' ') && normKw.length >= 4) {
+    try {
+      const escaped = normKw.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const boundaryRe = new RegExp(`\\b${escaped}\\w{0,4}\\b`, 'i');
+      if (boundaryRe.test(normText)) return true;
+    } catch {}
+  }
+
+  // 다단어 키워드: 모든 단어가 50자 이내에 등장
+  if (normKw.includes(' ')) {
+    const words = normKw.split(' ').filter(w => w.length >= 3);
+    if (words.length >= 2) {
+      const positions = words.map(w => normText.indexOf(w));
+      if (positions.every(p => p >= 0)) {
+        const span = Math.max(...positions) - Math.min(...positions);
+        if (span <= 50) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function scoreByThemes(item: RssItem, themes: ResearchTheme[], flatKeywords: string[]) {
-  const text = `${item.title} ${item.description}`.toLowerCase();
+  const text = `${item.title} ${item.description}`;
   const matchedThemes: string[] = [];
+  let themeMatchCount = 0; // 각 테마 안에서 몇 개 키워드가 매칭됐는지
   for (const theme of themes) {
-    if (theme.keywords.some(kw => text.includes(kw.toLowerCase()))) matchedThemes.push(theme.name);
+    let count = 0;
+    for (const kw of theme.keywords) { if (matchKeyword(text, kw)) count++; }
+    if (count > 0) {
+      matchedThemes.push(theme.name);
+      themeMatchCount += count;
+    }
   }
   let flatMatchCount = 0;
-  for (const kw of flatKeywords) { if (text.includes(kw.toLowerCase())) flatMatchCount++; }
-  const stars = matchedThemes.length >= 2 ? 3 : matchedThemes.length === 1 ? 2 : flatMatchCount > 0 ? 1 : 0;
+  for (const kw of flatKeywords) { if (matchKeyword(text, kw)) flatMatchCount++; }
+
+  // 별점 기준 완화 — 더 너그럽게 핵심으로 분류:
+  // ★3: 테마 ≥ 2 매칭, 또는 (테마 1 + 키워드 2+), 또는 (테마 1 + 같은테마 안에서 3+ 매칭)
+  // ★2: 테마 1 매칭, 또는 키워드 3+ 매칭
+  // ★1: 키워드 1+ 매칭 (의미 있을 가능성)
+  let stars = 0;
+  if (matchedThemes.length >= 2) stars = 3;
+  else if (matchedThemes.length === 1 && (flatMatchCount >= 2 || themeMatchCount >= 3)) stars = 3;
+  else if (matchedThemes.length === 1) stars = 2;
+  else if (flatMatchCount >= 3) stars = 2;
+  else if (flatMatchCount >= 1) stars = 1;
+
   const totalKw = flatKeywords.length + themes.reduce((s, t) => s + t.keywords.length, 0);
-  const score = totalKw > 0 ? Math.min(1, (matchedThemes.length + flatMatchCount) / Math.max(totalKw * 0.3, 1)) : 0;
+  const score = totalKw > 0 ? Math.min(1, (matchedThemes.length + flatMatchCount + themeMatchCount * 0.3) / Math.max(totalKw * 0.2, 1)) : 0;
   return { stars, matchedThemes, score };
 }
 
@@ -337,20 +412,29 @@ ${labContext ? `연구실 추가 맥락:\n${labContext}\n` : ''}
 아래 논문들은 키워드 매칭으로 사전 필터링되었으며, 각 논문에 **키워드 스코어**(참고값)가 표시되어 있습니다.
 이 스코어를 참고하되, 논문의 실제 내용(방법론, 소재, 응용 분야)을 기반으로 관련도를 재평가하세요.
 
-**중요 지침:**
+**중요 지침 — 너무 엄격하게 보지 말고, 가능성에 대해 관대하게 평가하세요:**
 - 키워드 스코어가 ★2~3인 논문은 명확한 이유가 없는 한 ★1로 강등하지 마세요.
-- 초록을 꼼꼼히 읽고, 소재/방법론/응용이 연구실 테마와 실질적으로 겹치는지 판단하세요.
-- ★2 논문에는 반드시 "이 논문의 어떤 부분이 연구실과 관련 있어서 확인을 추천하는지" 구체적으로 설명하세요.
+- "키워드 스코어 ★0"으로 표시된 논문도 있을 수 있습니다. 의미적으로 관련이 있다면 ★1~2로 승격해주세요.
+- 초록이 짧거나 description이 거의 없어도, 제목만으로 관련 가능성이 보이면 ★1을 기본으로 부여하세요.
+- 직접 키워드가 일치하지 않더라도 다음 분야는 모두 관련 있다고 봅니다:
+  · 유연/스트레처블 전자소자, 웨어러블 센서, 바이오인터페이스
+  · 폴리머/하이드로겔/고분자 소재 (특히 의료용/바이오용)
+  · 표면 처리/접착/항균 코팅 (특히 임플란트/의료기기 응용)
+  · 나노소재(나노입자, 나노섬유 등)의 생체 응용
+  · 뉴럴 인터페이스, BCI, 신경 전극, 신경 자극
+  · 액체금속, 전도성 잉크, 인쇄 전자
+- 같은 폴리머라도 응용이 medical/bioelectronic이면 ★2 이상 적극 부여하세요.
+- ★2 논문에는 "이 논문의 어떤 부분이 연구실과 관련 있어서 확인을 추천하는지" 구체적으로 설명하세요.
 
 ${paperList}
 
 각 논문에 대해 다음 JSON 배열로만 응답하세요:
 [{"id": 1, "stars": 1~3, "reason": "관련 이유 또는 확인 추천 코멘트 (2문장 이내)"}]
 
-stars 기준:
-- 3: 연구실 핵심 테마와 직접 관련. 방법론이나 소재가 연구실에서 활용 가능.
-- 2: 관련 분야이며 참고할 가치 있음. "이런 부분이 관련 있으니 확인 추천" 코멘트 필수.
-- 1: 같은 분야이나 직접 연관은 낮음. 동향 파악 목적.`;
+stars 기준 (관대하게):
+- 3: 연구실 핵심 테마와 직접 관련. 방법론·소재·응용이 연구실에서 즉시 활용 가능.
+- 2: 인접 분야이며 참고/검토할 가치 있음. 의미적으로 연구실 테마와 겹침.
+- 1: 같은 분야이나 직접 연관은 낮음. 동향 파악·인사이트 목적.`;
 
     try {
       if (env.ANTHROPIC_API_KEY) {
@@ -614,10 +698,26 @@ export async function runPaperCrawl(
   });
 
   // 1차 필터: 키워드 매칭 (빠른 pre-filter)
-  const keywordMatched = afterTLast
-    .map(item => ({ ...item, ...scoreByThemes(item, themes, flatKeywords) }))
+  const allScored = afterTLast.map(item => ({ ...item, ...scoreByThemes(item, themes, flatKeywords) }));
+  const keywordMatched = allScored
     .filter(item => item.stars > 0)
     .sort((a, b) => b.stars - a.stars || b.score - a.score);
+
+  // ★0 (키워드 미매칭) 중에서도 의미적으로 관련 가능한 후보를 일부 AI 평가에 포함:
+  // RSS description이 짧아 substring 매칭 실패 가능성 → 제목/저널 기반으로 일부 샘플링.
+  // 키워드 매칭이 너무 적을 때(< 30편)에만 추가 후보 수집 (AI 비용 통제).
+  let extraCandidates: typeof allScored = [];
+  if (keywordMatched.length < 30) {
+    const matchedTitles = new Set(keywordMatched.map(i => i.title));
+    extraCandidates = allScored
+      .filter(item => item.stars === 0 && !matchedTitles.has(item.title))
+      // 가벼운 휴리스틱: title/desc 길이가 어느 정도 있고 (스팸/공지가 아님), 영문 위주 (논문일 가능성)
+      .filter(item => item.title.length >= 20 && /^[a-zA-Z\s\d\-:.,()]+$/.test(item.title.slice(0, 50)))
+      .slice(0, Math.max(0, 30 - keywordMatched.length))
+      .map(item => ({ ...item, stars: 1 as 0 | 1 | 2 | 3 })); // 임시로 ★1로 마킹 → AI가 재평가
+  }
+
+  const aiInputCandidates = [...keywordMatched, ...extraCandidates];
 
   // 2차 필터: AI 관련도 평가 (연구실 맥락 기반)
   let labContext = '';
@@ -635,22 +735,32 @@ export async function runPaperCrawl(
     }
   } catch (err) { console.warn('[paper-alert] Lab context fetch failed:', err); }
 
-  const aiScores = await aiRelevanceScore(keywordMatched, themes, labContext);
+  const aiScores = await aiRelevanceScore(aiInputCandidates, themes, labContext);
 
   // AI 스코어 적용 (AI 결과 있으면 교체, 없으면 키워드 스코어 유지)
-  const scored = keywordMatched.map(item => {
-    const aiResult = aiScores.get(item.title);
-    return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : { ...item, aiReason: '' };
-  }).sort((a, b) => b.stars - a.stars || b.score - a.score).slice(0, 50); // ★1 포함해서 50편까지
+  // 단 extraCandidates(★0 출신)는 AI 결과 없으면 결과에서 제외 (의미 매칭 실패).
+  const matchedTitleSet = new Set(keywordMatched.map(i => i.title));
+  const scored = aiInputCandidates
+    .map(item => {
+      const aiResult = aiScores.get(item.title);
+      return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : { ...item, aiReason: '' };
+    })
+    .filter(item => {
+      // 키워드 매칭은 무조건 통과, 추가 후보(★0 출신)는 AI가 ★2+ 줬을 때만 통과
+      if (matchedTitleSet.has(item.title)) return true;
+      return item.stars >= 2;
+    })
+    .sort((a, b) => b.stars - a.stars || b.score - a.score)
+    .slice(0, 100); // 50 → 100편으로 확대
 
-  // 매칭 키워드 추출 함수
+  // 매칭 키워드 추출 함수 — scoreByThemes와 동일한 매칭 규칙 사용
   function extractMatchedKeywords(item: { title: string; description: string }, themesArr: ResearchTheme[], flatKw: string[]): string[] {
-    const text = `${item.title} ${item.description}`.toLowerCase();
+    const text = `${item.title} ${item.description}`;
     const matched: string[] = [];
     for (const t of themesArr) {
-      for (const kw of t.keywords) { if (text.includes(kw.toLowerCase()) && !matched.includes(kw)) matched.push(kw); }
+      for (const kw of t.keywords) { if (matchKeyword(text, kw) && !matched.includes(kw)) matched.push(kw); }
     }
-    for (const kw of flatKw) { if (text.includes(kw.toLowerCase()) && !matched.includes(kw)) matched.push(kw); }
+    for (const kw of flatKw) { if (matchKeyword(text, kw) && !matched.includes(kw)) matched.push(kw); }
     return matched;
   }
 
