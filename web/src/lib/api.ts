@@ -337,6 +337,68 @@ export async function completeBlissTask(id: string, done = true) {
   });
 }
 
+// ── BLISS-bot 미답변 질문 (Follow-up) ──────────────────
+export interface FollowUpItem {
+  id: string;
+  question: string;
+  askedBy: string;
+  reason: string | null;
+  channelId: string | null;
+  slackUserId: string | null;
+  slackChannelId: string | null;
+  answer: string | null;
+  category: string | null;
+  faqId: string | null;
+  resolvedVia: string | null;
+  resolvedBy: string | null;
+  exportedAt: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FollowUpListResponse {
+  items: FollowUpItem[];
+  nextCursor: string | null;
+  counts: { pending: number; answered: number };
+}
+
+export async function getFollowUpList(params: { status?: 'pending' | 'answered' | 'all'; limit?: number; cursor?: string } = {}) {
+  const qs = new URLSearchParams();
+  if (params.status) qs.set('status', params.status);
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.cursor) qs.set('cursor', params.cursor);
+  const path = `/api/follow-up${qs.toString() ? `?${qs}` : ''}`;
+  return apiFetch<FollowUpListResponse>(path);
+}
+
+export async function answerFollowUp(
+  id: string,
+  data: { answer: string; category?: string; addToFaq?: boolean; notifyStudent?: boolean },
+) {
+  return apiFetch<{
+    success: boolean;
+    item: FollowUpItem;
+    faqAdded: boolean;
+    faqId: string | null;
+    notify: { ok: boolean; reason?: string } | null;
+  }>(`/api/follow-up/${id}/answer`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function skipFollowUp(id: string, reason?: string) {
+  return apiFetch<{ success: boolean; item: FollowUpItem }>(`/api/follow-up/${id}/skip`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function deleteFollowUp(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/follow-up/${id}`, { method: 'DELETE' });
+}
+
 // ── 이메일 브리핑 ──────────────────────────────────
 export interface EmailBriefingItem {
   sender: string;

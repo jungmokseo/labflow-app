@@ -31,6 +31,8 @@ const envSchema = z.object({
   LABFLOW_SYNC_TOKEN: z.string().optional(),
   LAB_OWNER_CLERK_ID: z.string().optional(),  // Capture 소유자 결정 (default: dev-user-seo)
   LAB_OWNER_EMAIL: z.string().optional(),
+  // labflow-member API base URL (BLISS-bot 미답변 질문 follow-up 프록시 등)
+  LABFLOW_MEMBER_URL: z.string().default('https://labflow-member-production.up.railway.app'),
 });
 
 function loadEnv(): z.infer<typeof envSchema> {
