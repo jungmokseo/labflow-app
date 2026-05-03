@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getMeetings, checkHealth, getCostSummary, Meeting, CostSummary } from '@/lib/api';
-import { Brain, ClipboardList, BookOpen, Mic, DollarSign } from 'lucide-react';
+import Link from 'next/link';
+import { getMeetings, checkHealth, getCostSummary, getFollowUpList, Meeting, CostSummary, FollowUpItem } from '@/lib/api';
+import { Brain, ClipboardList, BookOpen, Mic, DollarSign, HelpCircle, ArrowRight, User, Clock } from 'lucide-react';
 
 export default function DashboardPage() {
   // 위젯별 독립 state — 각 fetch가 도착하는대로 즉시 표시 (Promise.allSettled로 묶지 않음)
@@ -10,18 +11,23 @@ export default function DashboardPage() {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null); // null = 로딩 중
   const [costData, setCostData] = useState<CostSummary | null>(null);
   const [costError, setCostError] = useState(false);
+  const [pendingQs, setPendingQs] = useState<FollowUpItem[] | null>(null);
+  const [pendingCount, setPendingCount] = useState<number>(0);
 
   // 첫 렌더는 즉시 (Skeleton wrapper 없음). 각 위젯이 자기 placeholder 보여줌.
   useEffect(() => {
     checkHealth().then(setIsHealthy).catch(() => setIsHealthy(false));
     getMeetings(5).then(res => setMeetings(res.data)).catch(() => setMeetings([]));
     getCostSummary(30).then(setCostData).catch(() => setCostError(true));
+    getFollowUpList({ status: 'pending', limit: 5 })
+      .then(res => { setPendingQs(res.items); setPendingCount(res.counts.pending); })
+      .catch(() => { setPendingQs([]); setPendingCount(0); });
   }, []);
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5 md:space-y-7">
       {/* 헤더 — 페이지 제목 좌측에 컬러 인디케이터 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <span className="w-1 h-8 md:h-10 bg-primary rounded-full" />
           <div>
@@ -31,7 +37,21 @@ export default function DashboardPage() {
             </p>
           </div>
         </div>
-        <StatusBadge healthy={isHealthy} />
+        <div className="flex items-center gap-2 flex-wrap">
+          {pendingCount > 0 && (
+            <Link
+              href="/follow-up"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-colors"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+              </span>
+              FAQ 답변 대기 {pendingCount}건
+            </Link>
+          )}
+          <StatusBadge healthy={isHealthy} />
+        </div>
       </div>
 
       {/* 바로가기 카드 */}
@@ -57,6 +77,56 @@ export default function DashboardPage() {
           <p className="text-sm text-text-muted mt-1">{meetings === null ? '...' : `${meetings.length}건의 회의 기록`}</p>
         </a>
       </div>
+
+      {/* 미답변 질문 미리보기 — 답변 대기 시 항상 표시 */}
+      {pendingQs && pendingQs.length > 0 && (
+        <div className="bg-amber-50/40 dark:bg-amber-500/5 border border-amber-500/30 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-text-heading flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-amber-600" />
+              BLISS-bot 미답변 질문
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+                {pendingCount}건
+              </span>
+            </h3>
+            <Link href="/follow-up" className="text-sm text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1">
+              모두 답변하기 <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+          <p className="text-xs text-text-muted mb-3">
+            학생이 BLISS-bot에 질문했지만 챗봇이 답하지 못했어요. 답변하면 자동으로 FAQ에 등록됩니다.
+          </p>
+          <div className="space-y-2">
+            {pendingQs.slice(0, 3).map(q => (
+              <Link
+                key={q.id}
+                href="/follow-up"
+                className="block bg-bg-card rounded-lg border border-amber-500/20 hover:border-amber-500/40 transition-colors p-3"
+              >
+                <p className="text-sm font-medium text-text-heading break-words">{q.question}</p>
+                <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
+                  <span className="inline-flex items-center gap-1">
+                    <User className="w-3 h-3" />
+                    {q.askedBy}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {timeAgoShort(q.createdAt)}
+                  </span>
+                  {q.reason && (
+                    <span className="text-text-muted/80 truncate hidden md:inline">· {q.reason}</span>
+                  )}
+                </div>
+              </Link>
+            ))}
+            {pendingQs.length > 3 && (
+              <p className="text-xs text-text-muted text-center pt-1">
+                외 {pendingQs.length - 3}건…
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 최근 회의 + AI 비용 — 2열 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -203,6 +273,19 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+// ── 헬퍼 ──────────────────────────────────────────
+function timeAgoShort(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.max(0, Math.floor(diff / 60000));
+  if (min < 1) return '방금';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return new Date(iso).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 }
 
 // ── 컴포넌트 ──────────────────────────────────────

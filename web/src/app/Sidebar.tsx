@@ -8,7 +8,7 @@ import type { User } from '@supabase/supabase-js';
 import { mutate } from 'swr';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
-  deleteBrainChannel, searchBrainMemory,
+  deleteBrainChannel, searchBrainMemory, getFollowUpList,
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
@@ -28,10 +28,29 @@ const PREFETCH_MAP: Record<string, () => void> = {
     mutate('captures-all-completed', () => getCaptures({ completed: 'true', sort: 'newest', limit: 20 }), { revalidate: false });
   },
   '/tasks/review': () => {},
+  '/follow-up': () => mutate('follow-up:pending', () => getFollowUpList({ status: 'pending', limit: 100 }), { revalidate: false }),
   '/brain': () => mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : []), { revalidate: false }),
   '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),
 };
+
+// Sidebar 우측 뱃지 카운트 — 페이지마다 다른 데이터 소스
+function useFollowUpPendingCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let mounted = true;
+    const fetchCount = () => {
+      getFollowUpList({ status: 'pending', limit: 1 })
+        .then(r => { if (mounted) setCount(r.counts.pending); })
+        .catch(() => {});
+    };
+    fetchCount();
+    // 30초마다 갱신 (다른 탭에서 답변하면 자동 반영)
+    const id = setInterval(fetchCount, 30000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+  return count;
+}
 
 const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
@@ -101,6 +120,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
   const { tasks } = useBackgroundTasks();
   const runningTasks = tasks.filter(t => t.status === 'running');
   const { dark, toggle } = useTheme();
+  const followUpPending = useFollowUpPendingCount();
   const isBrainPage = pathname.startsWith('/brain');
 
   // Brain sessions & search (only active on /brain)
@@ -173,6 +193,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
             : item.href === '/tasks'
               ? pathname === '/tasks'
               : pathname.startsWith(item.href);
+          const showFollowUpBadge = item.href === '/follow-up' && followUpPending > 0;
           return (
             <Link
               key={item.href}
@@ -186,7 +207,12 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
               }`}
             >
               <item.icon className="w-4 h-4" />
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {showFollowUpBadge && (
+                <span className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white min-w-[18px] text-center">
+                  {followUpPending}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -370,6 +396,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const followUpPending = useFollowUpPendingCount();
 
   // Persist collapsed state
   useEffect(() => {
@@ -415,11 +442,17 @@ export function Sidebar() {
             </button>
             {NAV_ITEMS.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+              const showBadge = item.href === '/follow-up' && followUpPending > 0;
               return (
                 <Link key={item.href} href={item.href} onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
-                  className={`p-2.5 rounded-lg mb-1 transition-colors ${active ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'}`}
-                  title={item.label}>
+                  className={`relative p-2.5 rounded-lg mb-1 transition-colors ${active ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'}`}
+                  title={`${item.label}${showBadge ? ` (${followUpPending})` : ''}`}>
                   <item.icon className="w-4 h-4" />
+                  {showBadge && (
+                    <span className="absolute -top-0.5 -right-0.5 px-1 min-w-[16px] h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {followUpPending > 9 ? '9+' : followUpPending}
+                    </span>
+                  )}
                 </Link>
               );
             })}
