@@ -11,8 +11,50 @@ import { useApiData } from '@/lib/use-api';
 import { StepProgress } from '@/components/Skeleton';
 import {
   BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
-  Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight,
+  Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight, Sparkles,
 } from 'lucide-react';
+
+/**
+ * AI 생성 시사점 텍스트를 문장 단위 bullet으로 분리.
+ * 줄글로 길게 이어진 한국어 문장을 시각적으로 분해해 가독성을 높인다.
+ * **bold** 마크다운은 <strong>으로 변환.
+ */
+function InsightBullets({ text }: { text: string }) {
+  // 문장 분리: 마침표/물음표/느낌표 + (공백 또는 끝)
+  // ' . '나 ', '는 분리하지 않음 (영문 약어 보호)
+  const sentences = text
+    .split(/(?<=[.!?。])\s+(?=[가-힣A-Z])/g)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  // 1문장이면 bullet 없이 줄글로 (어색함 방지)
+  if (sentences.length <= 1) {
+    return (
+      <p className="text-base text-text-heading leading-[1.75]">
+        {renderBoldText(text)}
+      </p>
+    );
+  }
+
+  return (
+    <ul className="space-y-2.5">
+      {sentences.map((s, i) => (
+        <li key={i} className="flex gap-2.5 text-base text-text-heading leading-[1.7]">
+          <span className="text-primary font-bold flex-shrink-0 mt-0.5">·</span>
+          <span className="flex-1">{renderBoldText(s)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function renderBoldText(text: string): React.ReactNode {
+  return text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i} className="font-semibold text-text-heading">{part.slice(2, -2)}</strong>
+      : <span key={i}>{part}</span>,
+  );
+}
 
 const MAX_JOURNALS = 15;
 
@@ -510,34 +552,68 @@ export default function PapersPage() {
       ) : weekGroups.map(week => (
         <div key={week.label} className="space-y-4">
           {/* 주차 헤더 */}
-          <div className="border-t border-border/30 pt-6 space-y-3">
-            <h2 className="text-xl md:text-2xl font-bold text-text-heading flex items-center gap-2"><Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary flex-shrink-0" /> {week.label}</h2>
-            <div className="text-base text-text-muted space-y-1.5 leading-relaxed">
-              <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
-              <p>
-                <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서
-                {week.totalFetched ? <> 총 <strong className="text-text-heading">{week.totalFetched.toLocaleString()}편</strong> 수집 →</> : ''}{' '}
-                <strong className="text-primary">{week.papers.length + week.otherPapers.length}편</strong> 관련
-                {' ('}핵심 <strong className="text-primary">{week.papers.length}편</strong>
-                {week.otherPapers.length > 0 && <> + 참고 <strong>{week.otherPapers.length}편</strong></>}
-                {')'}
-                {Array.from(week.themes.entries()).length > 0 && <>
-                  {' · 핵심 테마별: '}
-                  {Array.from(week.themes.entries()).map(([t, ps]) => `${t}(${ps.length})`).join(', ')}
-                </>}
-              </p>
-            </div>
-            {/* AI 생성 핵심 시사점 (서버에서 생성) */}
-            {(week.aiInsight || week.insight) && (
-              <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3.5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">핵심 시사점</p>
-                <p className="text-base text-text-heading leading-[1.75]">
-                  {(week.aiInsight || week.insight).split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-                    part.startsWith('**') && part.endsWith('**')
-                      ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
-                      : part
-                  )}
+          <div className="border-t border-border/30 pt-6 space-y-4">
+            <h2 className="text-xl md:text-2xl font-bold text-text-heading flex items-center gap-2">
+              <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary flex-shrink-0" /> {week.label}
+            </h2>
+
+            {/* KPI 카드 — 한눈에 들어오는 숫자 */}
+            <div className="grid grid-cols-3 gap-2 md:gap-3">
+              <div className="bg-bg-card border border-border rounded-xl p-3 md:p-4">
+                <p className="text-xs text-text-muted font-medium">수집</p>
+                <p className="text-2xl md:text-3xl font-bold text-text-heading mt-0.5 leading-none">
+                  {week.totalFetched ? week.totalFetched.toLocaleString() : '—'}
                 </p>
+                <p className="text-xs text-text-muted mt-1">{week.journals.length}개 저널</p>
+              </div>
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 md:p-4">
+                <p className="text-xs text-primary font-medium">관련</p>
+                <p className="text-2xl md:text-3xl font-bold text-primary mt-0.5 leading-none">
+                  {week.papers.length + week.otherPapers.length}
+                </p>
+                <p className="text-xs text-text-muted mt-1">키워드 매칭</p>
+              </div>
+              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 md:p-4">
+                <p className="text-xs text-emerald-600 font-medium">핵심</p>
+                <p className="text-2xl md:text-3xl font-bold text-emerald-600 mt-0.5 leading-none">
+                  {week.papers.length}
+                </p>
+                <p className="text-xs text-text-muted mt-1">★★ 이상</p>
+              </div>
+            </div>
+
+            {/* 테마별 분포 — 칩 형태 */}
+            {Array.from(week.themes.entries()).length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-text-muted">핵심 테마</span>
+                {Array.from(week.themes.entries()).map(([t, ps]) => (
+                  <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                    {t} <span className="text-primary/70">{ps.length}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* 수집 저널 — 접기/펼치기 */}
+            <details className="group">
+              <summary className="cursor-pointer text-sm text-text-muted hover:text-text-heading inline-flex items-center gap-1 list-none">
+                <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                수집 저널 {week.journals.length}개 보기
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-1.5 pl-5">
+                {week.journals.map(j => (
+                  <span key={j} className="px-2 py-0.5 bg-bg-input text-text-muted rounded text-xs">{j}</span>
+                ))}
+              </div>
+            </details>
+
+            {/* AI 생성 핵심 시사점 — bullet으로 분리 */}
+            {(week.aiInsight || week.insight) && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-primary mb-3 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" /> 핵심 시사점
+                </h3>
+                <InsightBullets text={week.aiInsight || week.insight} />
               </div>
             )}
           </div>

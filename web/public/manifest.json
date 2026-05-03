@@ -2,7 +2,7 @@
   "name": "Research Flow — Research Lab AI OS",
   "short_name": "Research Flow",
   "description": "AI-powered research lab management",
-  "start_url": "/",
+  "start_url": "/brain",
   "display": "standalone",
   "background_color": "#FAFAFA",
   "theme_color": "#2563EB",

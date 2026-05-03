@@ -383,10 +383,11 @@ export function Sidebar() {
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
 
-  // Supabase user 로드
+  // Supabase user 로드 — getSession은 cookie만 읽으므로 빠름.
+  // getUser는 서버 검증으로 200~500ms 소요 → middleware가 이미 검증했으므로 client에서는 session으로 충분.
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
