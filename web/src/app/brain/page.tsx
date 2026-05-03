@@ -1218,18 +1218,18 @@ export default function BrainPage() {
                 {/* 툴 실행 단계 — Gemini 스타일 */}
                 {(loading || recovering) && thinkingSteps.length > 0 && (
                   <div className="flex justify-start animate-msg-in">
-                    <div className="flex items-center gap-2 text-sm text-text-muted transition-all duration-300">
-                      <Sparkles className="w-3.5 h-3.5 text-primary/70 animate-pulse flex-shrink-0" />
+                    <div className="flex items-center gap-2 text-base text-text-muted transition-all duration-300">
+                      <Sparkles className="w-4 h-4 text-primary animate-pulse flex-shrink-0" />
                       <span key={thinkingSteps[thinkingSteps.length - 1]} className="truncate max-w-xs">{thinkingSteps[thinkingSteps.length - 1]}</span>
                     </div>
                   </div>
                 )}
-                {/* 생각 중 — Brain 아이콘 + 단계별 텍스트 */}
+                {/* 생각 중 — Brain 아이콘 + 단계별 텍스트, 더 두드러지게 */}
                 {loading && thinkingSteps.length === 0 && !streamingContent && (
                   <div className="flex justify-start animate-msg-in">
-                    <div className="flex items-center gap-2 text-sm text-text-muted">
-                      <Brain className="w-4 h-4 text-primary/70 animate-pulse" />
-                      <span className="thinking-dots">생각 중</span>
+                    <div className="flex items-center gap-2.5 text-base text-text-muted bg-bg-input/40 px-3 py-2 rounded-xl">
+                      <Brain className="w-5 h-5 text-primary animate-pulse" />
+                      <span className="thinking-dots font-medium">생각 중</span>
                     </div>
                   </div>
                 )}
@@ -1338,7 +1338,7 @@ export default function BrainPage() {
                     onKeyDown={handleTextareaKeyDown}
                     placeholder={loading && !queuedInput ? "새 질문을 입력하면 현재 답변을 중단하고 이어서 전송됩니다..." : "메시지를 입력하세요..."}
                     rows={2}
-                    className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-sm focus:outline-none resize-none min-h-[52px] max-h-[120px] md:max-h-[200px]"
+                    className="w-full bg-transparent text-text-heading px-4 pt-3 pb-2 text-base leading-relaxed focus:outline-none resize-none min-h-[56px] max-h-[140px] md:max-h-[200px]"
                   />
                   {/* 하단 도구 바 */}
                   <div className="flex items-center justify-between px-3 pb-2">

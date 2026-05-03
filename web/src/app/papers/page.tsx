@@ -347,22 +347,24 @@ export default function PapersPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-text-heading flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> 연구동향</h1>
-          <p className="text-text-muted text-base mt-1">
+      {/* Header — 모바일에서 stack, 데스크톱에서 row */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl md:text-3xl font-bold text-text-heading flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 연구동향
+          </h1>
+          <p className="text-text-muted text-sm md:text-base mt-1">
             {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <button onClick={handleCrawl} disabled={crawling}
-            className="px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50">
-            {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4 inline mr-1" /> 수집</>}
+            className="flex-1 sm:flex-none px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 inline-flex items-center justify-center gap-1">
+            {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4" /> 수집</>}
           </button>
           <button onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
-            className={`px-4 py-2 rounded-lg text-sm ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
-            <Settings className="w-4 h-4 inline mr-1" /> 설정
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm inline-flex items-center justify-center gap-1 ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
+            <Settings className="w-4 h-4" /> 설정
           </button>
         </div>
       </div>
@@ -509,8 +511,8 @@ export default function PapersPage() {
         <div key={week.label} className="space-y-4">
           {/* 주차 헤더 */}
           <div className="border-t border-border/30 pt-6 space-y-3">
-            <h2 className="text-lg font-bold text-text-heading flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" /> {week.label}</h2>
-            <div className="text-sm text-text-muted space-y-1">
+            <h2 className="text-xl md:text-2xl font-bold text-text-heading flex items-center gap-2"><Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary flex-shrink-0" /> {week.label}</h2>
+            <div className="text-base text-text-muted space-y-1.5 leading-relaxed">
               <p><span className="font-medium text-text-heading">수집 저널</span>: {week.journals.join(', ')}</p>
               <p>
                 <span className="font-medium text-text-heading">필터링 결과</span>: {week.journals.length}개 저널 RSS에서
@@ -527,9 +529,9 @@ export default function PapersPage() {
             </div>
             {/* AI 생성 핵심 시사점 (서버에서 생성) */}
             {(week.aiInsight || week.insight) && (
-              <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3">
-                <p className="text-xs font-medium text-primary mb-1.5">핵심 시사점</p>
-                <p className="text-sm text-text-heading leading-relaxed">
+              <div className="bg-primary/5 border border-primary/15 rounded-lg px-4 py-3.5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">핵심 시사점</p>
+                <p className="text-base text-text-heading leading-[1.75]">
                   {(week.aiInsight || week.insight).split(/(\*\*[^*]+\*\*)/).map((part, i) =>
                     part.startsWith('**') && part.endsWith('**')
                       ? <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>
@@ -542,8 +544,8 @@ export default function PapersPage() {
 
           {/* 테마별 섹션 (★2-3 논문) */}
           {Array.from(week.themes.entries()).map(([theme, papers]) => (
-            <div key={theme} className="bg-bg-card rounded-xl border border-border p-5">
-              <h3 className="text-primary font-semibold text-base mb-2 flex items-center gap-1.5">
+            <div key={theme} className="bg-bg-card rounded-xl border border-border p-4 md:p-5">
+              <h3 className="text-primary font-semibold text-lg mb-3 flex items-center gap-1.5">
                 {getThemeIcon(theme)} {theme} ({papers.length}편)
               </h3>
 
@@ -556,32 +558,42 @@ export default function PapersPage() {
 
                   return (
                     <div key={paper.id}>
-                      {/* 닫힘 상태: 한 줄 */}
+                      {/* 닫힘 상태: 모바일은 stack, 데스크톱은 inline */}
                       <button
                         onClick={() => togglePaper(paper.id)}
-                        className="w-full flex items-center gap-2 text-left py-2 px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
+                        className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
                       >
-                        {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />}
-                        <span className="flex-1 min-w-0">
-                          <span className="text-base text-text-heading truncate block">{paper.title}</span>
-                          {(paper as any).matchedKeywords && (paper as any).matchedKeywords.length > 0 && (
-                            <span className="text-xs text-text-muted/70 truncate block">{((paper as any).matchedKeywords as string[]).join(', ')}</span>
-                          )}
-                        </span>
-                        <span className="text-xs text-text-muted flex-shrink-0">({paper.journal})</span>
-                        <span className={`text-xs flex-shrink-0 flex items-center gap-0.5 ${si.color}`}><StarRating count={si.stars} /> {si.label}</span>
+                        <div className="flex items-start gap-2">
+                          {isOpen ? <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" /> : <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />}
+                          <div className="flex-1 min-w-0">
+                            {/* 제목 — 두 줄까지 표시, 잘리지 않음 */}
+                            <p className="text-base text-text-heading leading-snug font-medium line-clamp-2">
+                              {paper.title}
+                            </p>
+                            {/* 메타 — 저널 + 별점 + 키워드 한 줄에 */}
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                              <span className="text-xs text-text-muted">{paper.journal}</span>
+                              <span className={`text-xs inline-flex items-center gap-0.5 ${si.color}`}>
+                                <StarRating count={si.stars} /> {si.label}
+                              </span>
+                              {(paper as any).matchedKeywords && (paper as any).matchedKeywords.length > 0 && (
+                                <span className="text-xs text-text-muted/70 truncate">· {((paper as any).matchedKeywords as string[]).slice(0, 3).join(', ')}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       </button>
 
                       {/* 열림 상태: 상세 */}
                       {isOpen && (
-                        <div className="ml-7 mb-3 pl-4 border-l-2 border-border space-y-2">
-                          <p className="text-sm text-text-muted">
+                        <div className="ml-6 mb-3 pl-4 border-l-2 border-border space-y-2.5">
+                          <p className="text-sm text-text-muted leading-relaxed">
                             <span className="font-medium">저널</span>: {paper.journal}
                             {(paper as any).pubDate && <> | <span className="font-medium">발행일</span>: {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
                           </p>
                           {((paper as any).doi || paper.url) && (
-                            <p className="text-xs flex items-center gap-1">
-                              <Link2 className="w-3 h-3" />
+                            <p className="text-sm flex items-center gap-1">
+                              <Link2 className="w-3.5 h-3.5" />
                               {(paper as any).doi ? (
                                 <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
                               ) : paper.url ? (
@@ -592,16 +604,16 @@ export default function PapersPage() {
                           {/* ★2 확인 추천 코멘트 */}
                           {stars === 2 && (paper as any).aiReason && (
                             <div className="bg-orange-500/8 border border-orange-500/15 rounded-md px-3 py-2">
-                              <p className="text-xs text-orange-300">
+                              <p className="text-sm text-orange-300 leading-relaxed">
                                 <span className="font-semibold">확인 추천</span> — {(paper as any).aiReason}
                               </p>
                             </div>
                           )}
                           {paper.aiSummary && (
-                            <p className="text-sm text-text-main leading-relaxed">{paper.aiSummary}</p>
+                            <p className="text-base text-text-main leading-[1.7]">{paper.aiSummary}</p>
                           )}
                           {((paper as any).matchedKeywords || (paper as any).themes) && (
-                            <p className="text-xs text-text-muted">
+                            <p className="text-sm text-text-muted leading-relaxed">
                               <span className="font-medium">키워드 매칭</span>: {((paper as any).matchedKeywords || (paper as any).themes || []).join(', ')}
                             </p>
                           )}
@@ -616,11 +628,11 @@ export default function PapersPage() {
 
           {/* 기타 논문 섹션 (★1) */}
           {week.otherPapers.length > 0 && (
-            <div className="bg-bg-card/60 rounded-xl border border-border/50 p-5">
+            <div className="bg-bg-card/60 rounded-xl border border-border/50 p-4 md:p-5">
               <h3 className="text-text-muted font-semibold text-base mb-2 flex items-center gap-1.5">
                 <FileText className="w-4 h-4" /> 기타 논문 ({week.otherPapers.length}편)
               </h3>
-              <p className="text-xs text-text-muted/70 mb-3">동향 파악용 — 키워드 매칭되었으나 직접 연관은 낮은 논문</p>
+              <p className="text-sm text-text-muted/70 mb-3">동향 파악용 — 키워드 매칭되었으나 직접 연관은 낮은 논문</p>
               <div className="space-y-1">
                 {week.otherPapers.map(paper => {
                   const isOpen = expandedPapers.has(paper.id);
@@ -628,16 +640,24 @@ export default function PapersPage() {
                     <div key={paper.id}>
                       <button
                         onClick={() => togglePaper(paper.id)}
-                        className="w-full flex items-center gap-2 text-left py-1.5 px-3 rounded-lg hover:bg-bg-hover/20 transition-colors"
+                        className="w-full text-left py-2 px-3 rounded-lg hover:bg-bg-hover/20 transition-colors"
                       >
-                        {isOpen ? <ChevronDown className="w-3 h-3 text-text-muted/50 flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-text-muted/50 flex-shrink-0" />}
-                        <span className="flex-1 min-w-0 text-sm text-text-muted truncate">{paper.title}</span>
-                        <span className="text-xs text-text-muted/50 flex-shrink-0">({paper.journal})</span>
-                        <span className="text-xs text-gray-500 flex-shrink-0 flex items-center gap-0.5"><StarRating count={1} className="text-gray-500" /> 참고</span>
+                        <div className="flex items-start gap-2">
+                          {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted/50 flex-shrink-0 mt-1" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted/50 flex-shrink-0 mt-1" />}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-text-muted leading-snug line-clamp-2">{paper.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                              <span className="text-xs text-text-muted/50">{paper.journal}</span>
+                              <span className="text-xs text-gray-500 inline-flex items-center gap-0.5">
+                                <StarRating count={1} className="text-gray-500" /> 참고
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </button>
                       {isOpen && (
-                        <div className="ml-7 mb-2 pl-4 border-l-2 border-border/30 space-y-1.5">
-                          <p className="text-xs text-text-muted">
+                        <div className="ml-6 mb-2 pl-4 border-l-2 border-border/30 space-y-2">
+                          <p className="text-sm text-text-muted leading-relaxed">
                             {paper.journal}
                             {(paper as any).pubDate && <> | {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
                             {((paper as any).doi || paper.url) && <>
@@ -649,7 +669,7 @@ export default function PapersPage() {
                               ) : null}
                             </>}
                           </p>
-                          {paper.aiSummary && <p className="text-xs text-text-muted/80">{paper.aiSummary}</p>}
+                          {paper.aiSummary && <p className="text-sm text-text-muted/90 leading-relaxed">{paper.aiSummary}</p>}
                         </div>
                       )}
                     </div>

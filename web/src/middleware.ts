@@ -59,6 +59,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // pathname을 layout에 전달 — RootLayout이 SSR에서 supabase 한 번 더 호출하지 않도록
+  supabaseResponse.headers.set('x-pathname', request.nextUrl.pathname);
   return supabaseResponse;
 }
 

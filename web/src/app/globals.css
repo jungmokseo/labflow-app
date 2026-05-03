@@ -85,14 +85,24 @@
   --color-badge-bg: rgba(96, 165, 250, 0.18);
 }
 
+/* ── Base font sizing — 모바일 가독성 우선 ──
+ * 데스크톱: 16px (기본)
+ * 모바일(<640px): 17px — Korean 가독성 향상, ChatGPT/Claude 수준 */
 html {
   font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (max-width: 640px) {
+  html { font-size: 17px; }
 }
 
 body {
   background-color: var(--color-bg);
   color: var(--color-text-main);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -129,23 +139,24 @@ body {
 }
 
 .notion-note p {
-  margin: 0.3rem 0;
-  font-size: 0.875rem;
+  margin: 0.4rem 0;
+  font-size: 0.9375rem;
+  line-height: 1.7;
   color: var(--color-text-muted);
 }
 
 .notion-note ul {
   list-style: none;
   padding-left: 0;
-  margin: 0.25rem 0;
+  margin: 0.4rem 0;
 }
 
 .notion-note ul li {
   position: relative;
   padding-left: 1.5rem;
-  margin-bottom: 0.35rem;
-  font-size: 0.875rem;
-  line-height: 1.6;
+  margin-bottom: 0.45rem;
+  font-size: 0.9375rem;
+  line-height: 1.7;
 }
 
 .notion-note ul li::before {
@@ -287,11 +298,13 @@ main > * {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* ── Brain Chat Prose — Claude/Gemini 수준 가독성 ── */
+/* ── Brain Chat Prose — Claude/ChatGPT 수준 가독성 ──
+ * 데스크톱 16px, 모바일에서는 base font-size 17px의 1rem = 17px */
 .brain-prose {
-  font-size: 0.9375rem;
-  line-height: 1.8;
+  font-size: 1rem;
+  line-height: 1.75;
   color: var(--color-text-heading);
+  letter-spacing: -0.003em;
 }
 
 /* Headings — Lucide 아이콘과 함께 명확한 섹션 구분 */
@@ -536,12 +549,25 @@ main > * {
   color: #60A5FA;
 }
 
-/* Mobile responsive */
+/* Mobile responsive — html base가 17px이므로 rem 단위는 자동 확대됨.
+ * 헤딩만 약간 축소하되 본문은 절대 줄이지 않는다 (가독성 우선). */
 @media (max-width: 640px) {
-  .notion-note h1 { font-size: 1.25rem; }
-  .notion-note h2 { font-size: 1rem; }
-  .notion-note h3 { font-size: 0.875rem; }
-  .notion-note ul li { font-size: 0.8rem; }
+  .notion-note h1 { font-size: 1.35rem; }
+  .notion-note h2 { font-size: 1.1rem; }
+  .notion-note h3 { font-size: 1rem; }
+  .notion-note p,
+  .notion-note ul li {
+    font-size: 0.95rem;
+    line-height: 1.7;
+  }
+  /* Brain prose도 모바일에서 살짝 더 키움 — Korean 가독성 */
+  .brain-prose {
+    font-size: 1.0625rem;
+    line-height: 1.75;
+  }
+  .brain-prose h1 { font-size: 1.4rem; }
+  .brain-prose h2 { font-size: 1.2rem; }
+  .brain-prose h3 { font-size: 1.075rem; }
 }
 
 /* ── Brain 생각 중 점점점 애니메이션 ── */
