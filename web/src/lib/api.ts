@@ -432,27 +432,8 @@ export async function getVacationBalances() {
   return apiFetch<{ year: number; items: VacationBalanceItem[] }>(`/api/lab-data/vacations/balance`);
 }
 
-// ── Lab 계정 정보 (read-only) ──────────────────────────
-export interface LabAccountItem {
-  id: string;
-  service: string;
-  url: string | null;
-  username: string | null;
-  notes: string | null;
-  hasPassword: boolean;
-  gdriveRowIndex: number | null;
-  syncedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function getLabAccounts() {
-  return apiFetch<{ items: LabAccountItem[] }>(`/api/lab-data/lab-accounts`);
-}
-
-export async function getLabAccountPassword(id: string) {
-  return apiFetch<{ id: string; service: string; password: string }>(`/api/lab-data/lab-accounts/${id}/password`);
-}
+// 참고: Lab 계정 정보는 Slack BLISS-bot의 search_faq로 이전됨 (학생들이 같이 검색).
+// server의 /api/lab-data/lab-accounts 엔드포인트와 데이터(labflow-member)는 보존.
 
 // ── 이메일 브리핑 ──────────────────────────────────
 export interface EmailBriefingItem {
