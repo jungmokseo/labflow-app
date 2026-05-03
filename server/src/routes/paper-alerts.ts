@@ -366,13 +366,13 @@ function scoreByThemes(item: RssItem, themes: ResearchTheme[], flatKeywords: str
   let flatMatchCount = 0;
   for (const kw of flatKeywords) { if (matchKeyword(text, kw)) flatMatchCount++; }
 
-  // 별점 기준 완화 — 더 너그럽게 핵심으로 분류:
-  // ★3: 테마 ≥ 2 매칭, 또는 (테마 1 + 키워드 2+), 또는 (테마 1 + 같은테마 안에서 3+ 매칭)
-  // ★2: 테마 1 매칭, 또는 키워드 3+ 매칭
-  // ★1: 키워드 1+ 매칭 (의미 있을 가능성)
+  // 별점 기준 — 키워드 매칭이 5단계로 이미 관대하므로, 점수 부여는 신중하게:
+  // ★3: 테마 ≥ 2 매칭 (강한 융합 시그널), 또는 같은 테마 4+ 키워드 매칭 (집중도 매우 높음)
+  // ★2: 테마 1 매칭, 또는 flatKw 3+ 매칭
+  // ★1: flatKw 1+ 매칭 (노이즈 가능, AI가 재평가)
   let stars = 0;
   if (matchedThemes.length >= 2) stars = 3;
-  else if (matchedThemes.length === 1 && (flatMatchCount >= 2 || themeMatchCount >= 3)) stars = 3;
+  else if (matchedThemes.length === 1 && themeMatchCount >= 4) stars = 3;
   else if (matchedThemes.length === 1) stars = 2;
   else if (flatMatchCount >= 3) stars = 2;
   else if (flatMatchCount >= 1) stars = 1;
@@ -410,31 +410,30 @@ ${themes.map(t => `- ${t.name}: ${t.keywords.join(', ')}`).join('\n')}
 ${labContext ? `연구실 추가 맥락:\n${labContext}\n` : ''}
 
 아래 논문들은 키워드 매칭으로 사전 필터링되었으며, 각 논문에 **키워드 스코어**(참고값)가 표시되어 있습니다.
-이 스코어를 참고하되, 논문의 실제 내용(방법론, 소재, 응용 분야)을 기반으로 관련도를 재평가하세요.
+이 스코어를 참고하되, 논문의 실제 내용(방법론, 소재, 응용 분야)을 기반으로 관련도를 신중히 재평가하세요.
 
-**중요 지침 — 너무 엄격하게 보지 말고, 가능성에 대해 관대하게 평가하세요:**
-- 키워드 스코어가 ★2~3인 논문은 명확한 이유가 없는 한 ★1로 강등하지 마세요.
-- "키워드 스코어 ★0"으로 표시된 논문도 있을 수 있습니다. 의미적으로 관련이 있다면 ★1~2로 승격해주세요.
-- 초록이 짧거나 description이 거의 없어도, 제목만으로 관련 가능성이 보이면 ★1을 기본으로 부여하세요.
-- 직접 키워드가 일치하지 않더라도 다음 분야는 모두 관련 있다고 봅니다:
+**평가 원칙 — 균형 있게, 그러나 ★1을 기본값으로:**
+- 대부분의 논문은 ★1입니다. ★2와 ★3은 명확한 근거가 있을 때만 부여하세요.
+- 키워드 스코어가 ★2~3인 논문이라도, 초록을 보고 실제로 핵심 테마와 연결이 약하면 ★1로 조정 가능합니다.
+- "키워드 스코어 ★0" 논문은 의미적으로 직접 관련이 매우 강할 때만 ★3을 주세요. 애매하면 평가에서 제외(★1).
+- 다음 분야는 의미적으로 관련 있다고 봅니다 (단, 응용이 의료/바이오/유연전자 맥락일 때만):
   · 유연/스트레처블 전자소자, 웨어러블 센서, 바이오인터페이스
-  · 폴리머/하이드로겔/고분자 소재 (특히 의료용/바이오용)
-  · 표면 처리/접착/항균 코팅 (특히 임플란트/의료기기 응용)
-  · 나노소재(나노입자, 나노섬유 등)의 생체 응용
-  · 뉴럴 인터페이스, BCI, 신경 전극, 신경 자극
+  · 폴리머/하이드로겔/고분자 소재 (의료용/바이오용 응용 한정)
+  · 표면 처리/접착/항균 코팅 (임플란트/의료기기 응용 한정)
+  · 뉴럴 인터페이스, BCI, 신경 전극
   · 액체금속, 전도성 잉크, 인쇄 전자
-- 같은 폴리머라도 응용이 medical/bioelectronic이면 ★2 이상 적극 부여하세요.
-- ★2 논문에는 "이 논문의 어떤 부분이 연구실과 관련 있어서 확인을 추천하는지" 구체적으로 설명하세요.
+- 일반 폴리머·소재과학 논문(의료/바이오 응용 없음)은 ★1.
+- ★2 논문에는 "어떤 부분이 연구실과 관련 있어서 확인을 추천하는지" 구체적으로 설명하세요.
 
 ${paperList}
 
 각 논문에 대해 다음 JSON 배열로만 응답하세요:
 [{"id": 1, "stars": 1~3, "reason": "관련 이유 또는 확인 추천 코멘트 (2문장 이내)"}]
 
-stars 기준 (관대하게):
-- 3: 연구실 핵심 테마와 직접 관련. 방법론·소재·응용이 연구실에서 즉시 활용 가능.
-- 2: 인접 분야이며 참고/검토할 가치 있음. 의미적으로 연구실 테마와 겹침.
-- 1: 같은 분야이나 직접 연관은 낮음. 동향 파악·인사이트 목적.`;
+stars 기준 (신중하게):
+- 3: 연구실 핵심 테마와 직접 관련 + 방법론/소재/응용 모두 연구실에서 즉시 활용 가능. 매우 드물게 부여.
+- 2: 인접 분야이며 명확한 검토 가치. 응용 맥락이 연구실 방향과 일치.
+- 1 (기본): 같은 광범위 분야이나 직접 연관 낮음. 동향 파악 목적.`;
 
     try {
       if (env.ANTHROPIC_API_KEY) {
@@ -705,15 +704,15 @@ export async function runPaperCrawl(
 
   // ★0 (키워드 미매칭) 중에서도 의미적으로 관련 가능한 후보를 일부 AI 평가에 포함:
   // RSS description이 짧아 substring 매칭 실패 가능성 → 제목/저널 기반으로 일부 샘플링.
-  // 키워드 매칭이 너무 적을 때(< 30편)에만 추가 후보 수집 (AI 비용 통제).
+  // 키워드 매칭이 정말 적을 때(< 10편)에만 추가 후보 수집 (의미 매칭 부스팅 + 비용 통제).
   let extraCandidates: typeof allScored = [];
-  if (keywordMatched.length < 30) {
+  if (keywordMatched.length < 10) {
     const matchedTitles = new Set(keywordMatched.map(i => i.title));
     extraCandidates = allScored
       .filter(item => item.stars === 0 && !matchedTitles.has(item.title))
       // 가벼운 휴리스틱: title/desc 길이가 어느 정도 있고 (스팸/공지가 아님), 영문 위주 (논문일 가능성)
       .filter(item => item.title.length >= 20 && /^[a-zA-Z\s\d\-:.,()]+$/.test(item.title.slice(0, 50)))
-      .slice(0, Math.max(0, 30 - keywordMatched.length))
+      .slice(0, Math.max(0, 15 - keywordMatched.length))
       .map(item => ({ ...item, stars: 1 as 0 | 1 | 2 | 3 })); // 임시로 ★1로 마킹 → AI가 재평가
   }
 
@@ -738,7 +737,6 @@ export async function runPaperCrawl(
   const aiScores = await aiRelevanceScore(aiInputCandidates, themes, labContext);
 
   // AI 스코어 적용 (AI 결과 있으면 교체, 없으면 키워드 스코어 유지)
-  // 단 extraCandidates(★0 출신)는 AI 결과 없으면 결과에서 제외 (의미 매칭 실패).
   const matchedTitleSet = new Set(keywordMatched.map(i => i.title));
   const scored = aiInputCandidates
     .map(item => {
@@ -746,12 +744,12 @@ export async function runPaperCrawl(
       return aiResult ? { ...item, stars: aiResult.stars, aiReason: aiResult.reason } : { ...item, aiReason: '' };
     })
     .filter(item => {
-      // 키워드 매칭은 무조건 통과, 추가 후보(★0 출신)는 AI가 ★2+ 줬을 때만 통과
+      // 키워드 매칭은 ★1 이상 모두 통과, 추가 후보(★0 출신)는 AI가 ★3 줬을 때만 통과 (정말 핵심만)
       if (matchedTitleSet.has(item.title)) return true;
-      return item.stars >= 2;
+      return item.stars >= 3;
     })
     .sort((a, b) => b.stars - a.stars || b.score - a.score)
-    .slice(0, 100); // 50 → 100편으로 확대
+    .slice(0, 20); // 최종 20편 — 너무 많지도 적지도 않게
 
   // 매칭 키워드 추출 함수 — scoreByThemes와 동일한 매칭 규칙 사용
   function extractMatchedKeywords(item: { title: string; description: string }, themesArr: ResearchTheme[], flatKw: string[]): string[] {
