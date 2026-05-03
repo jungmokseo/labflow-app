@@ -2,49 +2,34 @@
 
 import { useEffect, useState } from 'react';
 import { getMeetings, checkHealth, getCostSummary, Meeting, CostSummary } from '@/lib/api';
-import { DashboardSkeleton } from '@/components/Skeleton';
 import { Brain, ClipboardList, BookOpen, Mic, DollarSign } from 'lucide-react';
 
 export default function DashboardPage() {
+  // 위젯별 독립 state — 각 fetch가 도착하는대로 즉시 표시 (Promise.allSettled로 묶지 않음)
   const [isHealthy, setIsHealthy] = useState<boolean | null>(null);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[] | null>(null); // null = 로딩 중
   const [costData, setCostData] = useState<CostSummary | null>(null);
   const [costError, setCostError] = useState(false);
-  const [loading, setLoading] = useState(true);
 
+  // 첫 렌더는 즉시 (Skeleton wrapper 없음). 각 위젯이 자기 placeholder 보여줌.
   useEffect(() => {
-    async function load() {
-      try {
-        const [health, meetingRes, costRes] = await Promise.allSettled([
-          checkHealth(),
-          getMeetings(5),
-          getCostSummary(30),
-        ]);
-
-        if (health.status === 'fulfilled') setIsHealthy(health.value);
-        if (meetingRes.status === 'fulfilled') setMeetings(meetingRes.value.data);
-        if (costRes.status === 'fulfilled') setCostData(costRes.value);
-        else setCostError(true);
-      } catch (err) {
-        console.error('Dashboard load error:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
+    checkHealth().then(setIsHealthy).catch(() => setIsHealthy(false));
+    getMeetings(5).then(res => setMeetings(res.data)).catch(() => setMeetings([]));
+    getCostSummary(30).then(setCostData).catch(() => setCostError(true));
   }, []);
 
-  if (loading) return <DashboardSkeleton />;
-
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4 md:space-y-6">
-      {/* 헤더 */}
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5 md:space-y-7">
+      {/* 헤더 — 페이지 제목 좌측에 컬러 인디케이터 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold text-text-heading">오늘의 대시보드</h2>
-          <p className="text-base text-text-muted mt-1">
-            {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="w-1 h-8 md:h-10 bg-primary rounded-full" />
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight leading-tight">오늘의 대시보드</h2>
+            <p className="text-sm md:text-base text-text-muted mt-1">
+              {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+            </p>
+          </div>
         </div>
         <StatusBadge healthy={isHealthy} />
       </div>
@@ -69,7 +54,7 @@ export default function DashboardPage() {
         <a href="/meetings" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
           <Mic className="w-7 h-7 text-amber-600" />
           <h3 className="text-base font-medium text-text-heading mt-3">회의 노트</h3>
-          <p className="text-sm text-text-muted mt-1">{meetings.length}건의 회의 기록</p>
+          <p className="text-sm text-text-muted mt-1">{meetings === null ? '...' : `${meetings.length}건의 회의 기록`}</p>
         </a>
       </div>
 
@@ -81,7 +66,14 @@ export default function DashboardPage() {
             <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-amber-600" /> 최근 회의</h3>
             <a href="/meetings" className="text-sm text-primary hover:underline">모두 보기 →</a>
           </div>
-          {meetings.length === 0 ? (
+          {meetings === null ? (
+            // 로딩 중 — shimmer placeholder (위젯 단위)
+            <div className="space-y-3">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="p-3 rounded-lg bg-bg-input/40 skeleton-shimmer h-16" />
+              ))}
+            </div>
+          ) : meetings.length === 0 ? (
             <p className="text-text-muted text-base py-8 text-center">아직 회의 기록이 없습니다</p>
           ) : (
             <div className="space-y-3">
@@ -114,7 +106,14 @@ export default function DashboardPage() {
           {costError ? (
             <p className="text-text-muted text-base py-8 text-center">사용 후 비용 데이터가 표시됩니다</p>
           ) : !costData ? (
-            <p className="text-text-muted text-base py-8 text-center">비용 데이터를 불러오는 중...</p>
+            // 로딩 중 — 위젯 단위 shimmer
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-bg-input/40 rounded-lg p-3 skeleton-shimmer h-16" />
+                <div className="bg-bg-input/40 rounded-lg p-3 skeleton-shimmer h-16" />
+              </div>
+              <div className="bg-bg-input/40 rounded-lg skeleton-shimmer h-24" />
+            </div>
           ) : (
             <div className="space-y-4">
               {/* 요약 카드 */}

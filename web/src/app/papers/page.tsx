@@ -388,16 +388,19 @@ export default function PapersPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5 md:space-y-7">
       {/* Header — 모바일에서 stack, 데스크톱에서 row */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-2xl md:text-3xl font-bold text-text-heading flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 연구동향
-          </h1>
-          <p className="text-text-muted text-sm md:text-base mt-1">
-            {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
-          </p>
+        <div className="min-w-0 flex-1 flex items-center gap-3">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 연구동향
+            </h1>
+            <p className="text-text-muted text-sm md:text-base mt-1">
+              {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
+            </p>
+          </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={handleCrawl} disabled={crawling}

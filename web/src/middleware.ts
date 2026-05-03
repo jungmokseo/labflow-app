@@ -8,6 +8,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// 참고: middleware는 항상 Edge runtime에서 실행됨 (Next.js 기본). 별도 명시 불필요.
+
 const PUBLIC_ROUTES = ['/sign-in', '/sign-up', '/legal', '/auth/callback', '/offline'];
 
 function isPublicRoute(pathname: string): boolean {
