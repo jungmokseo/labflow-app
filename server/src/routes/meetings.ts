@@ -30,6 +30,70 @@ import { buildGraphFromText, crossLinkSources } from '../services/knowledge-grap
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
 import { logError } from '../services/error-logger.js';
+import { Prisma } from '@prisma/client';
+
+/**
+ * 회의 actionItems → Capture 자동 동기화 (idempotent).
+ * 같은 meetingId의 기존 active capture를 archive 후, 현재 actionItems로 재생성.
+ *
+ * 회의 후 follow-up이 흩어지지 않도록 모든 액션 아이템을 /tasks 탭에 자동 노출.
+ */
+async function syncActionItemCaptures(
+  userId: string,
+  labId: string | null,
+  meetingId: string,
+  meetingTitle: string,
+  actionItems: string[],
+): Promise<{ created: number; archived: number }> {
+  const filtered = (actionItems ?? []).map(s => String(s).trim()).filter(s => s.length > 0);
+
+  // 1. 기존 (meetingId 기반) active Capture 모두 archive
+  const archived = await basePrismaClient.capture.updateMany({
+    where: {
+      userId,
+      sourceType: 'meeting',
+      status: 'active',
+      metadata: { path: ['meetingId'], equals: meetingId },
+    },
+    data: { status: 'archived' },
+  });
+
+  if (filtered.length === 0) return { created: 0, archived: archived.count };
+
+  // 2. 새 actionItems로 Capture 생성
+  let created = 0;
+  for (let idx = 0; idx < filtered.length; idx++) {
+    const item = filtered[idx];
+    try {
+      await basePrismaClient.capture.create({
+        data: {
+          userId,
+          labId,
+          content: `[회의 액션] ${item}\n\n출처: ${meetingTitle}`,
+          summary: item.slice(0, 200),
+          category: 'TASK',
+          tags: ['meeting', 'action-item'],
+          priority: 'MEDIUM',
+          confidence: 1.0,
+          modelUsed: 'meeting-action-sync',
+          sourceType: 'meeting',
+          reviewed: false,
+          status: 'active',
+          metadata: {
+            meetingId,
+            meetingTitle,
+            actionItemIndex: idx,
+            syncedAt: new Date().toISOString(),
+          } as Prisma.InputJsonValue,
+        },
+      });
+      created++;
+    } catch (err: any) {
+      console.warn('[meeting] action-item Capture 생성 실패:', err?.message);
+    }
+  }
+  return { created, archived: archived.count };
+}
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
@@ -734,6 +798,11 @@ export async function meetingRoutes(app: FastifyInstance) {
         },
       });
 
+      // actionItems → Capture 자동 동기화 (이메일·회의 follow-up이 /tasks에 자동 노출)
+      syncActionItemCaptures(user.id, request.labId ?? null, meeting.id, result.title, result.actionItems)
+        .then(r => { if (r.created > 0) console.log(`[meeting] action-item Capture ${r.created}개 자동 등록 (archived ${r.archived})`); })
+        .catch((err: any) => console.warn('[background] syncActionItemCaptures:', err?.message));
+
       // 비동기 임베딩 (LightRAG 연동)
       const embText = [result.title, result.summary || '', ...result.agenda, ...result.actionItems].filter(Boolean).join('\n');
       embedAndStore(basePrismaClient, {
@@ -889,6 +958,19 @@ export async function meetingRoutes(app: FastifyInstance) {
     // summary 또는 transcription이 수정된 경우, 원본과 비교하여 자동 패턴 학습 (백그라운드)
     if (body.transcription && existing.transcription && body.transcription !== existing.transcription) {
       learnCorrectionPatterns(existing.transcription, body.transcription, user.id).catch(logError('meeting', '수정 시 교정 패턴 학습 실패', { userId: user.id }));
+    }
+
+    // actionItems가 수정된 경우 Capture 재동기화
+    if (body.actionItems !== undefined) {
+      syncActionItemCaptures(
+        user.id,
+        request.labId ?? null,
+        meeting.id,
+        meeting.title || existing.title || '',
+        meeting.actionItems as string[],
+      )
+        .then(r => { if (r.created > 0 || r.archived > 0) console.log(`[meeting-edit] action-item Capture sync — created ${r.created}, archived ${r.archived}`); })
+        .catch((err: any) => console.warn('[background] syncActionItemCaptures (edit):', err?.message));
     }
 
     // 내용이 수정된 경우 RAG 재임베딩 + 지식그래프 업데이트 (백그라운드)

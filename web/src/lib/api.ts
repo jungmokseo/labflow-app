@@ -399,6 +399,61 @@ export async function deleteFollowUp(id: string) {
   return apiFetch<{ success: boolean }>(`/api/follow-up/${id}`, { method: 'DELETE' });
 }
 
+// ── 휴가 (read-only, labflow-member proxy) ──────────────
+export interface VacationRecentItem {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberEmail: string | null;
+  type: 'ANNUAL' | 'SICK' | 'SPECIAL' | 'OFFICIAL';
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string | null;
+  status: 'APPROVED' | 'CANCELLED';
+  createdAt: string;
+}
+
+export interface VacationBalanceItem {
+  memberId: string;
+  name: string;
+  email: string | null;
+  role: 'PI' | 'STUDENT' | 'ADMIN';
+  totalDays: number;
+  usedDays: number;
+  remainingDays: number;
+}
+
+export async function getRecentVacations(limit = 50) {
+  return apiFetch<{ items: VacationRecentItem[] }>(`/api/lab-data/vacations/recent?limit=${limit}`);
+}
+
+export async function getVacationBalances() {
+  return apiFetch<{ year: number; items: VacationBalanceItem[] }>(`/api/lab-data/vacations/balance`);
+}
+
+// ── Lab 계정 정보 (read-only) ──────────────────────────
+export interface LabAccountItem {
+  id: string;
+  service: string;
+  url: string | null;
+  username: string | null;
+  notes: string | null;
+  hasPassword: boolean;
+  gdriveRowIndex: number | null;
+  syncedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getLabAccounts() {
+  return apiFetch<{ items: LabAccountItem[] }>(`/api/lab-data/lab-accounts`);
+}
+
+export async function getLabAccountPassword(id: string) {
+  return apiFetch<{ id: string; service: string; password: string }>(`/api/lab-data/lab-accounts/${id}/password`);
+}
+
 // ── 이메일 브리핑 ──────────────────────────────────
 export interface EmailBriefingItem {
   sender: string;

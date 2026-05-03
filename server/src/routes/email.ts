@@ -1234,6 +1234,15 @@ export async function emailRoutes(app: FastifyInstance) {
         }).catch((err: any) => console.error('[background] email embedAndStore:', err.message || err));
       }
 
+      // 답장 필요 이메일(urgent/action-needed) → Capture 자동 등록 (백그라운드, idempotent)
+      import('../services/email-capture-sync.js')
+        .then(({ syncReplyNeededCaptures }) =>
+          syncReplyNeededCaptures(user.id, request.labId ?? null, briefings as any[])
+            .then(r => { if (r.created > 0) console.log(`[email-briefing] reply-needed Capture ${r.created}건 자동 등록 (skipped ${r.skipped})`); })
+            .catch((err: any) => console.warn('[background] syncReplyNeededCaptures:', err?.message)),
+        )
+        .catch(() => {});
+
       // 일정 메일에서 이벤트 감지 → pending events
       const scheduleEmails = briefings.filter((b: any) => b.category === 'schedule');
       if (scheduleEmails.length > 0) {

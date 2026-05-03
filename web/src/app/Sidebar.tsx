@@ -15,6 +15,7 @@ import {
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
   PanelLeftClose, PanelLeft, LogOut, Network, BookMarked, Inbox, HelpCircle,
+  Calendar, KeyRound,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -38,6 +39,8 @@ const NAV_ITEMS = [
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
   { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
   { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기' },
+  { href: '/vacations', icon: Calendar, label: '휴가 관리' },
+  { href: '/accounts', icon: KeyRound, label: '계정 정보' },
   { href: '/papers', icon: BookOpen, label: '연구동향' },
   { href: '/meetings', icon: Mic, label: '회의 노트' },
   { href: '/wiki', icon: BookMarked, label: '지식 위키' },
