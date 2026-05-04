@@ -79,6 +79,13 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
   const [customMessage, setCustomMessage] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
 
+  const isPiTurn = project.whoseTurn === 'PI';
+  const modalTitle = isPiTurn ? '검토 완료 알림' : 'Slack 리마인드';
+  const placeholder = isPiTurn
+    ? `'${project.title}' 워크시트에 PI 검토 코멘트가 추가되었습니다. 노션에서 확인 후 다음 단계 진행해 주세요.`
+    : `'${project.title}' 워크시트가 ${project.daysSinceTurn}일째 업데이트가 없습니다. 답변 부탁드려요.`;
+  const sendButtonLabel = isPiTurn ? '알림 보내기' : 'Slack 발송';
+
   const handleSend = async () => {
     setSending(true);
     try {
@@ -104,11 +111,16 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-bg-card rounded-2xl shadow-xl border border-border max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-text-heading">Slack 리마인드</h3>
+          <h3 className="text-lg font-bold text-text-heading">{modalTitle}</h3>
           <button onClick={onClose} className="p-1 hover:bg-bg-hover rounded-lg"><X className="w-4 h-4" /></button>
         </div>
         <p className="text-sm text-text-muted mb-4">
           <span className="font-medium text-text-heading">{project.title}</span>
+          {isPiTurn && (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/30">
+              PI 검토 완료 → 학생 알림
+            </span>
+          )}
         </p>
         <div className="space-y-3">
           <div>
@@ -127,11 +139,14 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
             <textarea
               value={customMessage}
               onChange={e => setCustomMessage(e.target.value)}
-              placeholder={`'${project.title}' 워크시트가 ${project.daysSinceTurn}일째 업데이트가 없습니다. 답변 부탁드려요.`}
+              placeholder={placeholder}
               rows={4}
               className="w-full px-3 py-2 bg-bg-input rounded-lg text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary resize-none"
             />
           </div>
+          <p className="text-xs text-text-muted/70">
+            보내는 사람: <span className="font-medium">@claude_connect 봇</span> (BLISS Lab Slack)
+          </p>
         </div>
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg border border-border text-sm hover:bg-bg-hover">
@@ -143,7 +158,7 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
             className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {sending ? '발송 중…' : 'Slack 발송'}
+            {sending ? '발송 중…' : sendButtonLabel}
           </button>
         </div>
       </div>
@@ -209,15 +224,14 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
             <ExternalLink className="w-4 h-4" />
             노션 열기
           </a>
-          {project.whoseTurn === 'STUDENT' && (
-            <button
-              onClick={onRemind}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              <Send className="w-4 h-4" />
-              Slack 리마인드
-            </button>
-          )}
+          {/* PI 차례: '검토 완료 알림 보내기' / 학생 차례: 'Slack 리마인드' */}
+          <button
+            onClick={onRemind}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Send className="w-4 h-4" />
+            {project.whoseTurn === 'PI' ? '검토 완료 알림' : 'Slack 리마인드'}
+          </button>
         </div>
       </div>
     </div>

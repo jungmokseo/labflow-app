@@ -100,6 +100,32 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
 
 function buildDefaultRemindMessage(project: any, students: string[]): string {
   const studentList = students.join(', ');
+
+  // PI 차례 = PI가 학생 답변을 검토하고 새 코멘트를 남긴 후 학생에게 알리는 케이스.
+  // 학생 차례 = 학생이 응답해야 하는데 N일 동안 안 한 케이스.
+  const isPiTurn = project.whoseTurn === 'PI';
+
+  if (isPiTurn) {
+    const lines = [
+      `📋 *${project.title} — 검토 완료, 다음 단계 진행 부탁*`,
+      '',
+      `${studentList}님,`,
+      `'${project.title}' 워크시트에 PI 검토 코멘트가 추가되었습니다.`,
+      '',
+    ];
+    if (project.lastActivitySnippet) {
+      lines.push(`최근 메모: "${project.lastActivitySnippet.slice(0, 80)}"`);
+      lines.push('');
+    }
+    lines.push(
+      `워크시트 확인: ${project.notionUrl}`,
+      '',
+      `노션에서 새 코멘트를 확인하시고 다음 단계 진행해 주세요.`,
+    );
+    return lines.join('\n');
+  }
+
+  // 학생 차례 — 응답 대기
   const lines = [
     `📌 *${project.title} 워크시트 업데이트 요청*`,
     '',
