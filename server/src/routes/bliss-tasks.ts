@@ -13,6 +13,8 @@ const captureSchema = z.object({
   sourceChannel: z.string().min(1).max(120),
   slackPermalink: z.string().url().optional(),
   slackUserId: z.string().min(1).max(80).optional(),
+  // metadata.fromPi=true 시 PI 본인 메시지에서 추출된 task → 검토 큐 거치지 않고 즉시 active.
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 const confirmSchema = z.object({
@@ -125,6 +127,10 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     const body = captureSchema.parse(request.body);
     const { user, labId } = await resolveOwner();
 
+    // PI 본인 메시지에서 추출된 task → 검토 단계 건너뛰고 즉시 active.
+    // 학생 DM 발송 안 함 (PI 본인 할 일이라 알림 불필요).
+    const fromPi = body.metadata?.fromPi === true;
+
     const capture = await prisma.capture.create({
       data: {
         userId: user.id,
@@ -132,12 +138,14 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         content: body.originalMessage,
         summary: body.title.slice(0, 200),
         category: 'TASK',
-        tags: ['bliss-slack', 'review-queue'],
+        tags: fromPi
+          ? ['bliss-slack', 'pi-self-task']
+          : ['bliss-slack', 'review-queue'],
         priority: 'MEDIUM',
         confidence: 1.0,
         modelUsed: 'bliss-task-capture',
         sourceType: 'slack',
-        reviewed: false,
+        reviewed: fromPi,  // PI 본인 메시지면 자동 confirm
         status: 'active',
         metadata: {
           blissSource: {
@@ -146,12 +154,13 @@ export async function blissTasksRoutes(app: FastifyInstance) {
             slackUserId: body.slackUserId,
             requesterName: body.requesterName,
           },
+          ...(fromPi ? { fromPi: true } : {}),
           capturedAt: new Date().toISOString(),
         },
       },
     });
 
-    return reply.code(201).send({ success: true, captureId: capture.id });
+    return reply.code(201).send({ success: true, captureId: capture.id, fromPi });
   });
 
   app.get('/api/bliss-tasks/review-queue', { preHandler: authMiddleware }, async (_request) => {
