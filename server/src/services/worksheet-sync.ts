@@ -28,6 +28,28 @@ const EXCLUDED_PROJECTS = new Set<string>([
   '328f9f17-6cf4-816f-a4f3-cb703e3ee1bf', // AutoPCB
 ]);
 
+/**
+ * 프로젝트 DB와 별개로 직접 등록할 워크시트 (사용자 추가 요청).
+ * Integration이 페이지에 권한 없을 수도 있으니 fallback 메타데이터 포함.
+ * 권한 받으면 다음 sync에서 실제 노션 데이터로 자동 갱신됨.
+ */
+const STANDALONE_WORKSHEETS: Array<{
+  id: string;
+  fallbackTitle: string;
+  fallbackTeam: string | null;
+  fallbackAssignees: string[];
+  fallbackStatus: string | null;
+}> = [
+  {
+    // LM Thermal Paste 2026-04-06 — LM Paste 또 다른 sub-page (사용자 추가 요청)
+    id: '33af9f17-6cf4-81fa-a4ee-cfe7b3a0dab1',
+    fallbackTitle: 'LM Thermal Paste 2026-04-06',
+    fallbackTeam: 'LM Team',
+    fallbackAssignees: ['홍승완', '육근영'],
+    fallbackStatus: '2. 실험중',
+  },
+];
+
 interface NotionBlock {
   id: string;
   type: string;
@@ -432,6 +454,97 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
         console.error(`[worksheet-sync] FAILED ${row.id}:`, err.message?.slice(0, 100));
       }
     }));
+  }
+
+  // STANDALONE_WORKSHEETS — 프로젝트 DB와 별개로 등록된 워크시트 처리
+  for (const sw of STANDALONE_WORKSHEETS) {
+    try {
+      // 1. 노션 페이지 fetch 시도 (권한 있으면 메타 + 활동 갱신)
+      let title = sw.fallbackTitle;
+      let team = sw.fallbackTeam;
+      let assignees = sw.fallbackAssignees;
+      let status = sw.fallbackStatus;
+      let notionLastEditedAt = new Date();
+      let activity: ActivityInfo | null = null;
+      let notionUrl = `https://www.notion.so/${sw.id.replace(/-/g, '')}`;
+
+      try {
+        const page: any = await notionFetch(`/pages/${sw.id}`);
+        notionLastEditedAt = new Date(page.last_edited_time);
+        notionUrl = page.url || notionUrl;
+
+        // early-out 캐시
+        const existing = await prisma.worksheetProject.findUnique({
+          where: { id: sw.id },
+          select: { notionLastEditedAt: true, archived: true },
+        });
+        if (existing && existing.notionLastEditedAt >= notionLastEditedAt && !existing.archived) {
+          await prisma.worksheetProject.update({
+            where: { id: sw.id },
+            data: { syncedAt: new Date() },
+          });
+          worksheets++;
+          continue;
+        }
+
+        // 블록 fetch + 활동 계산
+        const blocks = await getAllBlocksRecursive(sw.id);
+        const unknownUserIds = new Set<string>();
+        for (const b of blocks) {
+          if (b.created_by?.id && !userMap.has(b.created_by.id)) unknownUserIds.add(b.created_by.id);
+          if (b.last_edited_by?.id && !userMap.has(b.last_edited_by.id)) unknownUserIds.add(b.last_edited_by.id);
+        }
+        for (const uid of unknownUserIds) await ensureNotionUser(uid, userMap);
+        activity = await computeActivity(blocks, userMap);
+      } catch (err: any) {
+        // 권한 없음 (404) — fallback 메타로 placeholder 등록 (사용자가 invite 후 자동 갱신)
+        console.log(`[worksheet-sync] standalone ${sw.id} 권한 없음 → fallback 사용`);
+      }
+
+      const upsertData: any = {
+        notionUrl,
+        title,
+        team,
+        assignees,
+        status,
+        notionLastEditedAt,
+        archived: false,
+        syncedAt: new Date(),
+        ...(activity ? {
+          lastActivityAt: activity.lastActivityAt,
+          lastActivityBy: activity.lastActivityBy,
+          lastActivityByName: activity.lastActivityByName,
+          lastActivityRole: activity.lastActivityRole,
+          lastActivitySnippet: activity.lastActivitySnippet,
+          whoseTurn: activity.whoseTurn,
+          daysSinceTurn: Math.floor((Date.now() - activity.lastActivityAt.getTime()) / (1000 * 60 * 60 * 24)),
+          studentActivity: activity.studentActivity,
+          recentChanges: activity.recentChanges as any,
+        } : {
+          // 권한 없을 때 — 기본값 (PI 차례로 시작, 사용자가 invite 후 갱신)
+          lastActivityAt: notionLastEditedAt,
+          lastActivityBy: '',
+          lastActivityByName: 'Integration 권한 필요',
+          lastActivityRole: 'OTHER',
+          lastActivitySnippet: '⚠️ 노션 페이지에 Claude Code Integration을 추가해주세요. 추가 후 다음 sync에서 자동 갱신됩니다.',
+          whoseTurn: 'PI',
+          daysSinceTurn: 0,
+          studentActivity: {},
+          recentChanges: [],
+        }),
+      };
+
+      await prisma.worksheetProject.upsert({
+        where: { id: sw.id },
+        create: { id: sw.id, parentDbPageId: null, ...upsertData },
+        update: upsertData,
+      });
+      worksheets++;
+      updated++;
+    } catch (err: any) {
+      errors++;
+      console.error(`[worksheet-sync] STANDALONE FAILED ${sw.id}:`, err.message?.slice(0, 100));
+    }
   }
 
   // Stale cleanup: 이번 sync 시작 시각보다 이전 syncedAt = 더 이상 워크시트로 인식 안 되거나
