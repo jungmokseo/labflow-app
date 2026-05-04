@@ -117,11 +117,30 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
       }
 
       const success = results.filter(r => r.ok).length;
+
+      // PI 차례에서 발송 성공 → 즉시 학생 차례로 전환.
+      // (PI가 노션에 답변 코멘트 단 후 클릭하는 흐름이라, 메시지 발송 = 검토 완료 시그널)
+      // 다음 매시간 sync에서 노션의 실제 timeline으로 자동 재조정.
+      if (success > 0 && project.whoseTurn === 'PI') {
+        await prisma.worksheetProject.update({
+          where: { id: project.id },
+          data: {
+            whoseTurn: 'STUDENT',
+            lastActivityAt: new Date(),
+            lastActivityRole: 'PI',
+            lastActivityByName: 'PI (Slack 알림 발송)',
+            daysSinceTurn: 0,
+          },
+        });
+      }
+
       return reply.send({
         ok: success > 0,
         sent: success,
         total: targets.length,
         results,
+        // UI가 즉시 차례 전환을 반영할 수 있도록 명시
+        turnChanged: success > 0 && project.whoseTurn === 'PI',
       });
     } catch (err: any) {
       if (err instanceof z.ZodError) {

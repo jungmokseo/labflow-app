@@ -488,7 +488,13 @@ export async function remindWorksheetStudent(
   projectId: string,
   body: { studentName?: string; customMessage?: string },
 ) {
-  return apiFetch<{ ok: boolean; sent: number; total: number; results: Array<{ student: string; ok: boolean; error?: string; reminderId?: string }> }>(
+  return apiFetch<{
+    ok: boolean;
+    sent: number;
+    total: number;
+    turnChanged: boolean;  // PI 차례 → 학생 차례로 즉시 전환됐는지
+    results: Array<{ student: string; ok: boolean; error?: string; reminderId?: string }>;
+  }>(
     `/api/worksheet-projects/${projectId}/remind`,
     { method: 'POST', body: JSON.stringify(body) },
   );

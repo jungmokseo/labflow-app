@@ -96,7 +96,9 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
         customMessage: customMessage.trim() || undefined,
       });
       if (r.ok) {
-        toast(`Slack DM 발송: ${r.sent}/${r.total}`, 'success');
+        const baseMsg = `Slack DM 발송: ${r.sent}/${r.total}`;
+        const turnMsg = r.turnChanged ? ' · 🟡 학생 차례로 전환됨' : '';
+        toast(baseMsg + turnMsg, 'success');
         onSent();
         onClose();
       } else {
