@@ -436,6 +436,16 @@ export async function getVacationBalances() {
 // server의 /api/lab-data/lab-accounts 엔드포인트와 데이터(labflow-member)는 보존.
 
 // ── 워크시트 프로젝트 (PI ↔ 학생 캐치볼) ──────────────
+export interface WorksheetRecentChange {
+  blockId: string;
+  createdAt: string;
+  byUserId: string;
+  byName: string | null;
+  role: 'PI' | 'STUDENT' | 'OTHER';
+  blockType: string;
+  text: string;
+}
+
 export interface WorksheetProject {
   id: string;
   notionUrl: string;
@@ -454,6 +464,7 @@ export interface WorksheetProject {
   daysSinceTurn: number;
   currentSummary: string | null;
   studentActivity: Record<string, string>;
+  recentChanges: WorksheetRecentChange[];  // 최근 8개 블록 timeline
   archived: boolean;
   syncedAt: string;
 }

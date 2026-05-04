@@ -153,6 +153,16 @@ function blockText(b: NotionBlock): string {
   return '';
 }
 
+interface RecentChange {
+  blockId: string;
+  createdAt: string;       // ISO
+  byUserId: string;
+  byName: string | null;
+  role: string;            // 'PI' | 'STUDENT' | 'OTHER'
+  blockType: string;
+  text: string;            // 본문 발췌 (200자)
+}
+
 interface ActivityInfo {
   lastActivityAt: Date;
   lastActivityBy: string;
@@ -161,6 +171,7 @@ interface ActivityInfo {
   lastActivitySnippet: string | null;
   whoseTurn: string;
   studentActivity: Record<string, string>;
+  recentChanges: RecentChange[];  // 최근 8개 의미 있는 블록 (시간순 desc)
 }
 
 // 무의미한 블록 — 활동 판정 시 제외
@@ -208,10 +219,23 @@ async function computeActivity(
     }
   }
 
-  // 4. 가장 최근 created 블록의 작성자 = 마지막 활동자
+  // 4. 최근 8개 의미 있는 블록 — UI에 timeline으로 표시 (PI ↔ 학생 캐치볼 맥락)
+  const recentChanges: RecentChange[] = sorted.slice(0, 8).map(b => {
+    const u = userMap.get(b.created_by.id);
+    return {
+      blockId: b.id,
+      createdAt: b.created_time,
+      byUserId: b.created_by.id,
+      byName: u?.name || null,
+      role: u?.role || 'OTHER',
+      blockType: b.type,
+      text: blockText(b).slice(0, 200),
+    };
+  });
+
+  // 5. 가장 최근 created 블록의 작성자 = 마지막 활동자
   const last = sorted[0];
   if (!last) {
-    // 의미 있는 블록이 없으면 PI 차례로 (기본값)
     return {
       lastActivityAt: new Date(0),
       lastActivityBy: '',
@@ -220,6 +244,7 @@ async function computeActivity(
       lastActivitySnippet: null,
       whoseTurn: 'PI',
       studentActivity,
+      recentChanges: [],
     };
   }
 
@@ -236,6 +261,7 @@ async function computeActivity(
     lastActivitySnippet: blockText(last).slice(0, 120),
     whoseTurn,
     studentActivity,
+    recentChanges,
   };
 }
 
@@ -358,6 +384,7 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
             whoseTurn: activity.whoseTurn,
             daysSinceTurn,
             studentActivity: activity.studentActivity,
+            recentChanges: activity.recentChanges as any,
             archived: isDone,
             syncedAt: new Date(),
           },
@@ -376,6 +403,7 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
             whoseTurn: activity.whoseTurn,
             daysSinceTurn,
             studentActivity: activity.studentActivity,
+            recentChanges: activity.recentChanges as any,
             archived: isDone,
             syncedAt: new Date(),
           },

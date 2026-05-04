@@ -13,7 +13,7 @@ import { useToast } from '@/components/Toast';
 import {
   getWorksheetProjects, syncWorksheetProjects, remindWorksheetStudent,
   getWorksheetReminders,
-  type WorksheetProject, type WorksheetReminder,
+  type WorksheetProject, type WorksheetReminder, type WorksheetRecentChange,
 } from '@/lib/api';
 import {
   FlaskConical, RefreshCw, MessageSquare, Clock, User, ArrowRight,
@@ -177,6 +177,55 @@ function timeAgoShort(iso: string): string {
   return `${Math.floor(hr / 24)}일 전`;
 }
 
+interface ActivityTimelineProps {
+  changes: WorksheetRecentChange[];
+}
+
+function ActivityTimeline({ changes }: ActivityTimelineProps) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? changes : changes.slice(0, 3);
+  if (changes.length === 0) return null;
+
+  return (
+    <div className="bg-bg-input/40 rounded-lg p-3 border-l-2 border-border">
+      <p className="text-xs text-text-muted mb-2 font-medium flex items-center gap-1">
+        <MessageSquare className="w-3 h-3" />
+        최근 워크시트 활동 ({changes.length})
+      </p>
+      <ul className="space-y-2">
+        {visible.map(c => {
+          const isPi = c.role === 'PI';
+          const dotColor = isPi ? 'bg-blue-500' : c.role === 'STUDENT' ? 'bg-emerald-500' : 'bg-gray-400';
+          return (
+            <li key={c.blockId} className="flex gap-2.5">
+              <span className={`flex-shrink-0 mt-1.5 w-2 h-2 rounded-full ${dotColor}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs font-medium ${isPi ? 'text-blue-700 dark:text-blue-300' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    {isPi ? '🔵 PI' : c.role === 'STUDENT' ? '🟢 학생' : '⚪ 외부'} · {c.byName || '?'}
+                  </span>
+                  <span className="text-xs text-text-muted">{timeAgoShort(c.createdAt)}</span>
+                </div>
+                <p className="text-sm text-text-main leading-relaxed mt-0.5 whitespace-pre-line line-clamp-3">
+                  {c.text}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {changes.length > 3 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="text-xs text-primary hover:underline mt-2"
+        >
+          {expanded ? '접기' : `더 보기 (+${changes.length - 3})`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface RemindersInlineProps {
   projectId: string;
 }
@@ -281,8 +330,10 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
           <TurnBadge whoseTurn={project.whoseTurn} daysSinceTurn={project.daysSinceTurn} />
         </div>
 
-        {/* 마지막 활동 발췌 */}
-        {project.lastActivitySnippet && (
+        {/* 마지막 활동 발췌 + 최근 timeline (전후 맥락 — 노션 안 들어가도 OK) */}
+        {project.recentChanges && project.recentChanges.length > 0 ? (
+          <ActivityTimeline changes={project.recentChanges} />
+        ) : project.lastActivitySnippet ? (
           <div className="bg-bg-input/40 rounded-lg p-3 border-l-2 border-border">
             <p className="text-xs text-text-muted mb-1">
               <MessageSquare className="w-3 h-3 inline mr-0.5" />
@@ -292,7 +343,7 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
               "{project.lastActivitySnippet}"
             </p>
           </div>
-        )}
+        ) : null}
 
         {/* 액션 버튼 */}
         <div className="flex gap-2 pt-1">

@@ -233,9 +233,12 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     const capture = await findReviewCapture(id, request.userId!);
     if (!capture) return reply.code(404).send({ error: '검토 대기 항목을 찾을 수 없습니다' });
 
+    // status='on_hold'로 변경 → review-queue에서 자동 제외 (status='active' 필터)
+    // heldAt도 metadata에 기록 (audit + 추후 재활성화 시 사용)
     await prisma.capture.update({
       where: { id: capture.id },
       data: {
+        status: 'on_hold',
         metadata: {
           ...jsonObject(capture.metadata),
           heldAt: new Date().toISOString(),

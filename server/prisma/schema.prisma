@@ -761,6 +761,10 @@ model WorksheetProject {
   // 학생별 마지막 활동 — 리마인드 개인화용
   studentActivity     Json     @default("{}") @map("student_activity")  // {"강민경": "2026-04-07T..", ...}
 
+  // 최근 활동 timeline — UI에서 노션 안 들어가도 맥락 확인 가능
+  // [{blockId, createdAt, byUserId, byName, role, blockType, text}, ...]
+  recentChanges       Json     @default("[]") @map("recent_changes")
+
   // 비활성/완료 (DB의 "완료?" checkbox)
   archived            Boolean  @default(false)
 
