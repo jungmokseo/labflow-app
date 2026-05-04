@@ -35,14 +35,16 @@ const EXCLUDED_PROJECTS = new Set<string>([
  */
 const STANDALONE_WORKSHEETS: Array<{
   id: string;
+  parentDbPageId: string | null;  // 프로젝트 DB의 부모 row id (있으면 그 부모도 🟢 활성 마킹)
   fallbackTitle: string;
   fallbackTeam: string | null;
   fallbackAssignees: string[];
   fallbackStatus: string | null;
 }> = [
   {
-    // LM Thermal Paste 2026-04-06 — LM Paste 또 다른 sub-page (사용자 추가 요청)
+    // LM Thermal Paste 2026-04-06 — LM Paste 부모의 sub-page
     id: '33af9f17-6cf4-81fa-a4ee-cfe7b3a0dab1',
+    parentDbPageId: '328f9f17-6cf4-813c-9f22-df546a0b63c2',  // LM Paste DB row
     fallbackTitle: 'LM Thermal Paste 2026-04-06',
     fallbackTeam: 'LM Team',
     fallbackAssignees: ['홍승완', '육근영'],
@@ -150,17 +152,27 @@ function getFirstHeading(blocks: NotionBlock[]): string {
   return '';
 }
 
-/** 페이지가 워크시트인지 휴리스틱 판정 */
+/** 페이지가 워크시트인지 휴리스틱 판정.
+ * 워크시트 = 학생과 PI가 정기적으로 답변/코멘트 누적하는 페이지 (heading 많고 본문 풍부).
+ * 단순 to-do list 페이지는 제외 ('📋 현재 액션 아이템' 정확 일치).
+ */
 function isWorksheet(blocks: NotionBlock[]): { isWorksheet: boolean; reason: string } {
   const h2Count = blocks.filter(b => b.type === 'heading_2').length;
+  const h3Count = blocks.filter(b => b.type === 'heading_3').length;
+  const headingCount = h2Count + h3Count;
   const childPageCount = blocks.filter(b => b.type === 'child_page').length;
   const firstH2 = getFirstHeading(blocks);
 
+  // 단순 액션 아이템 페이지는 워크시트 아님 (정확 일치만)
+  if (firstH2 === '📋 현재 액션 아이템') {
+    return { isWorksheet: false, reason: '액션 아이템 페이지' };
+  }
   if (childPageCount >= 1) {
     return { isWorksheet: true, reason: `child_page ${childPageCount}개` };
   }
-  if (firstH2 !== '📋 현재 액션 아이템' && !firstH2.startsWith('📋') && h2Count >= 5) {
-    return { isWorksheet: true, reason: `긴 분석 워크시트 (h2:${h2Count})` };
+  // 헤딩 많은 페이지 = 워크시트로 판정 (h2+h3 통합 카운트로 점검 노트류도 포함)
+  if (headingCount >= 5) {
+    return { isWorksheet: true, reason: `긴 분석 워크시트 (h2:${h2Count} h3:${h3Count})` };
   }
   return { isWorksheet: false, reason: '' };
 }
@@ -536,8 +548,8 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
 
       await prisma.worksheetProject.upsert({
         where: { id: sw.id },
-        create: { id: sw.id, parentDbPageId: null, ...upsertData },
-        update: upsertData,
+        create: { id: sw.id, parentDbPageId: sw.parentDbPageId, ...upsertData },
+        update: { ...upsertData, parentDbPageId: sw.parentDbPageId },
       });
       worksheets++;
       updated++;
@@ -547,16 +559,61 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
     }
   }
 
-  // Stale cleanup: 이번 sync 시작 시각보다 이전 syncedAt = 더 이상 워크시트로 인식 안 되거나
-  // EXCLUDED_PROJECTS에 새로 추가된 항목 → archived 처리.
-  // 'completed' 상태인 워크시트(상태=11.게재완료)는 자연스럽게 archived (DB에서 archived=true).
+  // Stale cleanup
   const archiveResult = await prisma.worksheetProject.updateMany({
     where: { syncedAt: { lt: syncStartedAt }, archived: false },
     data: { archived: true },
   });
 
+  // 활성 워크시트 ID set — 노션 property 분류용 (DB row id 기준)
+  const dbActiveWorksheets = await prisma.worksheetProject.findMany({
+    where: { archived: false },
+    select: { id: true, parentDbPageId: true },
+  });
+  const activeWorksheetIds = new Set<string>();
+  for (const w of dbActiveWorksheets) {
+    activeWorksheetIds.add(w.id);
+    if (w.parentDbPageId) activeWorksheetIds.add(w.parentDbPageId);  // sub-page workflow 처리
+  }
+
+  // ── 노션 DB property 자동 분류 ──────────────────────────
+  // 매 sync마다 모든 프로젝트 row의 "🔬 워크시트 추적" property 갱신:
+  //  🟢 활성 — 활성 워크시트 (DB worksheet_projects에 archived=false)
+  //  ✅ 완료 — status가 "11.게재완료"
+  //  ⏸ 보류 — 사용자가 manual로 표시한 값 (덮어쓰지 않음)
+  //  ⚪ 미분류 — 그 외 (사용자가 ⏸ 보류로 수동 변경 가능)
+  let propertyUpdated = 0;
+  await Promise.all(projectRows.map(async (row) => {
+    try {
+      const status = row.properties['상태']?.status?.name || row.properties['상태']?.select?.name || '';
+      const currentTracking = row.properties['🔬 워크시트 추적']?.select?.name || '';
+      const isActive = activeWorksheetIds.has(row.id);
+      const isCompleted = status.includes('11.') || status.includes('게재완료');
+
+      let newValue: string;
+      if (isActive) newValue = '🟢 활성';
+      else if (isCompleted) newValue = '✅ 완료';
+      else if (currentTracking === '⏸ 보류') newValue = '⏸ 보류';  // 사용자 수동 보존
+      else newValue = '⚪ 미분류';
+
+      if (currentTracking === newValue) return;  // 이미 같음 — skip
+
+      await notionFetch(`/pages/${row.id}`, {
+        method: 'PATCH',
+        body: {
+          properties: {
+            '🔬 워크시트 추적': { select: { name: newValue } },
+          },
+        },
+      });
+      propertyUpdated++;
+    } catch (err: any) {
+      console.warn(`[worksheet-sync] property 갱신 실패 ${row.id}:`, err.message?.slice(0, 80));
+    }
+  }));
+
   const elapsed = Math.round((Date.now() - t0) / 1000);
-  console.log(`[worksheet-sync] 완료: ${worksheets} worksheets, ${updated} upserted, ${errors} errors, ${archiveResult.count} stale archived, ${elapsed}s`);
+  console.log(`[worksheet-sync] 완료: ${worksheets} worksheets, ${updated} upserted, ${errors} errors, ${archiveResult.count} stale archived, property updated: ${propertyUpdated}, ${elapsed}s`);
   return { total: projectRows.length, worksheets, updated, errors, archived: archiveResult.count };
 }
 
