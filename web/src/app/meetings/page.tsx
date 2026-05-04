@@ -63,10 +63,17 @@ export default function MeetingsPage() {
   );
   const meetings = meetingsData?.data || [];
 
-  // Cleanup on unmount: audio URL, Wake Lock, silent audio
+  // audioUrl 변경 시: 이전 URL revoke (메모리 회수)
   useEffect(() => {
     return () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
+    };
+  }, [audioUrl]);
+
+  // Unmount-only cleanup: Wake Lock, silent audio, timer
+  // (이전엔 audioUrl deps에 묶여 녹음 중에도 wake/timer가 정리되던 버그)
+  useEffect(() => {
+    return () => {
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
@@ -81,7 +88,7 @@ export default function MeetingsPage() {
         timerRef.current = null;
       }
     };
-  }, [audioUrl]);
+  }, []);
 
   // ── 내장 마이크 우선 선택 헬퍼 ──
   async function getLocalAudioStream(): Promise<MediaStream> {

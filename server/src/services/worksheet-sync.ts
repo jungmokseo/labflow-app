@@ -333,6 +333,24 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
 
         if (!worksheetPage) return;
 
+        // 0. Early-out 캐시: 노션의 last_edited_time이 마지막 sync 시점 이후 변경 없으면
+        //    재귀 fetch 생략. 매시간 cron 중 ~80%는 변경 없음 → Notion API 호출 대폭 절감.
+        const existing = await prisma.worksheetProject.findUnique({
+          where: { id: worksheetPageId },
+          select: { notionLastEditedAt: true, archived: true },
+        });
+        const newNotionTs = new Date(worksheetPage.last_edited_time);
+        if (existing && existing.notionLastEditedAt >= newNotionTs && !existing.archived) {
+          // 변경 없음 — syncedAt만 갱신해서 stale 처리 안 되게
+          await prisma.worksheetProject.update({
+            where: { id: worksheetPageId },
+            data: { syncedAt: new Date() },
+          });
+          worksheets++;
+          updated++;
+          return;
+        }
+
         // 1. 워크시트 판정용 — top-level 블록 1차 조회 (가벼움)
         const topBlocks = await getPageBlocks(worksheetPageId);
         const { isWorksheet: isWS } = isWorksheet(topBlocks);

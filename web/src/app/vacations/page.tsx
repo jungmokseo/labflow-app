@@ -70,13 +70,17 @@ export default function VacationsPage() {
   return (
     <div className="min-h-full pb-20 md:pb-12">
       <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
-        <div className="flex items-center gap-2 md:gap-3 mb-1">
-          <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary" />
-          <h1 className="text-lg md:text-2xl font-bold text-text-heading">휴가 관리</h1>
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <Calendar className="w-6 h-6 text-primary flex-shrink-0" /> 휴가 관리
+            </h1>
+            <p className="text-sm md:text-base text-text-muted mt-1">
+              학생이 BLISS Slack /휴가로 등록한 신청 내역과 잔여 휴가 현황.
+            </p>
+          </div>
         </div>
-        <p className="text-xs md:text-sm text-text-muted">
-          학생이 BLISS Slack /휴가로 등록한 신청 내역과 잔여 휴가 현황.
-        </p>
       </div>
 
       <div className="px-4 md:px-8 pt-1 pb-2 flex gap-2 overflow-x-auto">

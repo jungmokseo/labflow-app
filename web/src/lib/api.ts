@@ -446,6 +446,12 @@ export interface WorksheetRecentChange {
   text: string;
 }
 
+export interface WorksheetReminderStats {
+  sent: number;
+  acked: number;
+  lastSentAt: string | null;
+}
+
 export interface WorksheetProject {
   id: string;
   notionUrl: string;
@@ -465,6 +471,7 @@ export interface WorksheetProject {
   currentSummary: string | null;
   studentActivity: Record<string, string>;
   recentChanges: WorksheetRecentChange[];  // 최근 8개 블록 timeline
+  reminderStats: WorksheetReminderStats;   // 서버 응답에 포함 — RemindersInline mount fetch 제거
   archived: boolean;
   syncedAt: string;
 }

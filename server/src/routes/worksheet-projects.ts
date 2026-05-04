@@ -27,8 +27,46 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
     try {
       const includeArchived = (request.query as any)?.archived === 'true';
       const items = await getWorksheetProjects({ archived: includeArchived });
+
+      // 모든 프로젝트의 reminder stats를 단 하나의 SQL aggregate로 — 14 API call 제거
+      // 각 ProjectCard가 mount 시 개별 fetch하던 것을 부모 응답에 포함.
+      const ids = items.map(i => i.id);
+      let statsByProject: Record<string, { sent: number; acked: number; lastSentAt: string | null }> = {};
+      if (ids.length > 0) {
+        try {
+          const rows = await prisma.$queryRawUnsafe<Array<{
+            project_id: string;
+            sent_count: bigint;
+            acked_count: bigint;
+            last_sent_at: Date | null;
+          }>>(
+            `SELECT project_id,
+                    COUNT(*)::bigint as sent_count,
+                    COUNT(acked_at)::bigint as acked_count,
+                    MAX(sent_at) as last_sent_at
+             FROM worksheet_reminders
+             WHERE project_id = ANY($1::text[])
+               AND dismissed_at IS NULL
+             GROUP BY project_id`,
+            ids,
+          );
+          for (const row of rows) {
+            statsByProject[row.project_id] = {
+              sent: Number(row.sent_count),
+              acked: Number(row.acked_count),
+              lastSentAt: row.last_sent_at ? row.last_sent_at.toISOString() : null,
+            };
+          }
+        } catch { /* worksheet_reminders 테이블 없으면 빈 stats */ }
+      }
+
+      const enriched = items.map(i => ({
+        ...i,
+        reminderStats: statsByProject[i.id] || { sent: 0, acked: 0, lastSentAt: null },
+      }));
+
       return reply.send({
-        items,
+        items: enriched,
         counts: {
           piTurn: items.filter(i => i.whoseTurn === 'PI').length,
           studentTurn: items.filter(i => i.whoseTurn === 'STUDENT').length,

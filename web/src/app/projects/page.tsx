@@ -230,29 +230,28 @@ function ActivityTimeline({ changes }: ActivityTimelineProps) {
 
 interface RemindersInlineProps {
   projectId: string;
+  stats: { sent: number; acked: number; lastSentAt: string | null };
 }
 
-function RemindersInline({ projectId }: RemindersInlineProps) {
-  const [reminders, setReminders] = useState<WorksheetReminder[] | null>(null);
+/**
+ * 서버 응답의 reminderStats로 카운트 즉시 표시 (mount fetch 0회).
+ * 펼쳤을 때만 상세 row fetch — 14개 카드 × 14 API call → 0 + N(필요시)
+ */
+function RemindersInline({ projectId, stats }: RemindersInlineProps) {
+  const [details, setDetails] = useState<WorksheetReminder[] | null>(null);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open || reminders !== null) return;
-    getWorksheetReminders(projectId).then(r => setReminders(r.items)).catch(() => setReminders([]));
-  }, [open, projectId, reminders]);
+    if (!open || details !== null) return;
+    setLoading(true);
+    getWorksheetReminders(projectId)
+      .then(r => setDetails(r.items))
+      .catch(() => setDetails([]))
+      .finally(() => setLoading(false));
+  }, [open, projectId, details]);
 
-  // 항상 카운트는 빠르게 보여주기 위해 첫 mount 때 fetch (cache)
-  useEffect(() => {
-    if (reminders === null) {
-      getWorksheetReminders(projectId).then(r => setReminders(r.items)).catch(() => setReminders([]));
-    }
-  }, [projectId]);
-
-  const recent = (reminders || []).slice(0, 5);
-  const sentCount = recent.length;
-  const ackedCount = recent.filter(r => r.acked_at).length;
-
-  if (sentCount === 0) return null;
+  if (stats.sent === 0) return null;
 
   return (
     <div className="border-t border-border/50 pt-2.5 mt-1">
@@ -262,16 +261,20 @@ function RemindersInline({ projectId }: RemindersInlineProps) {
       >
         <span className="inline-flex items-center gap-1.5">
           <MailCheck className="w-3.5 h-3.5" />
-          최근 Slack 발송 {sentCount}건
-          {ackedCount > 0 && (
-            <span className="text-emerald-700 dark:text-emerald-400 font-medium">· ✅ {ackedCount}/{sentCount} 확인</span>
+          Slack 발송 {stats.sent}건
+          {stats.acked > 0 && (
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">· ✅ {stats.acked}/{stats.sent} 확인</span>
+          )}
+          {stats.lastSentAt && (
+            <span className="text-text-muted/70">· 마지막 {timeAgoShort(stats.lastSentAt)}</span>
           )}
         </span>
         <span className="text-xs">{open ? '▴' : '▾'}</span>
       </button>
       {open && (
         <ul className="mt-2 space-y-1.5">
-          {recent.map(r => (
+          {loading && <li className="text-xs text-text-muted">불러오는 중…</li>}
+          {!loading && details && details.slice(0, 5).map(r => (
             <li key={r.id} className="flex items-start gap-2 text-xs">
               <span className={`mt-1 flex-shrink-0 w-2 h-2 rounded-full ${r.acked_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
               <div className="flex-1 min-w-0">
@@ -368,8 +371,8 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
           </button>
         </div>
 
-        {/* 발송된 Slack 리마인드 + ✅ 수신 상태 (펼치기) */}
-        <RemindersInline projectId={project.id} />
+        {/* 발송된 Slack 리마인드 + ✅ 수신 상태 (펼치기). 서버 응답 stats로 mount fetch 제거. */}
+        <RemindersInline projectId={project.id} stats={project.reminderStats || { sent: 0, acked: 0, lastSentAt: null }} />
       </div>
     </div>
   );
