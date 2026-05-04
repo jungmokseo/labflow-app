@@ -715,6 +715,117 @@ model GdriveSyncLog {
   @@map("gdrive_sync_logs")
 }
 
+// ── pgvector raw SQL 테이블 보호 명세 ─────────────────────────
+// 다음 테이블들은 embedding-service.ts/embed-all-data.ts에서 raw SQL로 생성/관리.
+// prisma db push가 "schema에 없는 테이블"로 인식해 drop하는 사고를 막기 위해
+// 형태만 prisma에 등록하고 vector 컬럼은 Unsupported로 표기.
+// Bytes(1536 floats * 4 = 6144 bytes)는 직접 query하지 않으므로 Unsupported로 충분.
+//
+// CRITICAL: prisma db push 시 절대 --accept-data-loss 플래그 사용 금지.
+// 2026-05-03 incident — 이 플래그로 paper_embeddings(399), wiki_embeddings(145) drop됨.
+
+model PaperEmbedding {
+  id          String                       @id @default(uuid()) @db.Uuid
+  paperId     String                       @map("paper_id")
+  labId       String                       @map("lab_id")
+  title       String?
+  authors     String[]                     @default([])
+  abstract    String?
+  journal     String?
+  year        Int?
+  doi         String?
+  chunkIndex  Int                          @default(0) @map("chunk_index")
+  chunkText   String                       @map("chunk_text")
+  embedding   Unsupported("vector(1536)")
+  metadata    Json?                        @default("{}")
+  createdAt   DateTime                     @default(now()) @map("created_at")
+  updatedAt   DateTime                     @default(now()) @map("updated_at")
+
+  @@index([paperId])
+  @@index([labId])
+  @@map("paper_embeddings")
+}
+
+model WikiEmbedding {
+  id          String                       @id @default(uuid()) @db.Uuid
+  articleId   String                       @map("article_id")
+  labId       String                       @map("lab_id")
+  title       String?
+  category    String?
+  chunkIndex  Int                          @default(0) @map("chunk_index")
+  chunkText   String                       @map("chunk_text")
+  embedding   Unsupported("vector(1536)")
+  metadata    Json?                        @default("{}")
+  createdAt   DateTime                     @default(now()) @map("created_at")
+  updatedAt   DateTime                     @default(now()) @map("updated_at")
+
+  @@index([articleId])
+  @@index([labId])
+  @@map("wiki_embeddings")
+}
+
+// memo_embeddings는 위 line 174의 MemoEmbedding 모델로 이미 보호됨 (살아남은 이유).
+
+// ── 워크시트 프로젝트 (Notion 학생 디스커션 추적) ────────────
+// PI ↔ 학생 간 비동기 대화 캐치볼을 추적. "지금 누구 차례인가"가 핵심.
+model WorksheetProject {
+  id                  String   @id  // Notion page ID (워크시트 페이지)
+  notionUrl           String   @map("notion_url")
+  parentDbPageId      String?  @map("parent_db_page_id")  // 프로젝트 DB의 부모 row id (LM Paste 같은 sub-page일 때)
+  title               String
+  team                String?
+  assignees           String[] @default([])  // multi_select 학생들
+  status              String?  // 1.아이디어, 2.실험중, ...
+
+  // Notion 메타
+  notionLastEditedAt  DateTime @map("notion_last_edited_at")
+
+  // 대화 캐치볼 추적 — 마지막으로 페이지 블록을 수정한 사람
+  lastActivityAt      DateTime @map("last_activity_at")
+  lastActivityBy      String   @map("last_activity_by")    // Notion user id
+  lastActivityByName  String?  @map("last_activity_by_name")
+  lastActivityRole    String   @map("last_activity_role")  // "PI" | "STUDENT" | "OTHER"
+  lastActivitySnippet String?  @map("last_activity_snippet")  // 마지막 블록 텍스트 발췌 (60자)
+
+  // 핵심: 지금 누구 차례?
+  whoseTurn           String   @map("whose_turn")          // "PI" (학생 마지막) | "STUDENT" (PI 마지막)
+  daysSinceTurn       Int      @default(0) @map("days_since_turn")
+
+  // AI 요약 (현재 상황 1-2줄, 변경 감지 시에만 재생성)
+  currentSummary      String?  @map("current_summary")
+  summaryAt           DateTime? @map("summary_at")
+  summaryFromHash     String?  @map("summary_from_hash")   // 요약 생성 시 페이지 hash
+
+  // 학생별 마지막 활동 — 리마인드 개인화용
+  studentActivity     Json     @default("{}") @map("student_activity")  // {"강민경": "2026-04-07T..", ...}
+
+  // 비활성/완료 (DB의 "완료?" checkbox)
+  archived            Boolean  @default(false)
+
+  syncedAt            DateTime @default(now()) @map("synced_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([whoseTurn, lastActivityAt(sort: Desc)])
+  @@index([archived, lastActivityAt(sort: Desc)])
+  @@map("worksheet_projects")
+}
+
+// Notion user ↔ 역할 매핑. PI 1명 + 학생들.
+model NotionUser {
+  id          String   @id  // Notion user id
+  name        String
+  email       String?
+  role        String   // "PI" | "STUDENT" | "STAFF"
+  studentName String?  @map("student_name")  // BLISS Lab의 표시 이름 (담당자 multi_select와 매칭)
+  slackUserId String?  @map("slack_user_id")  // Slack DM 리마인드용
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("notion_users")
+}
+
 // ── 에러 로그 (운영 모니터링) ────────────────────────────
 model ErrorLog {
   id          String    @id @default(cuid())

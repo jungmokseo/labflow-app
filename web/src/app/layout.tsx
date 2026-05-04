@@ -1,21 +1,22 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { headers } from 'next/headers';
+import dynamic from 'next/dynamic';
 import './globals.css';
 
 // 참고: layout에 runtime='edge'를 적용하면 자식 페이지인 /offline (force-static)과 충돌.
-// /offline은 Service Worker precache용으로 정적 생성이 필수.
-// Middleware는 Next.js가 자동으로 Edge에서 실행하므로 그것만으로도 충분히 빠름.
 import { Sidebar } from './Sidebar';
 import { AuthInit } from '@/components/AuthInit';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { DataPrefetch } from '@/components/DataPrefetch';
 import { ToastProvider } from '@/components/Toast';
-import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
-import { TokenHealthCheck } from '@/components/TokenHealthCheck';
-import { QuickCapture } from '@/components/QuickCapture';
-import { OfflineStatusBadge } from '@/components/OfflineStatusBadge';
 import { SWRProvider } from '@/lib/swr-provider';
+
+// 첫 페인트 후에야 필요한 컴포넌트들 — dynamic + ssr:false로 초기 JS payload 축소
+const KeyboardShortcuts = dynamic(() => import('@/components/KeyboardShortcuts').then(m => ({ default: m.KeyboardShortcuts })), { ssr: false, loading: () => null });
+const TokenHealthCheck = dynamic(() => import('@/components/TokenHealthCheck').then(m => ({ default: m.TokenHealthCheck })), { ssr: false, loading: () => null });
+const QuickCapture = dynamic(() => import('@/components/QuickCapture').then(m => ({ default: m.QuickCapture })), { ssr: false, loading: () => null });
+const OfflineStatusBadge = dynamic(() => import('@/components/OfflineStatusBadge').then(m => ({ default: m.OfflineStatusBadge })), { ssr: false, loading: () => null });
 
 export const viewport: Viewport = {
   width: 'device-width',

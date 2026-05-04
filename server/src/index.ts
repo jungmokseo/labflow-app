@@ -32,6 +32,8 @@ import { blissTasksRoutes } from './routes/bliss-tasks.js';
 import { followUpRoutes } from './routes/follow-up.js';
 import { labDataRoutes } from './routes/lab-data.js';
 import { inboxSummaryRoutes } from './routes/inbox-summary.js';
+import { worksheetProjectRoutes } from './routes/worksheet-projects.js';
+import { syncWorksheetProjects } from './services/worksheet-sync.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -107,6 +109,7 @@ async function buildApp() {
     await app.register(followUpRoutes);
     await app.register(labDataRoutes);
     await app.register(inboxSummaryRoutes);
+    await app.register(worksheetProjectRoutes);
 
   return app;
 }
@@ -121,6 +124,30 @@ async function start() {
       startPaperAlertCron();
       startWeeklyBriefingCron();
       setInterval(() => archiveOldSessions().catch((err) => console.error('[background] archiveOldSessions:', err.message || err)), 24 * 60 * 60 * 1000);
+
+      // ── 워크시트 sync 크론 ─────────────────────────────
+      // Notion 워크시트 페이지의 캐치볼 추적 — 매시간 sync (가벼움, 메타+블록 listing만)
+      if (env.NOTION_API_KEY) {
+        // 시작 60초 후 1회 sync
+        setTimeout(async () => {
+          try {
+            await syncWorksheetProjects();
+          } catch (e: any) {
+            console.error('[worksheet-cron] 시작 sync 실패:', e.message);
+          }
+        }, 60000);
+
+        // 매시간 sync
+        setInterval(async () => {
+          try {
+            await syncWorksheetProjects();
+          } catch (e: any) {
+            console.error('[worksheet-cron] 정기 sync 실패:', e.message);
+          }
+        }, 60 * 60 * 1000);
+
+        console.log('[worksheet-cron] 워크시트 sync 예약됨 (1시간 주기)');
+      }
 
       // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)
       if (env.LAB_ID && env.GOOGLE_REFRESH_TOKEN && (env.GDRIVE_FILE_ACCOUNTS || env.GDRIVE_FILE_PROJECT_INFO || env.GDRIVE_FILE_ACKNOWLEDGMENT || env.GDRIVE_FILE_MEMBER_INFO)) {

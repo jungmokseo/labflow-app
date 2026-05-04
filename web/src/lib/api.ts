@@ -435,6 +435,54 @@ export async function getVacationBalances() {
 // 참고: Lab 계정 정보는 Slack BLISS-bot의 search_faq로 이전됨 (학생들이 같이 검색).
 // server의 /api/lab-data/lab-accounts 엔드포인트와 데이터(labflow-member)는 보존.
 
+// ── 워크시트 프로젝트 (PI ↔ 학생 캐치볼) ──────────────
+export interface WorksheetProject {
+  id: string;
+  notionUrl: string;
+  parentDbPageId: string | null;
+  title: string;
+  team: string | null;
+  assignees: string[];
+  status: string | null;
+  notionLastEditedAt: string;
+  lastActivityAt: string;
+  lastActivityBy: string;
+  lastActivityByName: string | null;
+  lastActivityRole: string;
+  lastActivitySnippet: string | null;
+  whoseTurn: string;
+  daysSinceTurn: number;
+  currentSummary: string | null;
+  studentActivity: Record<string, string>;
+  archived: boolean;
+  syncedAt: string;
+}
+
+export async function getWorksheetProjects(opts: { archived?: boolean } = {}) {
+  const q = opts.archived ? '?archived=true' : '';
+  return apiFetch<{
+    items: WorksheetProject[];
+    counts: { piTurn: number; studentTurn: number; stale7d: number };
+  }>(`/api/worksheet-projects${q}`);
+}
+
+export async function syncWorksheetProjects() {
+  return apiFetch<{ ok: boolean; total: number; worksheets: number; updated: number; errors: number }>(
+    '/api/worksheet-projects/sync',
+    { method: 'POST' },
+  );
+}
+
+export async function remindWorksheetStudent(
+  projectId: string,
+  body: { studentName?: string; customMessage?: string },
+) {
+  return apiFetch<{ ok: boolean; sent: number; total: number; results: Array<{ student: string; ok: boolean; error?: string }> }>(
+    `/api/worksheet-projects/${projectId}/remind`,
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
 // ── 이메일 브리핑 ──────────────────────────────────
 export interface EmailBriefingItem {
   sender: string;

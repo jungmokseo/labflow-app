@@ -12,6 +12,11 @@ const nextConfig = {
     },
   },
 
+  // 큰 패키지의 named import를 자동 tree-shake (Next 14.2+)
+  experimental: {
+    optimizePackageImports: ['react-markdown', 'lucide-react', '@supabase/ssr', 'remark-gfm', 'remark-breaks'],
+  },
+
   // gzip 압축 (기본 true, 명시)
   compress: true,
 

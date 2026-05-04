@@ -8,7 +8,7 @@ import type { User } from '@supabase/supabase-js';
 import { mutate } from 'swr';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
-  deleteBrainChannel, searchBrainMemory, getFollowUpList,
+  deleteBrainChannel, searchBrainMemory, getFollowUpList, getWorksheetProjects,
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
@@ -32,9 +32,10 @@ const PREFETCH_MAP: Record<string, () => void> = {
   '/brain': () => mutate('brain-channels', () => getBrainChannels().then(r => Array.isArray(r.data) ? r.data : []), { revalidate: false }),
   '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),
+  '/projects': () => mutate('worksheet-projects', () => getWorksheetProjects().catch(() => null), { revalidate: false }),
 };
 
-// Sidebar 우측 뱃지 카운트 — 페이지마다 다른 데이터 소스
+// Sidebar 우측 뱃지 카운트 — 첫 호출은 idle 시점 (TTI 차단 방지) + 30초 polling
 function useFollowUpPendingCount(): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -44,10 +45,17 @@ function useFollowUpPendingCount(): number {
         .then(r => { if (mounted) setCount(r.counts.pending); })
         .catch(() => {});
     };
-    fetchCount();
-    // 30초마다 갱신 (다른 탭에서 답변하면 자동 반영)
-    const id = setInterval(fetchCount, 30000);
-    return () => { mounted = false; clearInterval(id); };
+    // 첫 호출은 브라우저 idle 후 (첫 페인트 차단 방지)
+    const idleId = typeof window !== 'undefined' && 'requestIdleCallback' in window
+      ? (window as any).requestIdleCallback(fetchCount, { timeout: 2000 })
+      : (setTimeout(fetchCount, 100) as any);
+    const intervalId = setInterval(fetchCount, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+      if ((window as any).cancelIdleCallback) (window as any).cancelIdleCallback(idleId);
+      else clearTimeout(idleId);
+    };
   }, []);
   return count;
 }
@@ -55,6 +63,7 @@ function useFollowUpPendingCount(): number {
 const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
   { href: '/brain', icon: Brain, label: 'Brain' },
+  { href: '/projects', icon: FlaskConical, label: '프로젝트 관리' },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
   { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
   { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기' },
@@ -108,18 +117,18 @@ function isThisWeek(dateStr: string): boolean {
   return Date.now() - new Date(dateStr).getTime() < 7 * 24 * 60 * 60 * 1000;
 }
 
-function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggleCollapse }: {
+function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggleCollapse, followUpPending }: {
   pathname: string;
   onNavigate?: () => void;
   user: User | null;
   onSignOut: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  followUpPending: number;
 }) {
   const { tasks } = useBackgroundTasks();
   const runningTasks = tasks.filter(t => t.status === 'running');
   const { dark, toggle } = useTheme();
-  const followUpPending = useFollowUpPendingCount();
   const isBrainPage = pathname.startsWith('/brain');
 
   // Brain sessions & search (only active on /brain)
@@ -463,7 +472,7 @@ export function Sidebar() {
             </button>
           </div>
         ) : (
-          <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} collapsed={collapsed} onToggleCollapse={() => setCollapsed(true)} />
+          <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} collapsed={collapsed} onToggleCollapse={() => setCollapsed(true)} followUpPending={followUpPending} />
         )}
       </aside>
 
@@ -499,7 +508,7 @@ export function Sidebar() {
                 <path d="M5 5l10 10M15 5L5 15" />
               </svg>
             </button>
-            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} />
+            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} followUpPending={followUpPending} />
           </aside>
         </div>
       )}
