@@ -477,9 +477,37 @@ export async function remindWorksheetStudent(
   projectId: string,
   body: { studentName?: string; customMessage?: string },
 ) {
-  return apiFetch<{ ok: boolean; sent: number; total: number; results: Array<{ student: string; ok: boolean; error?: string }> }>(
+  return apiFetch<{ ok: boolean; sent: number; total: number; results: Array<{ student: string; ok: boolean; error?: string; reminderId?: string }> }>(
     `/api/worksheet-projects/${projectId}/remind`,
     { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export interface WorksheetReminder {
+  id: string;
+  project_id: string;
+  project_title: string;
+  student_name: string;
+  slack_user_id: string;
+  slack_channel_id: string;
+  slack_message_ts: string;
+  slack_permalink: string | null;
+  message: string;
+  purpose: 'PI_TURN' | 'STUDENT_TURN';
+  sent_at: string;
+  acked_at: string | null;
+  ack_emoji: string | null;
+  dismissed_at: string | null;
+}
+
+export async function getWorksheetReminders(projectId: string) {
+  return apiFetch<{ items: WorksheetReminder[] }>(`/api/worksheet-projects/${projectId}/reminders`);
+}
+
+export async function checkWorksheetAcks() {
+  return apiFetch<{ checked: number; acked: number; errors: number }>(
+    `/api/worksheet-projects/check-acks`,
+    { method: 'POST' },
   );
 }
 

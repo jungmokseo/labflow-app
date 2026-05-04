@@ -715,56 +715,18 @@ model GdriveSyncLog {
   @@map("gdrive_sync_logs")
 }
 
-// ── pgvector raw SQL 테이블 보호 명세 ─────────────────────────
-// 다음 테이블들은 embedding-service.ts/embed-all-data.ts에서 raw SQL로 생성/관리.
-// prisma db push가 "schema에 없는 테이블"로 인식해 drop하는 사고를 막기 위해
-// 형태만 prisma에 등록하고 vector 컬럼은 Unsupported로 표기.
-// Bytes(1536 floats * 4 = 6144 bytes)는 직접 query하지 않으므로 Unsupported로 충분.
+// ── pgvector raw SQL 테이블 보호 정책 ─────────────────────────
+// paper_embeddings, wiki_embeddings는 embedding-service.ts에서 raw SQL로 생성/관리.
+// schema에 모델로 정의하면 index/constraint 이름 mismatch로 prisma db push가 실패하므로
+// 명시 모델은 두지 않음. 대신 ABSOLUTE RULE:
 //
-// CRITICAL: prisma db push 시 절대 --accept-data-loss 플래그 사용 금지.
+// **CRITICAL: prisma db push 시 절대 --accept-data-loss 플래그 사용 금지.**
+//
 // 2026-05-03 incident — 이 플래그로 paper_embeddings(399), wiki_embeddings(145) drop됨.
-
-model PaperEmbedding {
-  id          String                       @id @default(uuid()) @db.Uuid
-  paperId     String                       @map("paper_id")
-  labId       String                       @map("lab_id")
-  title       String?
-  authors     String[]                     @default([])
-  abstract    String?
-  journal     String?
-  year        Int?
-  doi         String?
-  chunkIndex  Int                          @default(0) @map("chunk_index")
-  chunkText   String                       @map("chunk_text")
-  embedding   Unsupported("vector(1536)")
-  metadata    Json?                        @default("{}")
-  createdAt   DateTime                     @default(now()) @map("created_at")
-  updatedAt   DateTime                     @default(now()) @map("updated_at")
-
-  @@index([paperId])
-  @@index([labId])
-  @@map("paper_embeddings")
-}
-
-model WikiEmbedding {
-  id          String                       @id @default(uuid()) @db.Uuid
-  articleId   String                       @map("article_id")
-  labId       String                       @map("lab_id")
-  title       String?
-  category    String?
-  chunkIndex  Int                          @default(0) @map("chunk_index")
-  chunkText   String                       @map("chunk_text")
-  embedding   Unsupported("vector(1536)")
-  metadata    Json?                        @default("{}")
-  createdAt   DateTime                     @default(now()) @map("created_at")
-  updatedAt   DateTime                     @default(now()) @map("updated_at")
-
-  @@index([articleId])
-  @@index([labId])
-  @@map("wiki_embeddings")
-}
-
-// memo_embeddings는 위 line 174의 MemoEmbedding 모델로 이미 보호됨 (살아남은 이유).
+// 그 외 옵션 없이 db push 하면 prisma는 mismatch 발견 시 멈추고 사용자 확인 요청 → 안전.
+// 새 모델 추가 시 plain `npx prisma db push`만 사용. 필요시 raw SQL로 인덱스 정렬.
+//
+// memo_embeddings는 line 174의 MemoEmbedding 모델로 이미 보호됨 (schema 일치).
 
 // ── 워크시트 프로젝트 (Notion 학생 디스커션 추적) ────────────
 // PI ↔ 학생 간 비동기 대화 캐치볼을 추적. "지금 누구 차례인가"가 핵심.
@@ -810,6 +772,9 @@ model WorksheetProject {
   @@index([archived, lastActivityAt(sort: Desc)])
   @@map("worksheet_projects")
 }
+
+// worksheet_reminders는 paper_embeddings/wiki_embeddings 충돌로 raw SQL로 생성.
+// 위치: server/src/services/worksheet-reminder.ts ensureWorksheetRemindersTable().
 
 // Notion user ↔ 역할 매핑. PI 1명 + 학생들.
 model NotionUser {

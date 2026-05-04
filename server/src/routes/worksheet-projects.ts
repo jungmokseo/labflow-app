@@ -11,6 +11,12 @@ import { basePrismaClient as prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { syncWorksheetProjects, getWorksheetProjects } from '../services/worksheet-sync.js';
+import {
+  recordWorksheetReminder,
+  checkPendingReminders,
+  getRemindersByProject,
+  getRemindersForStudent,
+} from '../services/worksheet-reminder.js';
 import { logError } from '../services/error-logger.js';
 
 export async function worksheetProjectRoutes(app: FastifyInstance) {
@@ -74,11 +80,40 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
       if (!env.LAB_ID) return reply.code(500).send({ error: 'LAB_ID 미설정' });
 
       const message = body.customMessage || buildDefaultRemindMessage(project, targets);
-      const results: Array<{ student: string; ok: boolean; error?: string }> = [];
+      const purpose: 'PI_TURN' | 'STUDENT_TURN' = project.whoseTurn === 'PI' ? 'STUDENT_TURN' : 'PI_TURN';
+      const sentBy = (request as any).user?.id as string | undefined;
+      const results: Array<{ student: string; ok: boolean; error?: string; reminderId?: string }> = [];
 
       for (const studentName of targets) {
-        const result = await sendWorksheetRemind(studentName, message, token, env.LAB_ID);
-        results.push({ student: studentName, ...result });
+        // 1. LabMember 이메일 → Slack user_id lookup
+        const member = await prisma.labMember.findFirst({
+          where: { labId: env.LAB_ID, active: true, OR: [{ name: studentName }, { nameEn: studentName }] },
+          select: { email: true },
+        });
+        if (!member?.email) {
+          results.push({ student: studentName, ok: false, error: `LabMember 이메일 없음: ${studentName}` });
+          continue;
+        }
+        const lookup = await fetch(
+          `https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(member.email)}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        ).then(r => r.json() as Promise<{ ok: boolean; user?: { id: string }; error?: string }>);
+        if (!lookup.ok || !lookup.user?.id) {
+          results.push({ student: studentName, ok: false, error: lookup.error || 'Slack 유저 없음' });
+          continue;
+        }
+
+        // 2. recordWorksheetReminder — Slack DM 발송 + DB row 생성 (✅ reaction 추적용)
+        const r = await recordWorksheetReminder({
+          projectId: project.id,
+          projectTitle: project.title,
+          studentName,
+          slackUserId: lookup.user.id,
+          message,
+          purpose,
+          sentByUserId: sentBy,
+        });
+        results.push({ student: studentName, ok: r.ok, error: r.error, reminderId: r.reminderId });
       }
 
       const success = results.filter(r => r.ok).length;
@@ -94,6 +129,43 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
       }
       logError('background', 'POST /api/worksheet-projects/:id/remind 실패', { userId: (request as any).user?.id })(err);
       return reply.code(500).send({ error: '리마인드 실패', message: err.message });
+    }
+  });
+
+  // ── GET 프로젝트별 reminder 목록 ─────────────────
+  app.get('/api/worksheet-projects/:id/reminders', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const items = await getRemindersByProject(id);
+      return reply.send({ items });
+    } catch (err: any) {
+      return reply.code(500).send({ error: '조회 실패', message: err.message });
+    }
+  });
+
+  // ── POST reactions 폴링 — 발송된 reminder 중 ✅ 반응 받은 것 ackedAt 갱신 ─
+  app.post('/api/worksheet-projects/check-acks', async (_request, reply) => {
+    try {
+      const result = await checkPendingReminders();
+      return reply.send(result);
+    } catch (err: any) {
+      return reply.code(500).send({ error: 'check-acks 실패', message: err.message });
+    }
+  });
+
+  // ── GET 학생별 pending reminder (App Home에서 호출, X-Slack-Relay-Secret 인증) ─
+  app.get('/api/worksheet-projects/student/:slackUserId/reminders', async (request, reply) => {
+    try {
+      const headerSecret = request.headers['x-slack-relay-secret'] as string | undefined;
+      if (!env.SLACK_RELAY_SECRET || headerSecret !== env.SLACK_RELAY_SECRET) {
+        return reply.code(401).send({ error: 'Unauthorized' });
+      }
+      const { slackUserId } = request.params as { slackUserId: string };
+      const includeAcked = (request.query as any)?.includeAcked === 'true';
+      const items = await getRemindersForStudent(slackUserId, includeAcked);
+      return reply.send({ items });
+    } catch (err: any) {
+      return reply.code(500).send({ error: '학생 reminder 조회 실패', message: err.message });
     }
   });
 }
@@ -145,56 +217,29 @@ function buildDefaultRemindMessage(project: any, students: string[]): string {
   return lines.join('\n');
 }
 
-interface SlackResp {
-  ok: boolean;
-  user?: { id: string };
-  error?: string;
-}
-
-async function sendWorksheetRemind(
+// sendWorksheetRemind 옛 helper는 worksheet-reminder.ts의 recordWorksheetReminder로 대체됨.
+// 아래는 deprecated 한 잔여 구현으로 더 이상 사용되지 않음 (혹시 다른 import 있으면 컴파일 에러 잡힐 것).
+async function _legacySendWorksheetRemind_DEPRECATED(
   studentName: string,
   message: string,
   token: string,
   labId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
-    // 1. LabMember에서 이메일 찾기
     const member = await prisma.labMember.findFirst({
-      where: {
-        labId,
-        active: true,
-        OR: [{ name: studentName }, { nameEn: studentName }],
-      },
+      where: { labId, active: true, OR: [{ name: studentName }, { nameEn: studentName }] },
       select: { email: true, name: true },
     });
-
-    if (!member?.email) {
-      return { ok: false, error: `LabMember 이메일 없음: ${studentName}` };
-    }
-
-    // 2. Slack user lookup by email
+    if (!member?.email) return { ok: false, error: `LabMember 이메일 없음: ${studentName}` };
     const lookup = await fetch(
       `https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(member.email)}`,
       { headers: { Authorization: `Bearer ${token}` } },
-    ).then(r => r.json() as Promise<SlackResp>);
-
-    if (!lookup.ok || !lookup.user?.id) {
-      return { ok: false, error: lookup.error || `Slack 유저 없음: ${member.email}` };
-    }
-
-    // 3. DM 발송
+    ).then(r => r.json() as Promise<{ ok: boolean; user?: { id: string }; error?: string }>);
+    if (!lookup.ok || !lookup.user?.id) return { ok: false, error: lookup.error || `Slack 유저 없음: ${member.email}` };
     const post = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify({
-        channel: lookup.user.id,
-        text: message,
-        unfurl_links: false,
-        unfurl_media: false,
-      }),
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ channel: lookup.user.id, text: message, unfurl_links: false, unfurl_media: false }),
     }).then(r => r.json() as Promise<{ ok: boolean; error?: string }>);
 
     if (!post.ok) return { ok: false, error: post.error || 'chat.postMessage 실패' };

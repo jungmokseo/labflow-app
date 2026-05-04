@@ -7,16 +7,18 @@
  * - 🟠 학생 차례 (4~7일): 리마인드 권장
  * - 🔥 학생 차례 (8일+): 긴급 리마인드
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
   getWorksheetProjects, syncWorksheetProjects, remindWorksheetStudent,
-  type WorksheetProject,
+  getWorksheetReminders,
+  type WorksheetProject, type WorksheetReminder,
 } from '@/lib/api';
 import {
   FlaskConical, RefreshCw, MessageSquare, Clock, User, ArrowRight,
   Filter, AlertCircle, Send, X, ExternalLink, Loader2, Inbox, Users,
+  CheckCircle2, MailCheck,
 } from 'lucide-react';
 
 type FilterTab = 'piTurn' | 'stale' | 'all' | 'team';
@@ -166,6 +168,85 @@ function RemindModal({ project, onClose, onSent }: RemindModalProps) {
   );
 }
 
+function timeAgoShort(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  return `${Math.floor(hr / 24)}일 전`;
+}
+
+interface RemindersInlineProps {
+  projectId: string;
+}
+
+function RemindersInline({ projectId }: RemindersInlineProps) {
+  const [reminders, setReminders] = useState<WorksheetReminder[] | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || reminders !== null) return;
+    getWorksheetReminders(projectId).then(r => setReminders(r.items)).catch(() => setReminders([]));
+  }, [open, projectId, reminders]);
+
+  // 항상 카운트는 빠르게 보여주기 위해 첫 mount 때 fetch (cache)
+  useEffect(() => {
+    if (reminders === null) {
+      getWorksheetReminders(projectId).then(r => setReminders(r.items)).catch(() => setReminders([]));
+    }
+  }, [projectId]);
+
+  const recent = (reminders || []).slice(0, 5);
+  const sentCount = recent.length;
+  const ackedCount = recent.filter(r => r.acked_at).length;
+
+  if (sentCount === 0) return null;
+
+  return (
+    <div className="border-t border-border/50 pt-2.5 mt-1">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-xs text-text-muted hover:text-text-heading"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <MailCheck className="w-3.5 h-3.5" />
+          최근 Slack 발송 {sentCount}건
+          {ackedCount > 0 && (
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">· ✅ {ackedCount}/{sentCount} 확인</span>
+          )}
+        </span>
+        <span className="text-xs">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1.5">
+          {recent.map(r => (
+            <li key={r.id} className="flex items-start gap-2 text-xs">
+              <span className={`mt-1 flex-shrink-0 w-2 h-2 rounded-full ${r.acked_at ? 'bg-emerald-500' : 'bg-amber-400'}`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-text-heading">{r.student_name}</span>
+                  <span className="text-text-muted">{timeAgoShort(r.sent_at)} 발송</span>
+                  {r.acked_at ? (
+                    <span className="inline-flex items-center gap-0.5 text-emerald-700 dark:text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3" /> {timeAgoShort(r.acked_at)} 확인
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 dark:text-amber-400">미확인</span>
+                  )}
+                  {r.purpose === 'PI_TURN' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-700 dark:text-red-300">검토 완료 알림</span>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 interface ProjectCardProps {
   project: WorksheetProject;
   onRemind: () => void;
@@ -233,6 +314,9 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
             {project.whoseTurn === 'PI' ? '검토 완료 알림' : 'Slack 리마인드'}
           </button>
         </div>
+
+        {/* 발송된 Slack 리마인드 + ✅ 수신 상태 (펼치기) */}
+        <RemindersInline projectId={project.id} />
       </div>
     </div>
   );

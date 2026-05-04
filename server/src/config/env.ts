@@ -33,6 +33,8 @@ const envSchema = z.object({
   LAB_OWNER_EMAIL: z.string().optional(),
   // labflow-member API base URL (BLISS-bot 미답변 질문 follow-up 프록시 등)
   LABFLOW_MEMBER_URL: z.string().default('https://labflow-member-production.up.railway.app'),
+  // bliss-slack-bot ↔ labflow-app server-to-server (worksheet App Home reminders 조회 등)
+  SLACK_RELAY_SECRET: z.string().optional(),
 });
 
 function loadEnv(): z.infer<typeof envSchema> {

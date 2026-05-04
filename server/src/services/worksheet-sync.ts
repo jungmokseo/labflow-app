@@ -31,6 +31,7 @@ const EXCLUDED_PROJECTS = new Set<string>([
 interface NotionBlock {
   id: string;
   type: string;
+  has_children: boolean;
   created_time: string;
   created_by: { id: string };
   last_edited_time: string;
@@ -86,6 +87,38 @@ async function getPageBlocks(pageId: string, maxBlocks = 200): Promise<NotionBlo
   return all;
 }
 
+// child를 가질 수 있는 컨테이너 블록 — 재귀 fetch 대상
+const CONTAINER_TYPES = new Set([
+  'toggle', 'callout', 'quote', 'bulleted_list_item', 'numbered_list_item',
+  'to_do', 'column_list', 'column', 'synced_block',
+]);
+
+/**
+ * 페이지 + child block 재귀 fetch.
+ * 워크시트는 toggle/callout 안에 학생 답변이 들어가는 패턴이 흔함 →
+ * 최상위만 fetch하면 답변 블록 누락. 재귀로 모든 의미 있는 콘텐츠 수집.
+ */
+async function getAllBlocksRecursive(
+  pageId: string,
+  depth = 0,
+  maxDepth = 3,
+  budget = { remaining: 250 },  // 페이지당 총 fetch 호출 제한
+): Promise<NotionBlock[]> {
+  if (depth > maxDepth || budget.remaining <= 0) return [];
+  budget.remaining--;
+
+  const top = await getPageBlocks(pageId);
+  const all: NotionBlock[] = [];
+  for (const b of top) {
+    all.push(b);
+    if (b.has_children && CONTAINER_TYPES.has(b.type) && depth < maxDepth && budget.remaining > 0) {
+      const children = await getAllBlocksRecursive(b.id, depth + 1, maxDepth, budget);
+      all.push(...children);
+    }
+  }
+  return all;
+}
+
 /** 첫 헤딩 텍스트 추출 (워크시트 패턴 식별용) */
 function getFirstHeading(blocks: NotionBlock[]): string {
   for (const b of blocks) {
@@ -130,38 +163,77 @@ interface ActivityInfo {
   studentActivity: Record<string, string>;
 }
 
-/** 블록 timeline에서 활동 정보 + 차례 계산 */
+// 무의미한 블록 — 활동 판정 시 제외
+const IGNORED_TYPES = new Set([
+  'divider', 'child_database', 'child_page', 'unsupported',
+  'column_list', 'column', 'synced_block', 'table_of_contents',
+  'breadcrumb', 'embed', 'link_preview', 'image', 'video', 'audio',
+  'file', 'pdf', 'bookmark',
+]);
+
+const MIN_TEXT_LEN = 5;  // 너무 짧은 블록은 의미 없음으로 판정
+
+/**
+ * 블록 timeline에서 차례 계산 — created_time 기반.
+ *
+ * 왜 last_edited_time이 아닌 created_time?
+ * Notion에서 누가 블록의 indent 변경 / formatting / paste만 해도 last_edited 갱신됨.
+ * 단순 reformat과 의미 있는 콘텐츠 추가가 구분 안 되어 차례 판정이 잘못됨.
+ * created_time은 블록 생성 시점이라 변하지 않음 — '누가 새 콘텐츠를 마지막에 추가했는지'를 정확히 알 수 있음.
+ */
 async function computeActivity(
   blocks: NotionBlock[],
   userMap: Map<string, { name: string; role: string }>,
 ): Promise<ActivityInfo> {
-  // 사람 활동만 필터 (bot 자동 편집 제외 시 향후 확장)
-  const sorted = [...blocks].sort((a, b) =>
-    new Date(b.last_edited_time).getTime() - new Date(a.last_edited_time).getTime(),
+  // 1. 의미 있는 콘텐츠 블록만 필터 (divider/empty/short 제외)
+  const meaningful = blocks.filter(b => {
+    if (IGNORED_TYPES.has(b.type)) return false;
+    const text = blockText(b);
+    return text.length >= MIN_TEXT_LEN;
+  });
+
+  // 2. created_time 기준 내림차순 (가장 최근 생성된 블록이 첫 번째)
+  const sorted = [...meaningful].sort((a, b) =>
+    new Date(b.created_time).getTime() - new Date(a.created_time).getTime(),
   );
 
-  // 학생별 마지막 활동 누적
+  // 3. 학생별 마지막 활동 누적 — 학생이 새로 만든 블록의 created_time 기준
   const studentActivity: Record<string, string> = {};
-  for (const b of sorted) {
-    const u = userMap.get(b.last_edited_by.id);
+  for (const b of meaningful) {
+    const u = userMap.get(b.created_by.id);
     if (u && u.role === 'STUDENT') {
-      if (!studentActivity[u.name] || new Date(b.last_edited_time) > new Date(studentActivity[u.name])) {
-        studentActivity[u.name] = b.last_edited_time;
+      if (!studentActivity[u.name] || new Date(b.created_time) > new Date(studentActivity[u.name])) {
+        studentActivity[u.name] = b.created_time;
       }
     }
   }
 
+  // 4. 가장 최근 created 블록의 작성자 = 마지막 활동자
   const last = sorted[0];
-  const lastUser = last ? userMap.get(last.last_edited_by.id) : undefined;
+  if (!last) {
+    // 의미 있는 블록이 없으면 PI 차례로 (기본값)
+    return {
+      lastActivityAt: new Date(0),
+      lastActivityBy: '',
+      lastActivityByName: null,
+      lastActivityRole: 'OTHER',
+      lastActivitySnippet: null,
+      whoseTurn: 'PI',
+      studentActivity,
+    };
+  }
+
+  const lastUser = userMap.get(last.created_by.id);
   const role = lastUser?.role || 'OTHER';
+  // 차례 계산: 마지막 활동자가 학생 → PI 차례. PI → 학생 차례. OTHER → PI가 검토할 차례 (기본).
   const whoseTurn = role === 'STUDENT' ? 'PI' : role === 'PI' ? 'STUDENT' : 'PI';
 
   return {
-    lastActivityAt: last ? new Date(last.last_edited_time) : new Date(0),
-    lastActivityBy: last?.last_edited_by.id || '',
+    lastActivityAt: new Date(last.created_time),
+    lastActivityBy: last.created_by.id,
     lastActivityByName: lastUser?.name || null,
     lastActivityRole: role,
-    lastActivitySnippet: last ? blockText(last).slice(0, 120) : null,
+    lastActivitySnippet: blockText(last).slice(0, 120),
     whoseTurn,
     studentActivity,
   };
@@ -201,8 +273,9 @@ async function ensureNotionUser(
 }
 
 /** 메인 sync */
-export async function syncWorksheetProjects(): Promise<{ total: number; worksheets: number; updated: number; errors: number }> {
+export async function syncWorksheetProjects(): Promise<{ total: number; worksheets: number; updated: number; errors: number; archived: number }> {
   const t0 = Date.now();
+  const syncStartedAt = new Date();
   console.log('[worksheet-sync] 시작');
 
   // 1. PI/학생 매핑 로드
@@ -234,17 +307,21 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
 
         if (!worksheetPage) return;
 
-        // 블록 fetch (워크시트인지 판정 + 활동 계산)
-        const blocks = await getPageBlocks(worksheetPageId);
-        const { isWorksheet: isWS } = isWorksheet(blocks);
+        // 1. 워크시트 판정용 — top-level 블록 1차 조회 (가벼움)
+        const topBlocks = await getPageBlocks(worksheetPageId);
+        const { isWorksheet: isWS } = isWorksheet(topBlocks);
         if (!isWS) return;
         worksheets++;
 
-        // 본 적 없는 user_id 자동 등록 (강민경, Soo A Kim 같은 학생들)
+        // 2. 활동 계산용 — 재귀 fetch (toggle/callout/quote child 포함)
+        // 워크시트는 토글 안에 학생 답변이 들어가는 경우가 흔해서 재귀가 필수.
+        const blocks = await getAllBlocksRecursive(worksheetPageId);
+
+        // 본 적 없는 user_id 자동 등록 (created_by + last_edited_by 모두 검사)
         const unknownUserIds = new Set<string>();
         for (const b of blocks) {
-          if (!userMap.has(b.last_edited_by.id)) unknownUserIds.add(b.last_edited_by.id);
-          if (!userMap.has(b.created_by.id)) unknownUserIds.add(b.created_by.id);
+          if (b.created_by?.id && !userMap.has(b.created_by.id)) unknownUserIds.add(b.created_by.id);
+          if (b.last_edited_by?.id && !userMap.has(b.last_edited_by.id)) unknownUserIds.add(b.last_edited_by.id);
         }
         for (const uid of unknownUserIds) {
           await ensureNotionUser(uid, userMap);
@@ -311,9 +388,17 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
     }));
   }
 
+  // Stale cleanup: 이번 sync 시작 시각보다 이전 syncedAt = 더 이상 워크시트로 인식 안 되거나
+  // EXCLUDED_PROJECTS에 새로 추가된 항목 → archived 처리.
+  // 'completed' 상태인 워크시트(상태=11.게재완료)는 자연스럽게 archived (DB에서 archived=true).
+  const archiveResult = await prisma.worksheetProject.updateMany({
+    where: { syncedAt: { lt: syncStartedAt }, archived: false },
+    data: { archived: true },
+  });
+
   const elapsed = Math.round((Date.now() - t0) / 1000);
-  console.log(`[worksheet-sync] 완료: ${worksheets} worksheets, ${updated} upserted, ${errors} errors, ${elapsed}s`);
-  return { total: projectRows.length, worksheets, updated, errors };
+  console.log(`[worksheet-sync] 완료: ${worksheets} worksheets, ${updated} upserted, ${errors} errors, ${archiveResult.count} stale archived, ${elapsed}s`);
+  return { total: projectRows.length, worksheets, updated, errors, archived: archiveResult.count };
 }
 
 export async function getWorksheetProjects(opts: { archived?: boolean } = {}) {
