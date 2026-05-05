@@ -10,7 +10,8 @@ import { useApiData } from '@/lib/use-api';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
   deleteBrainChannel, searchBrainMemory, getFollowUpList, getWorksheetProjects,
-  getManuscripts,
+  getManuscripts, getBlissTaskReviewQueue, getRecentVacations,
+  getUnmatchedManuscriptEvents,
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
@@ -45,12 +46,16 @@ export const SIDEBAR_COUNT_KEYS = {
   followUp: 'sidebar:followup-count',
   projects: 'sidebar:projects-count',
   manuscripts: 'sidebar:manuscripts-count',
+  review: 'sidebar:review-count',
+  vacations: 'sidebar:vacations-count',
 } as const;
 
 interface SidebarCounts {
   followUpPending: number;
   projectsPiTurn: number;
-  manuscriptsAction: number;  // 리비전 D-7 + PI 차례 합산
+  manuscriptsAction: number;  // PI 차례 + 리비전 D-7 + 미매칭 Gmail 이벤트 합산
+  reviewQueue: number;
+  vacationsRecent: number;    // 최근 7일 휴가 신청
 }
 
 function useSidebarCounts(): SidebarCounts {
@@ -69,16 +74,42 @@ function useSidebarCounts(): SidebarCounts {
     () => getManuscripts().catch(() => ({ counts: { piTurn: 0, revisionDueSoon: 0 } } as any)),
     { refreshInterval: 60000, dedupingInterval: 10000 },
   );
+  const msUnmatched = useApiData<{ items: any[] }>(
+    'sidebar:manuscripts-unmatched',
+    () => getUnmatchedManuscriptEvents().catch(() => ({ items: [] })),
+    { refreshInterval: 5 * 60000, dedupingInterval: 60000 },
+  );
+  const rv = useApiData<any[]>(
+    SIDEBAR_COUNT_KEYS.review,
+    () => getBlissTaskReviewQueue().catch(() => []),
+    { refreshInterval: 60000, dedupingInterval: 10000 },
+  );
+  const vc = useApiData<{ items: Array<{ createdAt: string; status: string }> }>(
+    SIDEBAR_COUNT_KEYS.vacations,
+    () => getRecentVacations(50).catch(() => ({ items: [] })),
+    { refreshInterval: 60 * 60000, dedupingInterval: 60000 },
+  );
+
+  // 휴가: 최근 7일 ACTIVE/REQUESTED (CANCELLED 제외)
+  const sevenDaysAgo = Date.now() - 7 * 86400000;
+  const vacationsRecent = (vc.data?.items ?? []).filter(v =>
+    new Date(v.createdAt).getTime() >= sevenDaysAgo && v.status !== 'CANCELLED',
+  ).length;
 
   return {
     followUpPending: fu.data?.counts?.pending ?? 0,
     projectsPiTurn: pj.data?.counts?.piTurn ?? 0,
-    manuscriptsAction: (ms.data?.counts?.piTurn ?? 0) + (ms.data?.counts?.revisionDueSoon ?? 0),
+    manuscriptsAction:
+      (ms.data?.counts?.piTurn ?? 0) +
+      (ms.data?.counts?.revisionDueSoon ?? 0) +
+      (msUnmatched.data?.items?.length ?? 0),
+    reviewQueue: Array.isArray(rv.data) ? rv.data.length : 0,
+    vacationsRecent,
   };
 }
 
 // badgeKey: useSidebarCounts() 반환 키 매핑. urgent=true이면 빨강(액션 필요), false이면 amber.
-type BadgeKey = 'followUpPending' | 'projectsPiTurn' | 'manuscriptsAction';
+type BadgeKey = 'followUpPending' | 'projectsPiTurn' | 'manuscriptsAction' | 'reviewQueue' | 'vacationsRecent';
 interface NavItem {
   href: string;
   icon: any;
@@ -92,9 +123,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/projects', icon: FlaskConical, label: '프로젝트 관리', badgeKey: 'projectsPiTurn', urgent: true },
   { href: '/manuscripts', icon: FileText, label: '논문 파이프라인', badgeKey: 'manuscriptsAction', urgent: true },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
-  { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
+  { href: '/tasks/review', icon: Inbox, label: '검토 대기', badgeKey: 'reviewQueue', urgent: true },
   { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기', badgeKey: 'followUpPending', urgent: false },
-  { href: '/vacations', icon: Calendar, label: '휴가 관리' },
+  { href: '/vacations', icon: Calendar, label: '휴가 관리', badgeKey: 'vacationsRecent', urgent: false },
   { href: '/papers', icon: BookOpen, label: '연구동향' },
   { href: '/meetings', icon: Mic, label: '회의 노트' },
   { href: '/wiki', icon: BookMarked, label: '지식 위키' },

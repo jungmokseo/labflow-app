@@ -13,11 +13,12 @@ import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
   getManuscripts, syncManuscripts, scanManuscriptMail, getManuscriptKpi,
-  type Manuscript, type ManuscriptCounts, type ManuscriptKpi,
+  getUnmatchedManuscriptEvents, linkManuscriptEvent,
+  type Manuscript, type ManuscriptCounts, type ManuscriptKpi, type ManuscriptMailEvent,
 } from '@/lib/api';
 import {
   BookOpen, RefreshCw, Mail, Inbox, AlertCircle, Plus,
-  Award, TrendingUp, GraduationCap, FileText, ChevronRight, ChevronDown,
+  Award, TrendingUp, GraduationCap, FileText, ChevronRight, ChevronDown, Link2, X,
 } from 'lucide-react';
 import { ManuscriptRow } from './ManuscriptRow';
 import { TAB_TO_STAGES, TAB_LABEL, TAB_COLOR, stageToTab, type TabKey } from './types';
@@ -57,6 +58,11 @@ export default function ManuscriptsPage() {
     items: Manuscript[]; counts: ManuscriptCounts;
   }>('manuscripts', () => getManuscripts());
   const kpi = useApiData<ManuscriptKpi>('manuscripts:kpi', () => getManuscriptKpi());
+  const unmatched = useApiData<{ items: ManuscriptMailEvent[] }>(
+    'manuscripts:unmatched',
+    () => getUnmatchedManuscriptEvents().catch(() => ({ items: [] })),
+    { refreshInterval: 5 * 60000 },
+  );
 
   // useMemo 의존성 안정화 — data?.items가 같으면 같은 배열 reference 유지
   const allItems = useMemo(() => data?.items ?? [], [data?.items]);
@@ -143,6 +149,17 @@ export default function ManuscriptsPage() {
           </div>
         </div>
       </div>
+
+      {/* 미매칭 Gmail 이벤트 alert — 본인 논문 메일이지만 노션에 매칭되는 manuscript ID가 없음 */}
+      {unmatched.data && unmatched.data.items.length > 0 && (
+        <div className="px-4 md:px-8 pb-3">
+          <UnmatchedEventsAlert
+            items={unmatched.data.items}
+            manuscripts={allItems}
+            onLinked={() => { unmatched.mutate(); mutate(); globalMutate(SIDEBAR_COUNT_KEYS.manuscripts); }}
+          />
+        </div>
+      )}
 
       {/* KPI — 게재 완료 탭에서만 강조 노출 */}
       {tab === 'published' && kpi.data && (
@@ -248,6 +265,99 @@ export default function ManuscriptsPage() {
       </div>
 
       {editTarget && <EditModal m={editTarget} onClose={() => setEditTarget(null)} onSaved={() => { mutate(); kpi.mutate(); }} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// 미매칭 Gmail 이벤트 — 본인 논문 메일인데 노션에 manuscript ID 매칭 안 됨.
+// 사용자가 노션에 ID 입력 또는 [연결] 버튼으로 수동 매칭.
+// ─────────────────────────────────────────────
+function UnmatchedEventsAlert({
+  items, manuscripts, onLinked,
+}: {
+  items: ManuscriptMailEvent[];
+  manuscripts: Manuscript[];
+  onLinked: () => void;
+}) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
+
+  const eventTypeLabel: Record<string, string> = {
+    submitted: '📤 제출',
+    decision: '⚖️ 결정',
+    reject: '❌ 리젝',
+    revision_request: '✏️ 리비전',
+    accept: '✅ 억셉',
+  };
+
+  const handleLink = async (eventId: string, manuscriptId: string) => {
+    setLinking(eventId);
+    try {
+      await linkManuscriptEvent(eventId, manuscriptId);
+      toast('이벤트 연결됨 — 다음 sync에 노션에 반영', 'success');
+      onLinked();
+    } catch (e: any) {
+      toast(`연결 실패: ${e.message}`, 'error');
+    } finally {
+      setLinking(null);
+    }
+  };
+
+  return (
+    <div className="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-amber-500/5"
+      >
+        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+        <span className="text-sm font-medium text-amber-900 dark:text-amber-200 flex-1">
+          매칭 안 된 Gmail 이벤트 {items.length}건 — 노션에 ID 입력 필요
+        </span>
+        {open ? <ChevronDown className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-1.5 border-t border-amber-500/30">
+          {items.map(evt => (
+            <div key={evt.id} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-bg-card border border-border rounded p-2 mt-2">
+              <div className="flex-1 min-w-0 text-xs">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-medium text-text-heading">
+                    {eventTypeLabel[evt.eventType] || evt.eventType}
+                  </span>
+                  {evt.journal && <span className="text-text-muted">· {evt.journal}</span>}
+                  {evt.manuscriptNum && (
+                    <code className="text-[10px] px-1 py-0.5 bg-bg-input rounded font-mono">{evt.manuscriptNum}</code>
+                  )}
+                  <span className="text-text-muted/70">· {new Date(evt.receivedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+                </div>
+                {evt.subject && <p className="text-text-muted truncate mt-0.5">{evt.subject}</p>}
+              </div>
+              <select
+                disabled={linking === evt.id}
+                onChange={e => { if (e.target.value) handleLink(evt.id, e.target.value); }}
+                defaultValue=""
+                className="text-xs px-2 py-1 bg-bg-input border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              >
+                <option value="">→ 연결할 논문 선택…</option>
+                {manuscripts
+                  .filter(m => m.stage !== '게재 완료')
+                  .slice(0, 30)
+                  .map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.title.slice(0, 40)}{m.firstAuthors ? ` — ${m.firstAuthors.slice(0, 20)}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          ))}
+          <p className="text-[10px] text-text-muted/70 mt-2 px-1">
+            💡 연결하면 다음 매시간 sync에서 노션 단계/차례가 자동 갱신됩니다.
+            또는 노션 DB의 해당 row에 Manuscript ID를 직접 입력해도 자동 매칭됩니다.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

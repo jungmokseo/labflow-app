@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { mutate as globalMutate } from 'swr';
 import {
   archiveBlissTask,
   completeBlissTask,
@@ -18,6 +19,7 @@ import {
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
+import { SIDEBAR_COUNT_KEYS } from '../../Sidebar';
 import {
   Calendar,
   Check,
@@ -235,6 +237,7 @@ export default function BlissTaskReviewPage() {
       });
       removeTask(task.id);
       mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.review);
       if (result.notified) toast('Slack DM 발송됨', 'success');
       else toast(`확정됨. Slack DM 실패: ${result.error || '원인 미상'}`, 'info');
     } catch (error) {
@@ -255,6 +258,7 @@ export default function BlissTaskReviewPage() {
       setTasks(prev => sortReviewTasks([...prev.filter(item => item.id !== task.id), heldTask]));
       toast('보류됨', 'info');
       mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.review);
     } catch (error) {
       toast(error instanceof Error ? error.message : '보류 실패', 'error');
     } finally {
@@ -270,6 +274,7 @@ export default function BlissTaskReviewPage() {
       removeTask(task.id);
       toast('취소됨', 'info');
       mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.review);
     } catch (error) {
       toast(error instanceof Error ? error.message : '취소 실패', 'error');
     } finally {
