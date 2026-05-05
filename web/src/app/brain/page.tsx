@@ -11,6 +11,7 @@ import { useWakeLock } from '@/lib/use-wake-lock';
 import { savePendingBrainJob, getPendingBrainJob, clearPendingBrainJob, isPendingJobStale } from '@/lib/pending-brain-job';
 import { useConversationsStore } from '@/store/conversations';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
+import { useToast } from '@/components/Toast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -501,6 +502,7 @@ function AttachedFileChip({ file, onRemove }: { file: AttachedFile; onRemove: (i
 }
 
 export default function BrainPage() {
+  const { toast } = useToast();
   // Use shared store for activeChannelId (synced with Sidebar)
   const { activeChannelId, setActive: setActiveChannelId } = useConversationsStore();
   const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
@@ -668,10 +670,11 @@ export default function BrainPage() {
       storeMessages(channelId, msgs);
       setActiveChannelId(channelId);
       shouldScrollToBottomRef.current = true;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load messages', err);
+      toast(`대화 불러오기 실패: ${err?.message || '오류'}`, 'error');
     }
-  }, [setActiveChannelId, storeMessages]);
+  }, [setActiveChannelId, storeMessages, toast]);
 
   // Auto-load first channel messages — 최초 진입 시 가장 최근 세션 자동 로드
   // userChoseNewSessionRef가 true이면 (사용자가 "새 대화" 클릭) SWR 재검증으로 인한 재로드 방지
@@ -756,8 +759,9 @@ export default function BrainPage() {
         setActiveChannelId(null);
         setLocalNewMessages([]);
       }
-    } catch {
-      alert('삭제 실패');
+      toast('대화 삭제됨', 'info');
+    } catch (err: any) {
+      toast(`삭제 실패: ${err?.message || '알 수 없는 오류'}`, 'error');
     }
   }
 
@@ -1075,9 +1079,12 @@ export default function BrainPage() {
             if (data.text) {
               setInput(prev => prev ? `${prev} ${data.text}` : data.text);
             }
+          } else {
+            toast('음성 인식 실패 — 다시 시도해 주세요', 'error');
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('Transcription failed:', err);
+          toast(`음성 인식 실패: ${err?.message || '오류'}`, 'error');
         }
       };
 
@@ -1089,8 +1096,9 @@ export default function BrainPage() {
       timerRef.current = setInterval(() => {
         setRecordingTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 500);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Microphone access error:', err);
+      toast('마이크 접근 권한이 필요합니다. 브라우저 설정을 확인해 주세요.', 'error');
     }
   }
 

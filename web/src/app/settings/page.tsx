@@ -12,6 +12,7 @@ import {
   deleteImportanceRule, deleteKeyword, type SettingsSummary,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
+import { useToast } from '@/components/Toast';
 import { BarChart3, FlaskConical, Mail, BookOpen, Settings as SettingsIcon, AlertTriangle, Brain, Trash2 } from 'lucide-react';
 
 type Tab = 'status' | 'lab' | 'email' | 'dictionary' | 'errors' | 'ai-instructions';
@@ -291,13 +292,31 @@ function DeleteButton({ onClick, loading }: { onClick: () => void; loading: bool
 
 // ── Status Tab ──────────────────────────────────
 function StatusTab({ health, emailConnected, calendarConnected, calendarMessage, lab }: { health: boolean | null; emailConnected: boolean; calendarConnected: boolean; calendarMessage: string | null; lab: LabProfile | null }) {
+  const { toast } = useToast();
+  const [connecting, setConnecting] = useState(false);
 
+  // popup blocker 우회 — user gesture 시점에 즉시 빈 창 열고, await 후 URL 주입.
+  // 차단되면 same-tab redirect로 fallback.
   const handleConnectGmail = async () => {
+    if (connecting) return;
+    setConnecting(true);
+    const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
     try {
       const res = await getEmailAuthUrl();
-      window.open(res.url, '_blank');
-    } catch (err) {
-      console.error('Failed to get auth URL:', err);
+      const authUrl = res.url || res.authUrl;
+      if (!authUrl) throw new Error('OAuth URL이 응답에 없습니다');
+      if (popup && !popup.closed) {
+        popup.location.href = authUrl;
+      } else {
+        // 팝업 차단됨 → 같은 탭에서 이동
+        window.location.href = authUrl;
+      }
+    } catch (err: any) {
+      if (popup) popup.close();
+      const msg = err?.message || '재연동 실패';
+      toast(`Gmail 재연동 실패: ${msg.slice(0, 100)}`, 'error');
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -313,9 +332,21 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
           <StatusItem label="AI 비서" status="info" detail="활성화됨" />
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={handleConnectGmail} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium">
-            {emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기'}
+          <button
+            onClick={handleConnectGmail}
+            disabled={connecting}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            {connecting && <span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />}
+            {connecting
+              ? '재연동 중…'
+              : (emailConnected ? 'Gmail 재연동 (토큰 갱신)' : 'Gmail 연동하기')}
           </button>
+          {!calendarConnected && (
+            <p className="text-xs text-text-muted/80 self-center">
+              💡 Calendar 연동도 같은 OAuth로 함께 처리됩니다 (재연동 후 자동 활성)
+            </p>
+          )}
         </div>
       </section>
     </div>

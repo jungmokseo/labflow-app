@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, exportMeetingToGDocs, Meeting } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
+import { useToast } from '@/components/Toast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 // Skeleton imports removed — using inline spinner
@@ -55,6 +56,7 @@ function formatMeetingDate(iso: string): string {
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
 export default function MeetingsPage() {
+  const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Recording state
@@ -324,6 +326,7 @@ export default function MeetingsPage() {
     } catch (err: any) {
       console.error('Upload failed:', err);
       setProcessingQueue(prev => prev.map(j => j.id === jobId ? { ...j, status: 'error', error: err.message } : j));
+      toast(`업로드 실패: ${err?.message || '알 수 없는 오류'}`, 'error');
     }
   };
 
@@ -333,8 +336,10 @@ export default function MeetingsPage() {
     try {
       await deleteMeeting(id);
       refreshMeetings((prev: any) => prev ? { ...prev, data: (prev.data || []).filter((m: Meeting) => m.id !== id) } : prev, { revalidate: false });
-    } catch (err) {
+      toast('삭제됨', 'info');
+    } catch (err: any) {
       console.error('Failed to delete meeting:', err);
+      toast(`삭제 실패: ${err?.message || '알 수 없는 오류'}`, 'error');
     }
   };
 
@@ -786,9 +791,11 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
   onDelete: () => void;
   onRefresh: () => void;
 }) {
+  const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editSummary, setEditSummary] = useState(m.summary || '');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -813,8 +820,10 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
       });
       setEditing(false);
       onRefresh();
-    } catch (err) {
+      toast('저장됨', 'success');
+    } catch (err: any) {
       console.error('Failed to save meeting:', err);
+      toast(`저장 실패: ${err?.message || '알 수 없는 오류'}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -886,8 +895,10 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
           onClick={(e) => {
             e.stopPropagation();
             if (m.summary) {
-              navigator.clipboard.writeText(m.summary);
-              alert('마크다운이 클립보드에 복사되었습니다');
+              navigator.clipboard.writeText(m.summary).then(
+                () => toast('마크다운이 클립보드에 복사되었습니다', 'success'),
+                () => toast('클립보드 복사 실패', 'error'),
+              );
             }
           }}
           className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
@@ -895,22 +906,37 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
           <Copy className="w-3 h-3" /> 마크다운 복사
         </button>
         <button
+          disabled={exporting}
           onClick={async (e) => {
             e.stopPropagation();
+            if (exporting) return;
+            // popup blocker 우회 — user gesture 시점에 즉시 빈 창 열고, await 후 URL 주입
+            const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
+            setExporting(true);
             try {
               const data = await exportMeetingToGDocs(m.id);
               if (data.success && data.docUrl) {
-                window.open(data.docUrl, '_blank');
+                if (popup && !popup.closed) {
+                  popup.location.href = data.docUrl;
+                } else {
+                  // 팝업 차단됨 → 같은 탭에서 이동
+                  window.location.href = data.docUrl;
+                }
+                toast('Google Docs 열기 완료', 'success');
               } else {
-                alert(data.error || 'Google Docs 내보내기 실패');
+                if (popup) popup.close();
+                toast(data.error || 'Google Docs 내보내기 실패', 'error');
               }
             } catch (err: any) {
-              alert(`Google Docs 내보내기 실패: ${err.message || err}`);
+              if (popup) popup.close();
+              toast(`Google Docs 내보내기 실패: ${err?.message || err}`, 'error');
+            } finally {
+              setExporting(false);
             }
           }}
-          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 disabled:opacity-50"
         >
-          <FileText className="w-3 h-3" /> Google Docs 내보내기
+          <FileText className="w-3 h-3" /> {exporting ? '내보내는 중…' : 'Google Docs 내보내기'}
         </button>
         <div className="flex-1" />
         <button
