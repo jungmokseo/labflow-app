@@ -17,40 +17,29 @@ const prisma = new PrismaClient();
 const PROJECT_DB_ID = '37e9d1e2-155a-4f1a-8a17-a12f271f8c7d';
 
 // 수동 매핑: 프로젝트 DB row id → 실제 워크시트 sub-page id
-// LM Paste 같은 경우 부모 페이지가 아닌 특정 child page를 워크시트로 사용
-const WORKSHEET_OVERRIDES: Record<string, string> = {
-  // LM Paste (DB row) → 'LM Paste 2026-03-23' sub-page
-  '328f9f17-6cf4-813c-9f22-df546a0b63c2': '32df9f17-6cf4-8176-ad6c-d3677e7465d5',
-};
+// 2026-05-04: LM Paste / LM Thermal Paste가 사용자에 의해 DB의 독립 row로 분리되어
+// override 불필요. 새 워크시트 추가 요청 시 여기에 등록.
+const WORKSHEET_OVERRIDES: Record<string, string> = {};
 
 // 워크시트로 인식하지 않을 프로젝트 (사용자 명시적 제외)
+// 2026-05-04: LM Paste 부모 row(328f9f17...3c2)는 사용자가 ⚪ 미분류로 분류했고
+// 실제 워크시트는 LM Paste 2026-03-23(32df...d5) + LM Thermal Paste(33af...ab1) 두 child가
+// 독립 DB row로 분리된 상태.
 const EXCLUDED_PROJECTS = new Set<string>([
   '328f9f17-6cf4-816f-a4f3-cb703e3ee1bf', // AutoPCB
+  '328f9f17-6cf4-813c-9f22-df546a0b63c2', // LM Paste (부모 row, child가 독립 row로 분리됨)
 ]);
 
-/**
- * 프로젝트 DB와 별개로 직접 등록할 워크시트 (사용자 추가 요청).
- * Integration이 페이지에 권한 없을 수도 있으니 fallback 메타데이터 포함.
- * 권한 받으면 다음 sync에서 실제 노션 데이터로 자동 갱신됨.
- */
+// STANDALONE_WORKSHEETS — 프로젝트 DB와 별개로 직접 등록할 워크시트.
+// 2026-05-04: LM Thermal Paste가 DB row로 분리되어 비움. 새 sub-page 워크시트 필요 시 여기에 추가.
 const STANDALONE_WORKSHEETS: Array<{
   id: string;
-  parentDbPageId: string | null;  // 프로젝트 DB의 부모 row id (있으면 그 부모도 🟢 활성 마킹)
+  parentDbPageId: string | null;
   fallbackTitle: string;
   fallbackTeam: string | null;
   fallbackAssignees: string[];
   fallbackStatus: string | null;
-}> = [
-  {
-    // LM Thermal Paste 2026-04-06 — LM Paste 부모의 sub-page
-    id: '33af9f17-6cf4-81fa-a4ee-cfe7b3a0dab1',
-    parentDbPageId: '328f9f17-6cf4-813c-9f22-df546a0b63c2',  // LM Paste DB row
-    fallbackTitle: 'LM Thermal Paste 2026-04-06',
-    fallbackTeam: 'LM Team',
-    fallbackAssignees: ['홍승완', '육근영'],
-    fallbackStatus: '2. 실험중',
-  },
-];
+}> = [];
 
 interface NotionBlock {
   id: string;
@@ -358,6 +347,11 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
         if (EXCLUDED_PROJECTS.has(row.id)) return;
         const props = row.properties;
         const isDone = props['완료?']?.checkbox === true;
+        // 사용자가 노션에서 명시적으로 ⏸ 보류로 분류한 row는 워크시트 활성에서 제외.
+        // (UI dismiss 버튼이 노션 property를 ⏸ 보류로 갱신 → 다음 sync부터 자동 archived 처리)
+        const trackingValue = props['🔬 워크시트 추적']?.select?.name || '';
+        const isPaused = trackingValue === '⏸ 보류';
+        const archivedFlag = isDone || isPaused;
 
         // 워크시트 페이지 ID 결정 (override 우선)
         const worksheetPageId = WORKSHEET_OVERRIDES[row.id] || row.id;
@@ -374,8 +368,8 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
           select: { notionLastEditedAt: true, archived: true },
         });
         const newNotionTs = new Date(worksheetPage.last_edited_time);
-        if (existing && existing.notionLastEditedAt >= newNotionTs && !existing.archived) {
-          // 변경 없음 — syncedAt만 갱신해서 stale 처리 안 되게
+        if (existing && existing.notionLastEditedAt >= newNotionTs && existing.archived === archivedFlag) {
+          // 변경 없음 (notion 갱신 + archived flag 동일) — syncedAt만 갱신해서 stale 처리 안 되게
           await prisma.worksheetProject.update({
             where: { id: worksheetPageId },
             data: { syncedAt: new Date() },
@@ -437,7 +431,7 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
             daysSinceTurn,
             studentActivity: activity.studentActivity,
             recentChanges: activity.recentChanges as any,
-            archived: isDone,
+            archived: archivedFlag,
             syncedAt: new Date(),
           },
           update: {
@@ -456,7 +450,7 @@ export async function syncWorksheetProjects(): Promise<{ total: number; workshee
             daysSinceTurn,
             studentActivity: activity.studentActivity,
             recentChanges: activity.recentChanges as any,
-            archived: isDone,
+            archived: archivedFlag,
             syncedAt: new Date(),
           },
         });

@@ -189,6 +189,85 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── POST 보류로 변경 (UI "무시" 토글) ─────────────
+  // DB에서 archived=true + 노션 "🔬 워크시트 추적" property를 "⏸ 보류"로 갱신.
+  // 다음 sync에서 ⏸ 보류 property 보존되어 자동으로 활성 목록에서 제외.
+  app.post('/api/worksheet-projects/:id/dismiss', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const project = await prisma.worksheetProject.findUnique({ where: { id } });
+      if (!project) return reply.code(404).send({ error: '프로젝트 없음' });
+
+      // 1. DB archived=true (즉시 UI에서 사라짐)
+      await prisma.worksheetProject.update({
+        where: { id },
+        data: { archived: true, syncedAt: new Date() },
+      });
+
+      // 2. 노션 property 갱신 — parentDbPageId가 있으면 그것을 우선 (DB row만 property 보유)
+      const notionRowId = project.parentDbPageId || id;
+      let notionUpdated = false;
+      if (env.NOTION_API_KEY) {
+        try {
+          const res = await fetch(`https://api.notion.com/v1/pages/${notionRowId}`, {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${env.NOTION_API_KEY}`,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              properties: { '🔬 워크시트 추적': { select: { name: '⏸ 보류' } } },
+            }),
+          });
+          notionUpdated = res.ok;
+          if (!res.ok) console.warn(`[dismiss] Notion property 갱신 실패 ${notionRowId}: ${res.status}`);
+        } catch (e: any) {
+          console.warn(`[dismiss] Notion API 오류:`, e.message);
+        }
+      }
+
+      return reply.send({ ok: true, notionUpdated });
+    } catch (err: any) {
+      logError('background', 'POST /api/worksheet-projects/:id/dismiss 실패', { userId: (request as any).user?.id })(err);
+      return reply.code(500).send({ error: 'dismiss 실패', message: err.message });
+    }
+  });
+
+  // ── POST 차례 강제 전환 (PI 차례 → 학생 차례) ────────
+  // 사용자가 "이건 학생이 답할 차례다" 라고 수동으로 표시. 노션 변경 없이 DB만 갱신.
+  // 다음 매시간 sync에서 노션의 실제 timeline으로 자동 재조정됨 (사용자 의도가 잘못되면 자동 복구).
+  const turnSchema = z.object({
+    whoseTurn: z.enum(['PI', 'STUDENT']),
+  });
+  app.post('/api/worksheet-projects/:id/turn', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const body = turnSchema.parse(request.body || {});
+      const project = await prisma.worksheetProject.findUnique({ where: { id } });
+      if (!project) return reply.code(404).send({ error: '프로젝트 없음' });
+
+      await prisma.worksheetProject.update({
+        where: { id },
+        data: {
+          whoseTurn: body.whoseTurn,
+          lastActivityAt: new Date(),
+          lastActivityRole: body.whoseTurn === 'STUDENT' ? 'PI' : 'STUDENT',
+          lastActivityByName: body.whoseTurn === 'STUDENT' ? 'PI (수동 전환)' : '학생 (수동 전환)',
+          daysSinceTurn: 0,
+        },
+      });
+
+      return reply.send({ ok: true, whoseTurn: body.whoseTurn });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return reply.code(400).send({ error: 'Invalid input', details: err.errors });
+      }
+      logError('background', 'POST /api/worksheet-projects/:id/turn 실패', { userId: (request as any).user?.id })(err);
+      return reply.code(500).send({ error: '차례 전환 실패', message: err.message });
+    }
+  });
+
   // ── GET 프로젝트별 reminder 목록 ─────────────────
   app.get('/api/worksheet-projects/:id/reminders', async (request, reply) => {
     try {

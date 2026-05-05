@@ -7,17 +7,17 @@
  * - 🟠 학생 차례 (4~7일): 리마인드 권장
  * - 🔥 학생 차례 (8일+): 긴급 리마인드
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
   getWorksheetProjects, syncWorksheetProjects, remindWorksheetStudent,
-  getWorksheetReminders,
+  getWorksheetReminders, dismissWorksheetProject, switchWorksheetTurn,
   type WorksheetProject, type WorksheetReminder, type WorksheetRecentChange,
 } from '@/lib/api';
 import {
   FlaskConical, RefreshCw, MessageSquare, User, ExternalLink, Loader2, Inbox, Users,
-  CheckCircle2, MailCheck, AlertCircle, Send, X,
+  CheckCircle2, MailCheck, AlertCircle, Send, X, MoreVertical, PauseCircle, ArrowRightCircle,
 } from 'lucide-react';
 
 type FilterTab = 'piTurn' | 'stale' | 'all';
@@ -323,17 +323,90 @@ function RemindersInline({ projectId, stats }: RemindersInlineProps) {
   );
 }
 
+interface ProjectMenuProps {
+  project: WorksheetProject;
+  onDismiss: () => void;
+  onPassToStudent: () => void;
+}
+
+/**
+ * 카드 우측 ··· 메뉴 — "보류로 변경" + "학생 차례로 전환" (PI 차례일 때만).
+ * 외부 클릭/Esc 시 닫힘.
+ */
+function ProjectMenu({ project, onDismiss, onPassToStudent }: ProjectMenuProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  const isPiTurn = project.whoseTurn === 'PI';
+
+  return (
+    <div ref={ref} className="relative flex-shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors focus-ring"
+        aria-label="더 보기"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="더 보기"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-9 z-20 min-w-[200px] bg-bg-card border border-border rounded-lg shadow-card py-1 animate-msg-in"
+        >
+          {isPiTurn && (
+            <button
+              role="menuitem"
+              onClick={() => { setOpen(false); onPassToStudent(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-heading hover:bg-bg-hover text-left"
+            >
+              <ArrowRightCircle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+              학생 차례로 전환
+            </button>
+          )}
+          <button
+            role="menuitem"
+            onClick={() => { setOpen(false); onDismiss(); }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-text-heading hover:bg-bg-hover text-left"
+          >
+            <PauseCircle className="w-4 h-4 text-text-muted flex-shrink-0" />
+            보류로 변경 (목록에서 숨김)
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ProjectCardProps {
   project: WorksheetProject;
   onRemind: () => void;
+  onDismiss: () => void;
+  onPassToStudent: () => void;
 }
 
-function ProjectCard({ project, onRemind }: ProjectCardProps) {
+function ProjectCard({ project, onRemind, onDismiss, onPassToStudent }: ProjectCardProps) {
   const isPiTurn = project.whoseTurn === 'PI';
   return (
     <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4 hover:border-primary/30 transition-colors">
       <div className="flex flex-col gap-3">
-        {/* 헤더: 제목 + 차례 배지 */}
+        {/* 헤더: 제목 + 차례 배지 + ··· 메뉴 */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3 className="text-base md:text-lg font-bold text-text-heading leading-snug tracking-tight break-words">
@@ -355,7 +428,14 @@ function ProjectCard({ project, onRemind }: ProjectCardProps) {
               )}
             </div>
           </div>
-          <TurnBadge whoseTurn={project.whoseTurn} daysSinceTurn={project.daysSinceTurn} />
+          <div className="flex items-start gap-1.5 flex-shrink-0">
+            <TurnBadge whoseTurn={project.whoseTurn} daysSinceTurn={project.daysSinceTurn} />
+            <ProjectMenu
+              project={project}
+              onDismiss={onDismiss}
+              onPassToStudent={onPassToStudent}
+            />
+          </div>
         </div>
 
         {/* 마지막 활동 발췌 + 최근 timeline */}
@@ -467,6 +547,60 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleDismiss = async (project: WorksheetProject) => {
+    // Optimistic — 즉시 목록에서 제거
+    if (data) {
+      mutate(
+        { ...data, items: data.items.filter(i => i.id !== project.id) },
+        { revalidate: false },
+      );
+    }
+    try {
+      const r = await dismissWorksheetProject(project.id);
+      toast(
+        r.notionUpdated
+          ? `'${project.title}' 보류 처리됨 · 노션 ⏸ 보류 갱신`
+          : `'${project.title}' 보류 처리됨 (노션 갱신 실패 — 다음 sync에서 재시도)`,
+        'success',
+      );
+      // 카운트 정확화
+      mutate();
+    } catch (e: any) {
+      toast(`보류 실패: ${e.message}`, 'error');
+      mutate();  // 롤백
+    }
+  };
+
+  const handlePassToStudent = async (project: WorksheetProject) => {
+    // Optimistic — whoseTurn 즉시 STUDENT
+    if (data) {
+      mutate(
+        {
+          ...data,
+          items: data.items.map(i =>
+            i.id === project.id
+              ? { ...i, whoseTurn: 'STUDENT' as const, daysSinceTurn: 0 }
+              : i,
+          ),
+          counts: {
+            ...data.counts,
+            piTurn: Math.max(0, data.counts.piTurn - 1),
+            studentTurn: data.counts.studentTurn + 1,
+          },
+        },
+        { revalidate: false },
+      );
+    }
+    try {
+      await switchWorksheetTurn(project.id, 'STUDENT');
+      toast(`'${project.title}' 학생 차례로 전환됨`, 'success');
+      mutate();
+    } catch (e: any) {
+      toast(`전환 실패: ${e.message}`, 'error');
+      mutate();
+    }
+  };
+
   return (
     <div className="min-h-full pb-20 md:pb-12">
       {/* 헤더 */}
@@ -569,7 +703,13 @@ export default function ProjectsPage() {
                 </h2>
                 <div className="space-y-3">
                   {projects.map(p => (
-                    <ProjectCard key={p.id} project={p} onRemind={() => setRemindTarget(p)} />
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      onRemind={() => setRemindTarget(p)}
+                      onDismiss={() => handleDismiss(p)}
+                      onPassToStudent={() => handlePassToStudent(p)}
+                    />
                   ))}
                 </div>
               </div>

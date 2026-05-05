@@ -528,6 +528,22 @@ export async function getWorksheetReminders(projectId: string) {
   return apiFetch<{ items: WorksheetReminder[] }>(`/api/worksheet-projects/${projectId}/reminders`);
 }
 
+// 보류로 변경 (UI "무시" 토글) — 노션 ⏸ 보류 + DB archived=true
+export async function dismissWorksheetProject(projectId: string) {
+  return apiFetch<{ ok: boolean; notionUpdated: boolean }>(
+    `/api/worksheet-projects/${projectId}/dismiss`,
+    { method: 'POST' },
+  );
+}
+
+// 차례 강제 전환 (수동 override — 다음 sync에서 노션 timeline으로 재조정)
+export async function switchWorksheetTurn(projectId: string, whoseTurn: 'PI' | 'STUDENT') {
+  return apiFetch<{ ok: boolean; whoseTurn: 'PI' | 'STUDENT' }>(
+    `/api/worksheet-projects/${projectId}/turn`,
+    { method: 'POST', body: JSON.stringify({ whoseTurn }) },
+  );
+}
+
 export async function checkWorksheetAcks() {
   return apiFetch<{ checked: number; acked: number; errors: number }>(
     `/api/worksheet-projects/check-acks`,
