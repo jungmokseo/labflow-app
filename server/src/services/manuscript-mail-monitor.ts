@@ -69,28 +69,42 @@ function extractManuscriptId(text: string): ManuscriptIdMatch | null {
   return null;
 }
 
+// 본인 논문이 아닌 메일 — review 요청, peer review 초청, 다른 lab 협업 알림 등
+// 이런 메일은 같은 manuscript ID 패턴을 갖지만 PI가 1저자/교신/공저가 아닌 케이스 → 무시
+function isReviewerCorrespondence(subject: string, snippet: string): boolean {
+  const s = (subject + ' ' + snippet).toLowerCase();
+  return /(invitation to (peer )?review|assigned to review|inviting you to review|kindly agreed to review|review (arrived|received) for|review for [^.]* (due|requested)|thank you for (the |your )?review|review (arrived|invitation)|reviewer (invitation|assigned)|review of nn-|review of [a-z]+-d-)/i.test(s);
+}
+
 // 이벤트 타입 분류 — subject + snippet + body 첫 부분
+// 본인 논문임이 명확한 표현(your manuscript, decision on your, etc.)을 우선시.
 function classifyEvent(subject: string, snippet: string): 'submitted' | 'decision' | 'reject' | 'revision_request' | 'accept' | null {
+  // Review 요청은 명시적으로 제외 — 본인 논문 추적과 무관
+  if (isReviewerCorrespondence(subject, snippet)) return null;
+
   const s = (subject + ' ' + snippet).toLowerCase();
 
-  // 억셉
-  if (/\b(accept(ed|ance)?)\b/.test(s) && !/(rejection|reject)/.test(s)) {
-    if (/your manuscript has been accepted|i am pleased to accept|delighted to accept/.test(s)) return 'accept';
+  // 억셉 — 본인 논문임이 명확한 키워드만
+  if (/your manuscript has been accepted|i am pleased to accept|delighted to accept|congratulations.* manuscript .* accept/.test(s)) {
+    return 'accept';
   }
 
-  // 리비전 (reject보다 먼저 — "decision" 메일이 minor revision일 수 있음)
-  if (/revision (of|due|required|requested)/.test(s)) return 'revision_request';
-  if (/major revision|minor revision|please revise|revisions are required/.test(s)) return 'revision_request';
-  if (/^revision /.test(s)) return 'revision_request';
+  // 리비전 (reject보다 먼저)
+  if (/revision of (your|the|")|revision .* is due|major revision|minor revision|please revise|revisions are required|^revision /.test(s)) {
+    return 'revision_request';
+  }
 
-  // 리젝
-  if (/regret|reject|not (suitable|accept)|unable to (accept|publish)|decline|not consider/.test(s)) return 'reject';
+  // 제출 — 본인 키워드만
+  if (/thank you for submitting your|your manuscript .* (has been )?successfully (been )?submitted|submission started for|submission received|manuscript .* assigned to editor|manuscript submitted to/.test(s)) {
+    return 'submitted';
+  }
 
-  // 제출
-  if (/(thank you for submitting|submission (started|received|successful)|manuscript submitted|successfully submitted)/.test(s)) return 'submitted';
-
-  // 일반 decision (reject/revision 둘 다 아닐 때) — 사용자 검토 필요
-  if (/^decision on|decision on (your|submission)|decision on manuscript/.test(s)) return 'decision';
+  // 리젝 — Decision on (your/submission) 컨텍스트 + reject 키워드
+  // 본인 키워드 ("decision on your", "decision on submission") 없이 단독 reject만 있으면 무시
+  if (/decision on (your|submission|manuscript)/.test(s) || /^decision on/.test(s)) {
+    if (/regret|reject|not (suitable|accept)|unable to (accept|publish)|decline to publish/.test(s)) return 'reject';
+    return 'decision';  // 일반 decision (사용자 검토 필요)
+  }
 
   return null;
 }
