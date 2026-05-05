@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { mutate as globalMutate } from 'swr';
 import {
   answerFollowUp,
   deleteFollowUp,
@@ -18,6 +19,7 @@ import {
   type FollowUpItem,
   type FollowUpListResponse,
 } from '@/lib/api';
+import { SIDEBAR_COUNT_KEYS } from '../Sidebar';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
@@ -287,6 +289,7 @@ export default function FollowUpPage() {
       setOpenId(null);
       setForms(prev => { const next = { ...prev }; delete next[item.id]; return next; });
       refresh();
+      globalMutate(SIDEBAR_COUNT_KEYS.followUp);  // 사이드바 뱃지 즉시 갱신
     } catch (err: any) {
       toast(`답변 등록 실패: ${err?.message ?? '오류'}`, 'error');
     } finally {
@@ -301,6 +304,7 @@ export default function FollowUpPage() {
       await skipFollowUp(item.id);
       toast('답변 없이 종료', 'success');
       refresh();
+      globalMutate(SIDEBAR_COUNT_KEYS.followUp);
     } catch (err: any) {
       toast(`종료 실패: ${err?.message ?? '오류'}`, 'error');
     } finally {
@@ -315,6 +319,7 @@ export default function FollowUpPage() {
       await deleteFollowUp(item.id);
       toast('삭제됨', 'success');
       refresh();
+      globalMutate(SIDEBAR_COUNT_KEYS.followUp);
     } catch (err: any) {
       toast(`삭제 실패: ${err?.message ?? '오류'}`, 'error');
     } finally {

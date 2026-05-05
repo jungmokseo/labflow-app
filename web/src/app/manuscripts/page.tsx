@@ -8,6 +8,7 @@
  */
 import { useState, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { mutate as globalMutate } from 'swr';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ManuscriptRow } from './ManuscriptRow';
 import { TAB_TO_STAGES, TAB_LABEL, TAB_COLOR, stageToTab, type TabKey } from './types';
+import { SIDEBAR_COUNT_KEYS } from '../Sidebar';
 
 // EditModal — 모달 첫 마운트 시 lazy load (bundle ↓)
 const EditModal = dynamic(() => import('./EditModal').then(m => m.EditModal), { ssr: false, loading: () => null });
@@ -93,6 +95,7 @@ export default function ManuscriptsPage() {
       const r = await syncManuscripts();
       toast(`Sync: ${r.updated}편 갱신`, 'success');
       mutate(); kpi.mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.manuscripts);
     } catch (e: any) { toast(`Sync 실패: ${e.message}`, 'error'); }
     finally { setSyncing(false); }
   };

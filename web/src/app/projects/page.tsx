@@ -8,6 +8,7 @@
  * - 🔥 학생 차례 (8일+): 긴급 리마인드
  */
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { mutate as globalMutate } from 'swr';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
@@ -15,6 +16,7 @@ import {
   getWorksheetReminders, dismissWorksheetProject, switchWorksheetTurn,
   type WorksheetProject, type WorksheetReminder, type WorksheetRecentChange,
 } from '@/lib/api';
+import { SIDEBAR_COUNT_KEYS } from '../Sidebar';
 import {
   FlaskConical, RefreshCw, MessageSquare, User, ExternalLink, Loader2, Inbox, Users,
   CheckCircle2, MailCheck, AlertCircle, Send, X, MoreVertical, PauseCircle, ArrowRightCircle,
@@ -540,6 +542,7 @@ export default function ProjectsPage() {
       const r = await syncWorksheetProjects();
       toast(`Sync 완료: ${r.worksheets} worksheets, ${r.errors} errors`, 'success');
       await mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.projects);
     } catch (e: any) {
       toast(`Sync 실패: ${e.message}`, 'error');
     } finally {
@@ -565,6 +568,7 @@ export default function ProjectsPage() {
       );
       // 카운트 정확화
       mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.projects);
     } catch (e: any) {
       toast(`보류 실패: ${e.message}`, 'error');
       mutate();  // 롤백
@@ -595,6 +599,7 @@ export default function ProjectsPage() {
       await switchWorksheetTurn(project.id, 'STUDENT');
       toast(`'${project.title}' 학생 차례로 전환됨`, 'success');
       mutate();
+      globalMutate(SIDEBAR_COUNT_KEYS.projects);
     } catch (e: any) {
       toast(`전환 실패: ${e.message}`, 'error');
       mutate();

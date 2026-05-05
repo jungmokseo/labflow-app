@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { mutate } from 'swr';
+import { useApiData } from '@/lib/use-api';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
   deleteBrainChannel, searchBrainMemory, getFollowUpList, getWorksheetProjects,
@@ -37,39 +38,62 @@ const PREFETCH_MAP: Record<string, () => void> = {
   '/manuscripts': () => mutate('manuscripts', () => getManuscripts().catch(() => null), { revalidate: false }),
 };
 
-// Sidebar 우측 뱃지 카운트 — 첫 호출은 idle 시점 (TTI 차단 방지) + 30초 polling
-function useFollowUpPendingCount(): number {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let mounted = true;
-    const fetchCount = () => {
-      getFollowUpList({ status: 'pending', limit: 1 })
-        .then(r => { if (mounted) setCount(r.counts.pending); })
-        .catch(() => {});
-    };
-    // 첫 호출은 브라우저 idle 후 (첫 페인트 차단 방지)
-    const idleId = typeof window !== 'undefined' && 'requestIdleCallback' in window
-      ? (window as any).requestIdleCallback(fetchCount, { timeout: 2000 })
-      : (setTimeout(fetchCount, 100) as any);
-    const intervalId = setInterval(fetchCount, 30000);
-    return () => {
-      mounted = false;
-      clearInterval(intervalId);
-      if ((window as any).cancelIdleCallback) (window as any).cancelIdleCallback(idleId);
-      else clearTimeout(idleId);
-    };
-  }, []);
-  return count;
+// Sidebar 우측 뱃지 카운트 — SWR 기반으로 전환.
+// 페이지에서 액션(답변·sync·편집) 후 globalMutate(SIDEBAR_COUNT_KEYS.xxx)로 즉시 갱신 가능.
+// SWR refreshInterval 60초 + 페이지 액션 시 즉시 mutate.
+export const SIDEBAR_COUNT_KEYS = {
+  followUp: 'sidebar:followup-count',
+  projects: 'sidebar:projects-count',
+  manuscripts: 'sidebar:manuscripts-count',
+} as const;
+
+interface SidebarCounts {
+  followUpPending: number;
+  projectsPiTurn: number;
+  manuscriptsAction: number;  // 리비전 D-7 + PI 차례 합산
 }
 
-const NAV_ITEMS = [
+function useSidebarCounts(): SidebarCounts {
+  const fu = useApiData<{ counts: { pending: number } }>(
+    SIDEBAR_COUNT_KEYS.followUp,
+    () => getFollowUpList({ status: 'pending', limit: 1 }),
+    { refreshInterval: 60000, dedupingInterval: 10000, revalidateOnMount: true },
+  );
+  const pj = useApiData<{ counts: { piTurn: number } }>(
+    SIDEBAR_COUNT_KEYS.projects,
+    () => getWorksheetProjects().catch(() => ({ counts: { piTurn: 0 } } as any)),
+    { refreshInterval: 60000, dedupingInterval: 10000 },
+  );
+  const ms = useApiData<{ counts: { piTurn: number; revisionDueSoon: number } }>(
+    SIDEBAR_COUNT_KEYS.manuscripts,
+    () => getManuscripts().catch(() => ({ counts: { piTurn: 0, revisionDueSoon: 0 } } as any)),
+    { refreshInterval: 60000, dedupingInterval: 10000 },
+  );
+
+  return {
+    followUpPending: fu.data?.counts?.pending ?? 0,
+    projectsPiTurn: pj.data?.counts?.piTurn ?? 0,
+    manuscriptsAction: (ms.data?.counts?.piTurn ?? 0) + (ms.data?.counts?.revisionDueSoon ?? 0),
+  };
+}
+
+// badgeKey: useSidebarCounts() 반환 키 매핑. urgent=true이면 빨강(액션 필요), false이면 amber.
+type BadgeKey = 'followUpPending' | 'projectsPiTurn' | 'manuscriptsAction';
+interface NavItem {
+  href: string;
+  icon: any;
+  label: string;
+  badgeKey?: BadgeKey;
+  urgent?: boolean;
+}
+const NAV_ITEMS: NavItem[] = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
   { href: '/brain', icon: Brain, label: 'Brain' },
-  { href: '/projects', icon: FlaskConical, label: '프로젝트 관리' },
-  { href: '/manuscripts', icon: FileText, label: '논문 파이프라인' },
+  { href: '/projects', icon: FlaskConical, label: '프로젝트 관리', badgeKey: 'projectsPiTurn', urgent: true },
+  { href: '/manuscripts', icon: FileText, label: '논문 파이프라인', badgeKey: 'manuscriptsAction', urgent: true },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
   { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
-  { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기' },
+  { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기', badgeKey: 'followUpPending', urgent: false },
   { href: '/vacations', icon: Calendar, label: '휴가 관리' },
   { href: '/papers', icon: BookOpen, label: '연구동향' },
   { href: '/meetings', icon: Mic, label: '회의 노트' },
@@ -127,14 +151,14 @@ function isThisWeek(dateStr: string): boolean {
   return Date.now() - new Date(dateStr).getTime() < 7 * 24 * 60 * 60 * 1000;
 }
 
-function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggleCollapse, followUpPending }: {
+function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggleCollapse, counts }: {
   pathname: string;
   onNavigate?: () => void;
   user: User | null;
   onSignOut: () => void;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
-  followUpPending: number;
+  counts: SidebarCounts;
 }) {
   const { tasks } = useBackgroundTasks();
   const runningTasks = tasks.filter(t => t.status === 'running');
@@ -217,7 +241,9 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
             : item.href === '/tasks'
               ? pathname === '/tasks'
               : pathname.startsWith(item.href);
-          const showFollowUpBadge = item.href === '/follow-up' && followUpPending > 0;
+          const badgeCount = item.badgeKey ? counts[item.badgeKey] : 0;
+          const showBadge = badgeCount > 0;
+          const badgeBg = item.urgent ? 'bg-red-500' : 'bg-amber-500';
           return (
             <Link
               key={item.href}
@@ -233,12 +259,12 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
             >
               <item.icon className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1 truncate">{item.label}</span>
-              {showFollowUpBadge && (
+              {showBadge && (
                 <span
-                  className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white min-w-[18px] text-center flex-shrink-0"
-                  aria-label={`답변 대기 ${followUpPending}건`}
+                  className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold ${badgeBg} text-white min-w-[18px] text-center flex-shrink-0`}
+                  aria-label={`${item.label} ${badgeCount}건`}
                 >
-                  {followUpPending}
+                  {badgeCount}
                 </span>
               )}
             </Link>
@@ -426,7 +452,7 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const followUpPending = useFollowUpPendingCount();
+  const counts = useSidebarCounts();
 
   // Persist collapsed state
   useEffect(() => {
@@ -480,21 +506,23 @@ export function Sidebar() {
             </button>
             {NAV_ITEMS.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
-              const showBadge = item.href === '/follow-up' && followUpPending > 0;
+              const badgeCount = item.badgeKey ? counts[item.badgeKey] : 0;
+              const showBadge = badgeCount > 0;
+              const badgeBg = item.urgent ? 'bg-red-500' : 'bg-amber-500';
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
                   aria-current={active ? 'page' : undefined}
-                  aria-label={`${item.label}${showBadge ? `, 답변 대기 ${followUpPending}건` : ''}`}
+                  aria-label={`${item.label}${showBadge ? `, ${badgeCount}건` : ''}`}
                   className={`relative p-2.5 rounded-lg mb-1 transition-colors focus-ring ${active ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'}`}
-                  title={`${item.label}${showBadge ? ` (${followUpPending})` : ''}`}
+                  title={`${item.label}${showBadge ? ` (${badgeCount})` : ''}`}
                 >
                   <item.icon className="w-4 h-4" />
                   {showBadge && (
-                    <span className="absolute top-0 right-0 px-1 min-w-[16px] h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center pointer-events-none">
-                      {followUpPending > 9 ? '9+' : followUpPending}
+                    <span className={`absolute top-0 right-0 px-1 min-w-[16px] h-4 rounded-full ${badgeBg} text-white text-[9px] font-bold flex items-center justify-center pointer-events-none`}>
+                      {badgeCount > 9 ? '9+' : badgeCount}
                     </span>
                   )}
                 </Link>
@@ -511,7 +539,7 @@ export function Sidebar() {
             </button>
           </div>
         ) : (
-          <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} collapsed={collapsed} onToggleCollapse={() => setCollapsed(true)} followUpPending={followUpPending} />
+          <NavContent pathname={pathname} user={user} onSignOut={handleSignOut} collapsed={collapsed} onToggleCollapse={() => setCollapsed(true)} counts={counts} />
         )}
       </aside>
 
@@ -548,7 +576,7 @@ export function Sidebar() {
                 <path d="M5 5l10 10M15 5L5 15" />
               </svg>
             </button>
-            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} followUpPending={followUpPending} />
+            <NavContent pathname={pathname} onNavigate={() => setMobileOpen(false)} user={user} onSignOut={handleSignOut} counts={counts} />
           </aside>
         </div>
       )}
