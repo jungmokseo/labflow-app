@@ -811,8 +811,8 @@ export default function PapersPage() {
                               <p className="text-sm text-text-muted leading-snug line-clamp-2 break-words">{paper.title}</p>
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
                                 <span className="text-xs text-text-muted/60">{paper.journal}</span>
-                                <span className="text-xs text-gray-500 inline-flex items-center gap-0.5">
-                                  <StarRating count={1} className="text-gray-500" /> 참고
+                                <span className="text-xs text-text-muted inline-flex items-center gap-0.5">
+                                  <StarRating count={1} className="text-text-muted" /> 참고
                                 </span>
                               </div>
                             </div>

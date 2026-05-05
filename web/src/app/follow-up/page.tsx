@@ -369,7 +369,7 @@ export default function FollowUpPage() {
         )}
 
         {error && !isLoading && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm text-red-600 dark:text-red-400">
             데이터를 불러오지 못했습니다: {String(error)}
           </div>
         )}
@@ -449,7 +449,7 @@ export default function FollowUpPage() {
                     <button
                       onClick={() => onDelete(item)}
                       disabled={isBusy}
-                      className="px-3 py-1.5 bg-bg-input text-text-muted rounded-lg text-xs hover:bg-red-50 hover:text-red-600 disabled:opacity-50 inline-flex items-center gap-1"
+                      className="px-3 py-1.5 bg-bg-input text-text-muted rounded-lg text-xs hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 inline-flex items-center gap-1"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       삭제

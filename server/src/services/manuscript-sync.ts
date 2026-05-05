@@ -13,6 +13,8 @@ import { env } from '../config/env.js';
 const prisma = new PrismaClient();
 
 const MANUSCRIPT_DB_ID = '06e9070b-661d-4d7d-829f-3aed16dda560';
+const NOTION_TIMEOUT_MS = 10_000;
+const NOTION_CONCURRENCY = 5;  // Notion API rate limit 3 req/s 대비 안전
 
 interface NotionPage {
   id: string;
@@ -22,73 +24,165 @@ interface NotionPage {
   properties: Record<string, any>;
 }
 
-async function notionFetch<T>(path: string, opts: { method?: string; body?: any } = {}): Promise<T> {
+async function notionFetch<T>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   if (!env.NOTION_API_KEY) throw new Error('NOTION_API_KEY 미설정');
-  const res = await fetch(`https://api.notion.com/v1${path}`, {
-    method: opts.method || 'GET',
-    headers: {
-      Authorization: `Bearer ${env.NOTION_API_KEY}`,
-      'Notion-Version': '2022-06-28',
-      'Content-Type': 'application/json',
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (!res.ok) throw new Error(`Notion ${path}: ${res.status} ${await res.text().then(t => t.slice(0, 200))}`);
-  return res.json() as Promise<T>;
+  const method = opts.method || 'GET';
+  const body = opts.body ? JSON.stringify(opts.body) : undefined;
+
+  const attempt = async (): Promise<T> => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), NOTION_TIMEOUT_MS);
+    try {
+      const res = await fetch(`https://api.notion.com/v1${path}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${env.NOTION_API_KEY}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body,
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const text = (await res.text()).slice(0, 200);
+        const err: Error & { status?: number } = new Error(`Notion ${path}: ${res.status} ${text}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res.json() as Promise<T>;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    return await attempt();
+  } catch (e) {
+    // 5xx는 1회 재시도. 4xx/timeout/abort 등은 즉시 실패.
+    const status = (e as { status?: number }).status;
+    if (status && status >= 500 && status < 600) {
+      await new Promise(r => setTimeout(r, 500));
+      return attempt();
+    }
+    throw e;
+  }
 }
 
 async function queryDb(): Promise<NotionPage[]> {
   const all: NotionPage[] = [];
   let cursor: string | undefined;
   do {
-    const data: any = await notionFetch(`/databases/${MANUSCRIPT_DB_ID}/query`, {
-      method: 'POST',
-      body: { page_size: 100, start_cursor: cursor },
-    });
+    const data = await notionFetch<{ results: NotionPage[]; has_more: boolean; next_cursor: string | null }>(
+      `/databases/${MANUSCRIPT_DB_ID}/query`,
+      { method: 'POST', body: { page_size: 100, start_cursor: cursor } },
+    );
     all.push(...data.results);
-    cursor = data.has_more ? data.next_cursor : undefined;
+    cursor = data.has_more ? data.next_cursor || undefined : undefined;
   } while (cursor);
   return all;
 }
 
-function getTitle(page: NotionPage): string {
-  const titleProp = Object.values(page.properties).find((p: any) => p?.type === 'title') as any;
-  return titleProp?.title?.[0]?.plain_text || '(제목 없음)';
-}
+// ─────────────────────────────────────────────
+// Notion property getter — type별 location 분기
+// ─────────────────────────────────────────────
 
-function getText(page: NotionPage, propName: string): string | null {
-  const p = page.properties[propName];
+function getText(page: NotionPage, name: string): string | null {
+  const p = page.properties[name];
   if (!p) return null;
   if (p.type === 'rich_text') return p.rich_text?.[0]?.plain_text || null;
   if (p.type === 'title') return p.title?.[0]?.plain_text || null;
   return null;
 }
 
-function getSelect(page: NotionPage, propName: string): string | null {
-  const p = page.properties[propName];
-  if (!p) return null;
-  if (p.type === 'select') return p.select?.name || null;
-  if (p.type === 'status') return p.status?.name || null;
+function getSelect(page: NotionPage, name: string): string | null {
+  const p = page.properties[name];
+  if (p?.type === 'select') return p.select?.name || null;
+  if (p?.type === 'status') return p.status?.name || null;
   return null;
 }
 
-function getNumber(page: NotionPage, propName: string): number | null {
-  const p = page.properties[propName];
+function getNumber(page: NotionPage, name: string): number | null {
+  const p = page.properties[name];
   return p?.type === 'number' ? p.number : null;
 }
 
-function getDate(page: NotionPage, propName: string): Date | null {
-  const p = page.properties[propName];
-  if (p?.type !== 'date' || !p.date?.start) return null;
-  return new Date(p.date.start);
+function getDate(page: NotionPage, name: string): Date | null {
+  const p = page.properties[name];
+  return p?.type === 'date' && p.date?.start ? new Date(p.date.start) : null;
 }
 
-function getUrl(page: NotionPage, propName: string): string | null {
-  const p = page.properties[propName];
+function getUrl(page: NotionPage, name: string): string | null {
+  const p = page.properties[name];
   return p?.type === 'url' ? p.url : null;
 }
 
-/** 메인 sync — 모든 노션 row를 DB로 upsert */
+function getTitle(page: NotionPage): string {
+  for (const p of Object.values(page.properties)) {
+    if (p?.type === 'title') return p.title?.[0]?.plain_text || '(제목 없음)';
+  }
+  return '(제목 없음)';
+}
+
+/** 노션 row → DB upsert payload */
+function rowToData(row: NotionPage, syncStartedAt: Date) {
+  return {
+    notionUrl: row.url,
+    title: getTitle(row),
+    stage: getSelect(row, '단계') || '작성',
+    whoseTurn: getSelect(row, '차례'),
+    firstAuthors: getText(row, '1저자 학생'),
+    piRole: getSelect(row, 'PI 역할'),
+    currentJournal: getText(row, '현재/타겟 저널'),
+    impactFactor: getNumber(row, 'Impact Factor'),
+    attempts: getNumber(row, '시도 횟수') || 1,
+    rejectHistory: getText(row, '리젝 이력'),
+    manuscriptNum: getText(row, 'Manuscript ID'),
+    submittedAt: getDate(row, '제출일'),
+    revisionDueAt: getDate(row, '리비전 마감'),
+    publishedAt: getDate(row, '게재일'),
+    doi: getUrl(row, 'DOI'),
+    manuscriptPageUrl: getUrl(row, '노션 페이지'),
+    lastActivityAt: getDate(row, '마지막 활동') || new Date(row.last_edited_time),
+    lastActivityType: getText(row, '마지막 활동 종류'),
+    memo: getText(row, '메모'),
+    notionLastEditedAt: new Date(row.last_edited_time),
+    archived: false as const,
+    syncedAt: syncStartedAt,
+  };
+}
+
+/** 한 row를 upsert. 실패는 (errors++) 호출자가 집계. */
+async function upsertRow(row: NotionPage, syncStartedAt: Date): Promise<void> {
+  if (row.archived) return;  // 노션 trash row 스킵
+  const data = rowToData(row, syncStartedAt);
+  await prisma.manuscript.upsert({
+    where: { id: row.id },
+    create: { id: row.id, ...data },
+    update: data,
+  });
+}
+
+/** N개씩 동시 처리 — Promise.allSettled로 개별 실패 격리 */
+async function runConcurrent<T extends { id: string }>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<{ ok: number; errors: number }> {
+  let ok = 0, errors = 0;
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(fn));
+    settled.forEach((r, j) => {
+      if (r.status === 'fulfilled') { ok++; return; }
+      errors++;
+      const reason = (r.reason as Error)?.message?.slice(0, 100) || String(r.reason);
+      console.error(`[manuscript-sync] FAILED ${batch[j].id}: ${reason}`);
+    });
+  }
+  return { ok, errors };
+}
+
+/** 메인 sync — 모든 노션 row를 DB로 upsert (concurrency 5) */
 export async function syncManuscripts(): Promise<{ total: number; updated: number; archived: number; errors: number }> {
   const t0 = Date.now();
   const syncStartedAt = new Date();
@@ -97,72 +191,18 @@ export async function syncManuscripts(): Promise<{ total: number; updated: numbe
   let rows: NotionPage[];
   try {
     rows = await queryDb();
-  } catch (e: any) {
-    console.error('[manuscript-sync] DB query 실패:', e.message);
+  } catch (e) {
+    const msg = (e as Error).message?.slice(0, 100) || 'unknown';
+    console.error(`[manuscript-sync] FAILED queryDb: ${msg}`);
     return { total: 0, updated: 0, archived: 0, errors: 1 };
   }
   console.log(`[manuscript-sync] 노션 rows: ${rows.length}`);
 
-  let updated = 0, errors = 0;
-  for (const row of rows) {
-    try {
-      if (row.archived) continue;  // 노션에서 trash 처리된 row 스킵
-
-      const title = getTitle(row);
-      const stage = getSelect(row, '단계') || '작성';
-      const whoseTurn = getSelect(row, '차례');
-      const firstAuthors = getText(row, '1저자 학생');
-      const piRole = getSelect(row, 'PI 역할');
-      const currentJournal = getText(row, '현재/타겟 저널');
-      const impactFactor = getNumber(row, 'Impact Factor');
-      const attempts = getNumber(row, '시도 횟수') || 1;
-      const rejectHistory = getText(row, '리젝 이력');
-      const manuscriptNum = getText(row, 'Manuscript ID');
-      const submittedAt = getDate(row, '제출일');
-      const revisionDueAt = getDate(row, '리비전 마감');
-      const publishedAt = getDate(row, '게재일');
-      const doi = getUrl(row, 'DOI');
-      const manuscriptPageUrl = getUrl(row, '노션 페이지');
-      const lastActivityAt = getDate(row, '마지막 활동') || new Date(row.last_edited_time);
-      const lastActivityType = getText(row, '마지막 활동 종류');
-      const memo = getText(row, '메모');
-
-      const data = {
-        notionUrl: row.url,
-        title,
-        stage,
-        whoseTurn,
-        firstAuthors,
-        piRole,
-        currentJournal,
-        impactFactor,
-        attempts,
-        rejectHistory,
-        manuscriptNum,
-        submittedAt,
-        revisionDueAt,
-        publishedAt,
-        doi,
-        manuscriptPageUrl,
-        lastActivityAt,
-        lastActivityType,
-        memo,
-        notionLastEditedAt: new Date(row.last_edited_time),
-        archived: false,
-        syncedAt: syncStartedAt,
-      };
-
-      await prisma.manuscript.upsert({
-        where: { id: row.id },
-        create: { id: row.id, ...data },
-        update: data,
-      });
-      updated++;
-    } catch (err: any) {
-      errors++;
-      console.error(`[manuscript-sync] FAILED ${row.id}:`, err.message?.slice(0, 100));
-    }
-  }
+  const { ok: updated, errors } = await runConcurrent(
+    rows,
+    NOTION_CONCURRENCY,
+    row => upsertRow(row, syncStartedAt),
+  );
 
   // Stale cleanup — 이번 sync에서 업데이트 안 된 row는 노션에서 삭제됐다고 간주 → archived
   const archiveResult = await prisma.manuscript.updateMany({
@@ -178,7 +218,7 @@ export async function syncManuscripts(): Promise<{ total: number; updated: numbe
 /** Notion property 직접 patch — Gmail monitor 등이 호출 */
 export async function patchManuscriptProperty(
   manuscriptId: string,
-  properties: Record<string, any>,
+  properties: Record<string, unknown>,
 ): Promise<boolean> {
   try {
     await notionFetch(`/pages/${manuscriptId}`, {
@@ -186,8 +226,9 @@ export async function patchManuscriptProperty(
       body: { properties },
     });
     return true;
-  } catch (e: any) {
-    console.warn(`[manuscript-sync] property patch 실패 ${manuscriptId}:`, e.message?.slice(0, 80));
+  } catch (e) {
+    const msg = (e as Error).message?.slice(0, 100) || 'unknown';
+    console.warn(`[manuscript-sync] FAILED ${manuscriptId}: ${msg}`);
     return false;
   }
 }
@@ -218,11 +259,10 @@ export async function getPublishedKpi() {
   // 1저자 학생 unique count
   const firstAuthorSet = new Set<string>();
   for (const m of corresponding) {
-    if (m.firstAuthors) {
-      for (const name of m.firstAuthors.split(',')) {
-        const n = name.trim();
-        if (n) firstAuthorSet.add(n);
-      }
+    if (!m.firstAuthors) continue;
+    for (const name of m.firstAuthors.split(',')) {
+      const n = name.trim();
+      if (n) firstAuthorSet.add(n);
     }
   }
 

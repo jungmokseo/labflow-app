@@ -26,14 +26,14 @@ const CATEGORIES = [
 ];
 
 const CATEGORY_BADGE: Record<string, string> = {
-  insight: 'bg-indigo-100 text-indigo-700',
-  person: 'bg-blue-100 text-blue-700',
-  project: 'bg-green-100 text-green-700',
-  research_trend: 'bg-purple-100 text-purple-700',
-  meeting_thread: 'bg-amber-100 text-amber-700',
-  experiment: 'bg-rose-100 text-rose-700',
-  collaboration: 'bg-cyan-100 text-cyan-700',
-  general: 'bg-gray-100 text-gray-600',
+  insight: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300',
+  person: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+  project: 'bg-green-500/15 text-green-700 dark:text-green-300',
+  research_trend: 'bg-purple-500/15 text-purple-700 dark:text-purple-300',
+  meeting_thread: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  experiment: 'bg-rose-500/15 text-rose-700 dark:text-rose-300',
+  collaboration: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300',
+  general: 'bg-gray-500/15 text-gray-700 dark:text-gray-300',
 };
 
 function timeAgo(dateStr: string): string {
@@ -49,7 +49,7 @@ function timeAgo(dateStr: string): string {
 
 function CategoryBadge({ category }: { category: string }) {
   const label = CATEGORIES.find(c => c.value === category)?.label ?? category;
-  const cls = CATEGORY_BADGE[category] ?? 'bg-gray-100 text-gray-600';
+  const cls = CATEGORY_BADGE[category] ?? 'bg-gray-500/15 text-gray-700 dark:text-gray-300';
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${cls}`}>
       {label}
@@ -736,7 +736,7 @@ export default function WikiPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(detail.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg transition-colors flex-shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 rounded-lg transition-colors flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">삭제</span>
