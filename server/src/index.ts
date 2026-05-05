@@ -148,18 +148,24 @@ async function start() {
         setInterval(runSyncAndCheck, 60 * 60 * 1000);  // 매시간
         console.log('[worksheet-cron] 워크시트 sync + reminder ack 폴링 예약됨 (1시간 주기)');
 
-        // 논문 파이프라인 sync + Gmail 자동 감지 — 매시간
+        // 논문 파이프라인:
+        // - sync (노션→DB): 매시간 (UI 갱신 빠르게)
+        // - Gmail 자동 감지: 하루 1회 + incremental (last receivedAt 이후만 — AI 미사용이지만 사용자 선호 따름)
         const runManuscriptSync = async () => {
           try { await syncManuscripts(); }
           catch (e: any) { console.error('[manuscript-cron] sync 실패:', e.message); }
+        };
+        const runManuscriptMail = async () => {
           try {
-            const r = await monitorManuscriptMail({ userId: '', daysAgo: 7 });  // 7일치만 (cron 주기 충분)
+            const r = await monitorManuscriptMail({ userId: '' });  // daysAgo 미지정 → incremental
             if (r.scanned > 0) console.log(`[manuscript-cron] mail scan: ${r.scanned} (matched ${r.matched})`);
           } catch (e: any) { console.error('[manuscript-cron] mail monitor 실패:', e.message); }
         };
-        setTimeout(runManuscriptSync, 90000);  // 시작 90초 후 1회 (worksheet 다음)
-        setInterval(runManuscriptSync, 60 * 60 * 1000);  // 매시간
-        console.log('[manuscript-cron] 논문 sync + Gmail 자동 감지 예약됨 (1시간 주기)');
+        setTimeout(runManuscriptSync, 90000);
+        setInterval(runManuscriptSync, 60 * 60 * 1000);  // 매시간 sync
+        setTimeout(runManuscriptMail, 120000);  // 시작 2분 후 1회
+        setInterval(runManuscriptMail, 24 * 60 * 60 * 1000);  // 하루 1회 Gmail 감지
+        console.log('[manuscript-cron] 노션 sync 1h + Gmail 감지 24h (incremental) 예약됨');
       }
 
       // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)

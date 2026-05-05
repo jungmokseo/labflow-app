@@ -83,19 +83,26 @@ function useTheme() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    setDark(document.documentElement.getAttribute('data-theme') === 'dark');
+    const sync = () => setDark(document.documentElement.getAttribute('data-theme') === 'dark');
+    sync();
+    // ThemeSync가 attribute 변경 시 동기화. MutationObserver로 다른 source의 변경도 감지.
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => obs.disconnect();
   }, []);
 
   const toggle = useCallback(() => {
     const next = !dark;
     setDark(next);
-    if (next) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      localStorage.setItem('theme', 'light');
-    }
+    try {
+      if (next) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme', 'light');
+      }
+    } catch {}
   }, [dark]);
 
   return { dark, toggle };

@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* native form/scrollbar/autofill 색깔이 light/dark 자동 적응 */
+:root { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+
 /* ── Design System: Structured Canvas ── */
 :root {
   /* Primary — deeper blue for readability */

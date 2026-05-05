@@ -10,6 +10,7 @@ import { AuthInit } from '@/components/AuthInit';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import { DataPrefetch } from '@/components/DataPrefetch';
 import { ToastProvider } from '@/components/Toast';
+import { ThemeSync } from '@/components/ThemeSync';
 import { SWRProvider } from '@/lib/swr-provider';
 
 // 첫 페인트 후에야 필요한 컴포넌트들 — dynamic + ssr:false로 초기 JS payload 축소
@@ -50,19 +51,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
-        {/* Theme initializer — prevents flash of wrong theme */}
+        {/* Theme initializer — prevents flash of wrong theme. try/catch로 storage 접근 실패 보호. */}
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
-            var t = localStorage.getItem('theme');
-            if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-              document.documentElement.setAttribute('data-theme', 'dark');
-            }
+            try {
+              var t = null;
+              try { t = localStorage.getItem('theme'); } catch (e) {}
+              var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+              if (t === 'dark' || (!t && sysDark)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+              } else {
+                document.documentElement.removeAttribute('data-theme');
+              }
+            } catch (e) {}
           })();
         `}} />
       </head>
       <body className="min-h-screen bg-bg text-text-main antialiased">
         <SWRProvider>
           <ToastProvider>
+            <ThemeSync />
             <KeyboardShortcuts />
             <AuthInit />
             <ServiceWorkerRegister />

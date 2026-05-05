@@ -649,6 +649,32 @@ export async function changeManuscriptStage(manuscriptId: string, stage: Manuscr
   );
 }
 
+// 종합 편집 — 모든 필드 갱신 (DB + 노션 양쪽)
+export type ManuscriptUpdatePayload = Partial<{
+  title: string;
+  stage: Manuscript['stage'];
+  whoseTurn: 'PI' | '학생' | '저널' | null;
+  firstAuthors: string | null;
+  piRole: '교신' | '공저' | null;
+  currentJournal: string | null;
+  impactFactor: number | null;
+  attempts: number | null;
+  rejectHistory: string | null;
+  manuscriptNum: string | null;
+  submittedAt: string | null;       // YYYY-MM-DD
+  revisionDueAt: string | null;
+  publishedAt: string | null;
+  doi: string | null;
+  memo: string | null;
+}>;
+
+export async function updateManuscript(id: string, payload: ManuscriptUpdatePayload) {
+  return apiFetch<{ ok: boolean; notionUpdated: boolean }>(
+    `/api/manuscripts/${id}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
 export async function checkWorksheetAcks() {
   return apiFetch<{ checked: number; acked: number; errors: number }>(
     `/api/worksheet-projects/check-acks`,

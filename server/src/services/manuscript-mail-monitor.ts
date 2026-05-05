@@ -141,9 +141,33 @@ interface GmailMsg {
   receivedAt: Date;
 }
 
+/** 마지막 처리한 메일 시각 — incremental 검색에 사용 (테이블에서 max(received_at) 조회) */
+async function getLastProcessedAt(): Promise<Date | null> {
+  const last = await prisma.manuscriptMailEvent.findFirst({
+    orderBy: { receivedAt: 'desc' },
+    select: { receivedAt: true },
+  });
+  return last?.receivedAt || null;
+}
+
+/** 본문에서 논문 제목 추출 — ManuscriptCentral/Editorial Manager 표준 헤더 */
+function extractTitleFromBody(body: string): string | null {
+  // "Title: \"...\"" 또는 "TITLE: ..." 또는 "manuscript entitled \"...\""
+  const m1 = body.match(/(?:^|\n)\s*Title:\s*"([^"\n]+)"/i);
+  if (m1) return m1[1].trim();
+  const m2 = body.match(/(?:^|\n)\s*Title:\s*([^\n]+)/i);
+  if (m2) return m2[1].trim();
+  const m3 = body.match(/manuscript entitled "([^"]+)"/i);
+  if (m3) return m3[1].trim();
+  const m4 = body.match(/manuscript[,:]?\s*"([^"\n]{10,})"/i);
+  if (m4) return m4[1].trim();
+  return null;
+}
+
 async function fetchGmailMessages(
   userId: string,
   daysAgo: number = 90,
+  sinceDate: Date | null = null,
 ): Promise<GmailMsg[]> {
   const gmailToken = await prisma.gmailToken.findFirst({
     where: { userId },
@@ -178,7 +202,10 @@ async function fetchGmailMessages(
   });
 
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-  const afterEpoch = Math.floor((Date.now() - daysAgo * 86400000) / 1000);
+  // sinceDate 우선 사용 (incremental). 없으면 daysAgo fallback.
+  const afterEpoch = sinceDate
+    ? Math.floor(sinceDate.getTime() / 1000)
+    : Math.floor((Date.now() - daysAgo * 86400000) / 1000);
 
   // 검색 쿼리: 저널 시스템 sender 또는 manuscript 키워드
   const senderQuery = JOURNAL_SENDERS.map(s => `from:${s}`).join(' OR ');
@@ -290,11 +317,23 @@ async function processOneMessage(msg: GmailMsg): Promise<{ matched: boolean; eve
     },
   });
 
+  // 본문에서 논문 제목 추출 (있으면 메모/제목 보강에 활용)
+  const extractedTitle = extractTitleFromBody(msg.body);
+
   // 매칭됐으면 노션 patch
   if (manuscriptId) {
     const patchProps: Record<string, any> = {
       "마지막 활동": { date: { start: msg.receivedAt.toISOString().slice(0, 10) } },
     };
+
+    // 메모에 추출된 제목 자동 보강 (이미 있으면 skip)
+    if (extractedTitle) {
+      const ms = await prisma.manuscript.findUnique({ where: { id: manuscriptId }, select: { memo: true, title: true } });
+      if (ms && (!ms.memo || !ms.memo.includes(extractedTitle))) {
+        const newMemo = ms.memo ? `${ms.memo}\n\nTITLE: ${extractedTitle}` : `TITLE: ${extractedTitle}`;
+        patchProps["메모"] = { rich_text: [{ text: { content: newMemo.slice(0, 1900) } }] };
+      }
+    }
     let stage: string | null = null;
     let whoseTurn: string | null = null;
     let activityType = '';
@@ -339,8 +378,9 @@ async function processOneMessage(msg: GmailMsg): Promise<{ matched: boolean; eve
   return { matched: !!manuscriptId, eventType };
 }
 
-/** 메인 monitor — userId의 Gmail에서 최근 N일 검색 후 처리 */
-export async function monitorManuscriptMail(opts: { userId: string; daysAgo?: number } = { userId: '' }):
+/** 메인 monitor — userId의 Gmail에서 마지막 처리 시점 이후 메일만 처리 (incremental).
+ *  daysAgo 명시 시 그 기간 풀스캔 (수동 [Gmail] 버튼 / 첫 백필 용). */
+export async function monitorManuscriptMail(opts: { userId: string; daysAgo?: number; force?: boolean } = { userId: '' }):
   Promise<{ scanned: number; matched: number; unmatched: number; events: Record<string, number> }> {
   const t0 = Date.now();
   console.log('[mail-monitor] 시작');
@@ -351,7 +391,19 @@ export async function monitorManuscriptMail(opts: { userId: string; daysAgo?: nu
     return { scanned: 0, matched: 0, unmatched: 0, events: {} };
   }
 
-  const messages = await fetchGmailMessages(userId, opts.daysAgo ?? 90);
+  // incremental — 마지막 처리한 receivedAt 이후 메일만. 수동 트리거(daysAgo 명시)는 풀스캔.
+  let sinceDate: Date | null = null;
+  if (!opts.daysAgo) {
+    sinceDate = await getLastProcessedAt();
+    if (sinceDate) {
+      // 1시간 백트래킹 — 동시 도착 메일 누락 방지
+      sinceDate = new Date(sinceDate.getTime() - 60 * 60 * 1000);
+    }
+  }
+  const messages = await fetchGmailMessages(userId, opts.daysAgo ?? 30, sinceDate);
+  if (sinceDate) {
+    console.log(`[mail-monitor] incremental: ${sinceDate.toISOString()} 이후 ${messages.length}건`);
+  }
   let scanned = 0, matched = 0, unmatched = 0;
   const events: Record<string, number> = {};
 
