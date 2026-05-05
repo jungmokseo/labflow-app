@@ -1,0 +1,380 @@
+/**
+ * Gmail 자동 감지 — 논문 제출/리젝/리비전/억셉 이메일을 자동 분류해서 노션 manuscript에 반영.
+ *
+ * 흐름:
+ * 1. Gmail 검색 (저널 시스템 sender + manuscript 키워드)
+ * 2. 각 이메일에서 manuscript ID 추출 (nn-2026-XXX, MTBIO-D-26-XXX 등)
+ * 3. ManuscriptMailEvent 로그 (중복 처리 방지)
+ * 4. 매칭되는 Manuscript row가 있으면 노션 property 자동 patch
+ *    - 제출 → 단계="심사 중", 차례="저널", 제출일 갱신
+ *    - 리젝 → 단계="대응 중", 차례="PI", 리젝 이력 추가, 시도 횟수 +1
+ *    - 리비전 → 단계="대응 중", 차례="학생", 리비전 마감일 추출
+ *    - 억셉 → 단계="억셉", 차례=null
+ * 5. 매칭 안 되면 unmatched 큐로 → 사용자가 수동 매칭
+ */
+import { PrismaClient } from '@prisma/client';
+import { google } from 'googleapis';
+import { env } from '../config/env.js';
+import { encryptToken, decryptToken, isEncrypted } from '../utils/crypto.js';
+import { patchManuscriptProperty } from './manuscript-sync.js';
+
+function safeDecrypt(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return isEncrypted(value) ? decryptToken(value) : value;
+}
+
+const prisma = new PrismaClient();
+
+// 논문 시스템 발신자 (다 cover)
+const JOURNAL_SENDERS = [
+  'onbehalfof@manuscriptcentral.com',  // ACS, Wiley
+  'em@editorialmanager.com',            // Elsevier (Materials Today, Biomaterials, etc)
+  'no-reply@atyponrex.com',             // Wiley submission system
+  '@wiley.com',
+  '@elsevier.com',
+  '@aaas.org',
+  '@nature.com',
+  '@science.org',
+  '@aip.org',
+  '@iop.org',
+  '@rsc.org',
+  '@acs.org',
+  'no-reply@submissions.elsevier.com',
+];
+
+interface ManuscriptIdMatch {
+  id: string;
+  journal: string;
+}
+
+// 추출 패턴: ID prefix → 저널
+const ID_PATTERNS: Array<{ regex: RegExp; journal: string }> = [
+  { regex: /\b(nn-\d{4}-\d{5}[a-z]?(?:\.R\d)?)\b/i, journal: 'ACS Nano' },
+  { regex: /\b(am-\d{4}-\d{6}(?:\.R\d)?)\b/i, journal: 'ACS Applied Materials & Interfaces' },
+  { regex: /\b(nl-\d{4}-\d{6}(?:\.R\d)?)\b/i, journal: 'Nano Letters' },
+  { regex: /\b(MTBIO-D-\d{2}-\d{5})\b/i, journal: 'Materials Today Bio' },
+  { regex: /\b(BIOACTMAT-D-\d{2}-\d{5})\b/i, journal: 'Bioactive Materials' },
+  { regex: /\b(NANOTODAY-D-\d{2}-\d{5})\b/i, journal: 'Nano Today' },
+  { regex: /\b(NCOMMS-\d{2}-\d{6})\b/i, journal: 'Nature Communications' },
+  { regex: /\b(aeg\d{4})\b/i, journal: 'Science Advances' },
+  { regex: /\b(jbmt\d+(?:R\d)?)\b/i, journal: 'Biomaterials' },
+  { regex: /\b(TB-ART-\d{2}-\d{4}-\d{6})\b/i, journal: 'Journal of Materials Chemistry B' },
+];
+
+function extractManuscriptId(text: string): ManuscriptIdMatch | null {
+  for (const { regex, journal } of ID_PATTERNS) {
+    const m = text.match(regex);
+    if (m) return { id: m[1], journal };
+  }
+  return null;
+}
+
+// 이벤트 타입 분류 — subject + snippet + body 첫 부분
+function classifyEvent(subject: string, snippet: string): 'submitted' | 'decision' | 'reject' | 'revision_request' | 'accept' | null {
+  const s = (subject + ' ' + snippet).toLowerCase();
+
+  // 억셉
+  if (/\b(accept(ed|ance)?)\b/.test(s) && !/(rejection|reject)/.test(s)) {
+    if (/your manuscript has been accepted|i am pleased to accept|delighted to accept/.test(s)) return 'accept';
+  }
+
+  // 리비전 (reject보다 먼저 — "decision" 메일이 minor revision일 수 있음)
+  if (/revision (of|due|required|requested)/.test(s)) return 'revision_request';
+  if (/major revision|minor revision|please revise|revisions are required/.test(s)) return 'revision_request';
+  if (/^revision /.test(s)) return 'revision_request';
+
+  // 리젝
+  if (/regret|reject|not (suitable|accept)|unable to (accept|publish)|decline|not consider/.test(s)) return 'reject';
+
+  // 제출
+  if (/(thank you for submitting|submission (started|received|successful)|manuscript submitted|successfully submitted)/.test(s)) return 'submitted';
+
+  // 일반 decision (reject/revision 둘 다 아닐 때) — 사용자 검토 필요
+  if (/^decision on|decision on (your|submission)|decision on manuscript/.test(s)) return 'decision';
+
+  return null;
+}
+
+// 리비전 due date 추출 (본문에서)
+function extractRevisionDueDate(body: string): Date | null {
+  // 패턴: "due by Mar 15, 2026" / "before 2026-04-15" / "30 days from"
+  const m1 = body.match(/(?:due|deadline|by)\s+(?:on\s+)?([A-Z][a-z]+\s+\d{1,2}(?:,?\s+\d{4})?)/);
+  if (m1) {
+    const d = new Date(m1[1]);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const m2 = body.match(/(\d{4}-\d{2}-\d{2})/);
+  if (m2) {
+    const d = new Date(m2[1]);
+    if (!isNaN(d.getTime())) return d;
+  }
+  // "X days" → 메일 받은 날 + X일
+  const m3 = body.match(/(\d+)\s+days/);
+  if (m3) {
+    const d = new Date(Date.now() + Number(m3[1]) * 86400000);
+    return d;
+  }
+  return null;
+}
+
+interface GmailMsg {
+  id: string;
+  threadId: string;
+  subject: string;
+  snippet: string;
+  body: string;
+  fromAddr: string;
+  receivedAt: Date;
+}
+
+async function fetchGmailMessages(
+  userId: string,
+  daysAgo: number = 90,
+): Promise<GmailMsg[]> {
+  const gmailToken = await prisma.gmailToken.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!gmailToken) {
+    console.warn('[mail-monitor] Gmail 토큰 없음 — userId:', userId);
+    return [];
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI,
+  );
+  oauth2Client.setCredentials({
+    access_token: safeDecrypt(gmailToken.accessToken),
+    refresh_token: safeDecrypt(gmailToken.refreshToken),
+    expiry_date: gmailToken.expiresAt?.getTime(),
+  });
+  oauth2Client.on('tokens', async (tokens) => {
+    try {
+      await prisma.gmailToken.update({
+        where: { id: gmailToken.id },
+        data: {
+          accessToken: encryptToken(tokens.access_token!),
+          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+          ...(tokens.refresh_token ? { refreshToken: encryptToken(tokens.refresh_token) } : {}),
+        },
+      });
+    } catch (e) { console.error('Gmail 토큰 갱신 실패:', e); }
+  });
+
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const afterEpoch = Math.floor((Date.now() - daysAgo * 86400000) / 1000);
+
+  // 검색 쿼리: 저널 시스템 sender 또는 manuscript 키워드
+  const senderQuery = JOURNAL_SENDERS.map(s => `from:${s}`).join(' OR ');
+  const subjectKeywords = '(manuscript OR submission OR "decision on" OR revision OR rebuttal OR accepted)';
+  const q = `after:${afterEpoch} (${senderQuery}) ${subjectKeywords} -from:me`;
+
+  const allIds: Array<{ id: string; threadId: string }> = [];
+  let pageToken: string | undefined;
+  for (let p = 0; p < 5; p++) {
+    const list = await gmail.users.messages.list({ userId: 'me', maxResults: 100, q, pageToken });
+    const msgs = list.data.messages || [];
+    allIds.push(...msgs.map(m => ({ id: m.id!, threadId: m.threadId! })));
+    pageToken = list.data.nextPageToken || undefined;
+    if (!pageToken) break;
+  }
+  console.log(`[mail-monitor] Gmail 검색: ${allIds.length}개 메시지`);
+
+  // 상세 (full body) 가져오기 — concurrency 5
+  const result: GmailMsg[] = [];
+  const concurrency = 5;
+  for (let i = 0; i < allIds.length; i += concurrency) {
+    const batch = allIds.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(m =>
+      gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' }),
+    ));
+    for (const r of settled) {
+      if (r.status !== 'fulfilled') continue;
+      const data = r.value.data;
+      const headers = data.payload?.headers || [];
+      const get = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+      // body 추출 (text/plain part)
+      function extractBody(parts: any[]): string {
+        for (const p of parts) {
+          if (p.mimeType === 'text/plain' && p.body?.data) {
+            return Buffer.from(p.body.data, 'base64').toString('utf-8');
+          }
+          if (p.parts) {
+            const r = extractBody(p.parts);
+            if (r) return r;
+          }
+        }
+        return '';
+      }
+      let body = '';
+      if (data.payload?.body?.data) {
+        body = Buffer.from(data.payload.body.data, 'base64').toString('utf-8');
+      } else if (data.payload?.parts) {
+        body = extractBody(data.payload.parts);
+      }
+      result.push({
+        id: data.id!,
+        threadId: data.threadId!,
+        subject: get('Subject'),
+        snippet: data.snippet || '',
+        body: body.slice(0, 5000),  // 본문 5KB까지만
+        fromAddr: get('From'),
+        receivedAt: new Date(Number(data.internalDate) || Date.now()),
+      });
+    }
+  }
+  return result;
+}
+
+/** 메일 한 통을 처리 — 추출/분류/매칭/노션 patch */
+async function processOneMessage(msg: GmailMsg): Promise<{ matched: boolean; eventType: string | null }> {
+  // 이미 처리된 메일?
+  const existing = await prisma.manuscriptMailEvent.findUnique({
+    where: { gmailMessageId: msg.id },
+  });
+  if (existing) return { matched: !!existing.manuscriptId, eventType: existing.eventType };
+
+  const fullText = msg.subject + '\n' + msg.snippet + '\n' + msg.body;
+  const idMatch = extractManuscriptId(fullText);
+  const eventType = classifyEvent(msg.subject, msg.snippet);
+  if (!eventType) return { matched: false, eventType: null };
+
+  // manuscript 매칭 시도
+  let manuscriptId: string | null = null;
+  if (idMatch) {
+    // 정확히 매치 (R1 등 suffix 제외하고도 시도)
+    const baseId = idMatch.id.replace(/\.R\d+$/, '');
+    const manuscript = await prisma.manuscript.findFirst({
+      where: {
+        archived: false,
+        OR: [
+          { manuscriptNum: idMatch.id },
+          { manuscriptNum: baseId },
+        ],
+      },
+    });
+    if (manuscript) manuscriptId = manuscript.id;
+  }
+
+  // 이벤트 로그 저장
+  const evt = await prisma.manuscriptMailEvent.create({
+    data: {
+      gmailMessageId: msg.id,
+      threadId: msg.threadId,
+      manuscriptId,
+      manuscriptNum: idMatch?.id || null,
+      eventType,
+      journal: idMatch?.journal || null,
+      subject: msg.subject.slice(0, 200),
+      fromAddr: msg.fromAddr.slice(0, 100),
+      receivedAt: msg.receivedAt,
+      revisionDueAt: eventType === 'revision_request' ? extractRevisionDueDate(msg.body) : null,
+      rawSnippet: msg.snippet.slice(0, 500),
+      applied: false,
+    },
+  });
+
+  // 매칭됐으면 노션 patch
+  if (manuscriptId) {
+    const patchProps: Record<string, any> = {
+      "마지막 활동": { date: { start: msg.receivedAt.toISOString().slice(0, 10) } },
+    };
+    let stage: string | null = null;
+    let whoseTurn: string | null = null;
+    let activityType = '';
+    if (eventType === 'submitted') {
+      stage = '심사 중';
+      whoseTurn = '저널';
+      activityType = `${idMatch?.journal || ''} 제출됨`;
+      patchProps["제출일"] = { date: { start: msg.receivedAt.toISOString().slice(0, 10) } };
+    } else if (eventType === 'reject') {
+      stage = '대응 중';
+      whoseTurn = 'PI';
+      activityType = `${idMatch?.journal || ''} reject`;
+    } else if (eventType === 'revision_request') {
+      stage = '대응 중';
+      whoseTurn = '학생';
+      activityType = `${idMatch?.journal || ''} 리비전 요청`;
+      if (evt.revisionDueAt) {
+        patchProps["리비전 마감"] = { date: { start: evt.revisionDueAt.toISOString().slice(0, 10) } };
+      }
+    } else if (eventType === 'accept') {
+      stage = '억셉';
+      whoseTurn = null;
+      activityType = `${idMatch?.journal || ''} 억셉`;
+    } else if (eventType === 'decision') {
+      // PI 검토 필요
+      whoseTurn = 'PI';
+      activityType = `${idMatch?.journal || ''} decision (검토 필요)`;
+    }
+    if (stage) patchProps["단계"] = { select: { name: stage } };
+    if (whoseTurn) patchProps["차례"] = { select: { name: whoseTurn } };
+    patchProps["마지막 활동 종류"] = { rich_text: [{ text: { content: activityType.slice(0, 200) } }] };
+
+    const ok = await patchManuscriptProperty(manuscriptId, patchProps);
+    if (ok) {
+      await prisma.manuscriptMailEvent.update({
+        where: { id: evt.id },
+        data: { applied: true },
+      });
+    }
+  }
+
+  return { matched: !!manuscriptId, eventType };
+}
+
+/** 메인 monitor — userId의 Gmail에서 최근 N일 검색 후 처리 */
+export async function monitorManuscriptMail(opts: { userId: string; daysAgo?: number } = { userId: '' }):
+  Promise<{ scanned: number; matched: number; unmatched: number; events: Record<string, number> }> {
+  const t0 = Date.now();
+  console.log('[mail-monitor] 시작');
+
+  const userId = opts.userId || (await prisma.user.findFirst({ where: { email: 'jungmok.seo@gmail.com' } }))?.id;
+  if (!userId) {
+    console.warn('[mail-monitor] userId 없음');
+    return { scanned: 0, matched: 0, unmatched: 0, events: {} };
+  }
+
+  const messages = await fetchGmailMessages(userId, opts.daysAgo ?? 90);
+  let scanned = 0, matched = 0, unmatched = 0;
+  const events: Record<string, number> = {};
+
+  for (const msg of messages) {
+    try {
+      const r = await processOneMessage(msg);
+      scanned++;
+      if (r.eventType) {
+        events[r.eventType] = (events[r.eventType] || 0) + 1;
+        if (r.matched) matched++;
+        else unmatched++;
+      }
+    } catch (e: any) {
+      console.warn(`[mail-monitor] 메일 처리 실패 ${msg.id}:`, e.message?.slice(0, 80));
+    }
+  }
+
+  const elapsed = Math.round((Date.now() - t0) / 1000);
+  console.log(`[mail-monitor] 완료: 스캔 ${scanned}, 매칭 ${matched}, 미매칭 ${unmatched}, 이벤트 ${JSON.stringify(events)}, ${elapsed}s`);
+  return { scanned, matched, unmatched, events };
+}
+
+/** 미매칭 이벤트 목록 — UI에서 사용자가 수동 매칭 */
+export async function getUnmatchedEvents() {
+  return prisma.manuscriptMailEvent.findMany({
+    where: { manuscriptId: null, applied: false },
+    orderBy: { receivedAt: 'desc' },
+    take: 50,
+  });
+}
+
+/** 미매칭 이벤트를 manuscript에 수동 매칭 */
+export async function linkUnmatchedEvent(eventId: string, manuscriptId: string) {
+  await prisma.manuscriptMailEvent.update({
+    where: { id: eventId },
+    data: { manuscriptId },
+  });
+  // 자동 적용은 사용자가 별도로 트리거. (또는 cron이 다음에 처리)
+  return { ok: true };
+}

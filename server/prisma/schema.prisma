@@ -777,6 +777,73 @@ model WorksheetProject {
   @@map("worksheet_projects")
 }
 
+// ── 논문 파이프라인 (Notion 📝 BLISS Lab 논문) ────────────
+// 진행 중(작성/심사/대응) + 게재 완료 통합 캐시. Notion이 source of truth, 매시간 sync.
+// Gmail 자동 감지로 제출/리젝/리비전 단계 자동 갱신.
+model Manuscript {
+  id                String   @id  // Notion page ID
+  notionUrl         String   @map("notion_url")
+  title             String
+
+  // 핵심 단계 + 차례 (워크시트와 동일 패턴)
+  stage             String   // "작성" | "심사 중" | "대응 중" | "억셉" | "게재 완료"
+  whoseTurn         String?  @map("whose_turn")  // "PI" | "학생" | "저널" | null
+
+  firstAuthors      String?  @map("first_authors")     // 콤마 구분 학생 이름
+  piRole            String?  @map("pi_role")           // "교신" | "공저"
+  currentJournal    String?  @map("current_journal")   // 현재/타겟 저널 또는 게재 저널
+  impactFactor      Float?   @map("impact_factor")
+  attempts          Int?     @default(1)               // 저널 시도 횟수
+  rejectHistory     String?  @map("reject_history")    // "Nano Today→Small" trail
+
+  manuscriptNum     String?  @map("manuscript_num")    // Gmail 자동 매칭 키 (nn-2026-07790j 등)
+
+  submittedAt       DateTime? @map("submitted_at")
+  revisionDueAt     DateTime? @map("revision_due_at")
+  publishedAt       DateTime? @map("published_at")
+  doi               String?
+
+  manuscriptPageUrl String?  @map("manuscript_page_url")  // 노션의 별도 manuscript draft 페이지
+
+  lastActivityAt    DateTime @map("last_activity_at")
+  lastActivityType  String?  @map("last_activity_type")   // "제출됨"/"리젝"/"리비전 요청"/"억셉"
+  memo              String?
+
+  notionLastEditedAt DateTime @map("notion_last_edited_at")
+  syncedAt          DateTime @default(now()) @map("synced_at")
+  archived          Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([stage, lastActivityAt(sort: Desc)])
+  @@index([whoseTurn, lastActivityAt(sort: Desc)])
+  @@index([archived, publishedAt(sort: Desc)])
+  @@index([manuscriptNum])
+  @@map("manuscripts")
+}
+
+// Gmail 매뉴스크립트 이벤트 로그 — 중복 처리 방지
+model ManuscriptMailEvent {
+  id                String   @id @default(cuid())
+  gmailMessageId    String   @unique @map("gmail_message_id")
+  threadId          String?  @map("thread_id")
+  manuscriptId      String?  @map("manuscript_id")  // 매칭된 manuscript (없을 수도 — 미매칭 큐)
+  manuscriptNum     String?  @map("manuscript_num") // Gmail에서 추출한 ID
+  eventType         String   @map("event_type")     // "submitted"/"reject"/"revision_request"/"accept"/"decision"
+  journal           String?
+  subject           String?
+  fromAddr          String?  @map("from_addr")
+  receivedAt        DateTime @map("received_at")
+  revisionDueAt     DateTime? @map("revision_due_at")  // 리비전이면 due 추출
+  rawSnippet        String?  @map("raw_snippet")
+  applied           Boolean  @default(false)         // manuscript에 반영됐는지
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([manuscriptId, receivedAt(sort: Desc)])
+  @@index([applied, receivedAt(sort: Desc)])
+  @@map("manuscript_mail_events")
+}
+
 // worksheet_reminders는 paper_embeddings/wiki_embeddings 충돌로 raw SQL로 생성.
 // 위치: server/src/services/worksheet-reminder.ts ensureWorksheetRemindersTable().
 

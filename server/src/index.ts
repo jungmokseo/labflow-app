@@ -35,6 +35,9 @@ import { inboxSummaryRoutes } from './routes/inbox-summary.js';
 import { worksheetProjectRoutes } from './routes/worksheet-projects.js';
 import { syncWorksheetProjects } from './services/worksheet-sync.js';
 import { checkPendingReminders } from './services/worksheet-reminder.js';
+import { manuscriptRoutes } from './routes/manuscripts.js';
+import { syncManuscripts } from './services/manuscript-sync.js';
+import { monitorManuscriptMail } from './services/manuscript-mail-monitor.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -111,6 +114,7 @@ async function buildApp() {
     await app.register(labDataRoutes);
     await app.register(inboxSummaryRoutes);
     await app.register(worksheetProjectRoutes);
+    await app.register(manuscriptRoutes);
 
   return app;
 }
@@ -143,6 +147,19 @@ async function start() {
         setTimeout(runSyncAndCheck, 60000);  // 시작 60초 후 1회
         setInterval(runSyncAndCheck, 60 * 60 * 1000);  // 매시간
         console.log('[worksheet-cron] 워크시트 sync + reminder ack 폴링 예약됨 (1시간 주기)');
+
+        // 논문 파이프라인 sync + Gmail 자동 감지 — 매시간
+        const runManuscriptSync = async () => {
+          try { await syncManuscripts(); }
+          catch (e: any) { console.error('[manuscript-cron] sync 실패:', e.message); }
+          try {
+            const r = await monitorManuscriptMail({ userId: '', daysAgo: 7 });  // 7일치만 (cron 주기 충분)
+            if (r.scanned > 0) console.log(`[manuscript-cron] mail scan: ${r.scanned} (matched ${r.matched})`);
+          } catch (e: any) { console.error('[manuscript-cron] mail monitor 실패:', e.message); }
+        };
+        setTimeout(runManuscriptSync, 90000);  // 시작 90초 후 1회 (worksheet 다음)
+        setInterval(runManuscriptSync, 60 * 60 * 1000);  // 매시간
+        console.log('[manuscript-cron] 논문 sync + Gmail 자동 감지 예약됨 (1시간 주기)');
       }
 
       // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)

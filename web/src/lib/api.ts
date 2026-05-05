@@ -544,6 +544,111 @@ export async function switchWorksheetTurn(projectId: string, whoseTurn: 'PI' | '
   );
 }
 
+// ── 논문 파이프라인 (Manuscripts) ──────────────────────
+export interface Manuscript {
+  id: string;
+  notionUrl: string;
+  title: string;
+  stage: '작성' | '심사 중' | '대응 중' | '억셉' | '게재 완료';
+  whoseTurn: 'PI' | '학생' | '저널' | null;
+  firstAuthors: string | null;
+  piRole: '교신' | '공저' | null;
+  currentJournal: string | null;
+  impactFactor: number | null;
+  attempts: number | null;
+  rejectHistory: string | null;
+  manuscriptNum: string | null;
+  submittedAt: string | null;
+  revisionDueAt: string | null;
+  publishedAt: string | null;
+  doi: string | null;
+  manuscriptPageUrl: string | null;
+  lastActivityAt: string;
+  lastActivityType: string | null;
+  memo: string | null;
+}
+
+export interface ManuscriptCounts {
+  piTurn: number;
+  studentTurn: number;
+  journalTurn: number;
+  writing: number;
+  review: number;
+  responding: number;
+  accepted: number;
+  published: number;
+  revisionDueSoon: number;
+}
+
+export interface ManuscriptKpi {
+  total: number;
+  correspondingTotal: number;
+  correspondingThisYear: number;
+  coAuthorTotal: number;
+  avgImpactFactor: number;
+  uniqueFirstAuthors: number;
+}
+
+export async function getManuscripts() {
+  return apiFetch<{ items: Manuscript[]; counts: ManuscriptCounts }>('/api/manuscripts');
+}
+
+export async function getManuscriptKpi() {
+  return apiFetch<ManuscriptKpi>('/api/manuscripts/published-kpi');
+}
+
+export async function syncManuscripts() {
+  return apiFetch<{ ok: boolean; total: number; updated: number; archived: number; errors: number }>(
+    '/api/manuscripts/sync',
+    { method: 'POST' },
+  );
+}
+
+export async function scanManuscriptMail(daysAgo?: number) {
+  return apiFetch<{ ok: boolean; scanned: number; matched: number; unmatched: number; events: Record<string, number> }>(
+    '/api/manuscripts/scan-mail',
+    { method: 'POST', body: JSON.stringify(daysAgo ? { daysAgo } : {}) },
+  );
+}
+
+export interface ManuscriptMailEvent {
+  id: string;
+  gmailMessageId: string;
+  manuscriptNum: string | null;
+  eventType: string;
+  journal: string | null;
+  subject: string | null;
+  fromAddr: string | null;
+  receivedAt: string;
+  revisionDueAt: string | null;
+  rawSnippet: string | null;
+}
+
+export async function getUnmatchedManuscriptEvents() {
+  return apiFetch<{ items: ManuscriptMailEvent[] }>('/api/manuscripts/unmatched-events');
+}
+
+export async function linkManuscriptEvent(eventId: string, manuscriptId: string) {
+  return apiFetch<{ ok: boolean }>(
+    `/api/manuscripts/events/${eventId}/link`,
+    { method: 'POST', body: JSON.stringify({ manuscriptId }) },
+  );
+}
+
+export async function switchManuscriptTurn(manuscriptId: string, whoseTurn: 'PI' | '학생' | '저널' | null) {
+  return apiFetch<{ ok: boolean; whoseTurn: string | null }>(
+    `/api/manuscripts/${manuscriptId}/turn`,
+    { method: 'PATCH', body: JSON.stringify({ whoseTurn }) },
+  );
+}
+
+export async function changeManuscriptStage(manuscriptId: string, stage: Manuscript['stage']) {
+  return apiFetch<{ ok: boolean; stage: string }>(
+    `/api/manuscripts/${manuscriptId}/stage`,
+    { method: 'PATCH', body: JSON.stringify({ stage }) },
+  );
+}
+
 export async function checkWorksheetAcks() {
   return apiFetch<{ checked: number; acked: number; errors: number }>(
     `/api/worksheet-projects/check-acks`,

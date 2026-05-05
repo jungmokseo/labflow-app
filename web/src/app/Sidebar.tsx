@@ -9,13 +9,14 @@ import { mutate } from 'swr';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
   deleteBrainChannel, searchBrainMemory, getFollowUpList, getWorksheetProjects,
+  getManuscripts,
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
   PanelLeftClose, PanelLeft, LogOut, Network, BookMarked, Inbox, HelpCircle,
-  Calendar,
+  Calendar, FileText,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -33,6 +34,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   '/meetings': () => mutate('meetings', () => getMeetings(), { revalidate: false }),
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),
   '/projects': () => mutate('worksheet-projects', () => getWorksheetProjects().catch(() => null), { revalidate: false }),
+  '/manuscripts': () => mutate('manuscripts', () => getManuscripts().catch(() => null), { revalidate: false }),
 };
 
 // Sidebar 우측 뱃지 카운트 — 첫 호출은 idle 시점 (TTI 차단 방지) + 30초 polling
@@ -64,6 +66,7 @@ const NAV_ITEMS = [
   { href: '/', icon: LayoutDashboard, label: '대시보드' },
   { href: '/brain', icon: Brain, label: 'Brain' },
   { href: '/projects', icon: FlaskConical, label: '프로젝트 관리' },
+  { href: '/manuscripts', icon: FileText, label: '논문 파이프라인' },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
   { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
   { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기' },
