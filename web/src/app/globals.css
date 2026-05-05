@@ -304,6 +304,44 @@ main > * {
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ── iOS safe-area-inset (notch/home indicator) ──
+ * 고정 위치 FAB·드로어·바텀 네비게이션이 홈 인디케이터에 가려지는 것을 방지.
+ * 클래스 단위로 opt-in해서 layout 스크롤 영역과 충돌하지 않게 한다. */
+.safe-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+.safe-top {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+/* ── 모바일 터치 타깃 최소 크기 (Apple HIG: 44pt, MD: 48dp) ──
+ * 작은 아이콘 버튼에 클래스 단위로 적용. 시각적 크기는 그대로 두고
+ * 보이지 않는 핫존을 확장한다. */
+.tap-target {
+  position: relative;
+}
+.tap-target::after {
+  content: '';
+  position: absolute;
+  inset: 50% 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  /* invisible hit area */
+}
+
+/* ── Reduced motion — 시스템 설정 존중 ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ── Brain Chat Prose — Claude/ChatGPT 수준 가독성 ──
  * 데스크톱 16px, 모바일에서는 base font-size 17px의 1rem = 17px */
 .brain-prose {

@@ -68,6 +68,167 @@ const EMPTY_FORM: AnswerFormState = {
   notifyStudent: false,
 };
 
+interface TabButtonProps {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  count: number | string;
+  countTone: 'primary' | 'muted';
+}
+
+function TabButton({ active, onClick, icon, label, count, countTone }: TabButtonProps) {
+  const baseBtn = 'px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap';
+  const activeBtn = 'bg-primary text-white';
+  const idleBtn = 'bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover border border-border';
+  const baseBadge = 'ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold';
+  const activeBadge = 'bg-white/20 text-white';
+  const idleBadge = countTone === 'primary' ? 'bg-primary-light text-primary' : 'bg-bg-input text-text-muted';
+  return (
+    <button onClick={onClick} className={`${baseBtn} ${active ? activeBtn : idleBtn}`}>
+      {icon}
+      {label}
+      <span className={`${baseBadge} ${active ? activeBadge : idleBadge}`}>{count}</span>
+    </button>
+  );
+}
+
+interface QuestionMetaProps {
+  item: FollowUpItem;
+}
+
+function QuestionMeta({ item }: QuestionMetaProps) {
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+      <span className="inline-flex items-center gap-1">
+        <User className="w-3.5 h-3.5" />
+        {item.askedBy}
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <Clock className="w-3.5 h-3.5" />
+        {timeAgo(item.createdAt)}
+      </span>
+      {item.slackChannelId && (
+        <span className="inline-flex items-center gap-1 text-text-muted/80">
+          <MessageSquare className="w-3.5 h-3.5" />
+          Slack
+        </span>
+      )}
+      {item.category && (
+        <span className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] font-medium">
+          {item.category}
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface AnsweredBlockProps {
+  item: FollowUpItem;
+}
+
+function AnsweredBlock({ item }: AnsweredBlockProps) {
+  if (!item.answer) return null;
+  const meta = [
+    item.resolvedBy && `· ${item.resolvedBy}`,
+    item.answeredAt && `· ${timeAgo(item.answeredAt)}`,
+  ].filter(Boolean).join(' ');
+  return (
+    <div className="mt-2 bg-primary-light/50 rounded-lg p-3 border border-primary/20">
+      <p className="text-xs text-primary font-medium mb-1">
+        답변 {meta}
+      </p>
+      <p className="text-sm text-text-heading whitespace-pre-wrap break-words leading-relaxed">{item.answer}</p>
+      {item.faqId && <p className="text-[10px] text-primary/80 mt-1.5">FAQ에 등록됨</p>}
+      {item.resolvedVia === 'skipped' && (
+        <p className="text-[10px] text-text-muted mt-1.5">답변 없이 종료</p>
+      )}
+    </div>
+  );
+}
+
+interface AnswerFormProps {
+  item: FollowUpItem;
+  form: AnswerFormState;
+  busy: boolean;
+  onChange: (patch: Partial<AnswerFormState>) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}
+
+function AnswerForm({ item, form, busy, onChange, onSubmit, onCancel }: AnswerFormProps) {
+  const canNotify = !!(item.slackUserId || item.slackChannelId);
+  return (
+    <div className="mt-3 space-y-3 border-t border-border pt-3">
+      <div>
+        <label className="block text-xs font-medium text-text-muted mb-1">답변</label>
+        <textarea
+          value={form.answer}
+          onChange={e => onChange({ answer: e.target.value })}
+          rows={5}
+          placeholder="학생이 이해하기 쉽게 답변을 작성하세요..."
+          className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-1 focus:ring-primary resize-y"
+          autoFocus
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-text-muted mb-1">카테고리 (선택)</label>
+          <input
+            type="text"
+            value={form.category}
+            onChange={e => onChange({ category: e.target.value })}
+            placeholder="예: 출장, 영수증, 장비"
+            className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="inline-flex items-center gap-2 text-sm text-text-muted cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={form.addToFaq}
+              onChange={e => onChange({ addToFaq: e.target.checked })}
+              className="w-4 h-4 rounded accent-primary"
+            />
+            FAQ 추가
+          </label>
+          {canNotify && (
+            <label className="inline-flex items-center gap-2 text-sm text-text-muted cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.notifyStudent}
+                onChange={e => onChange({ notifyStudent: e.target.checked })}
+                className="w-4 h-4 rounded accent-primary"
+              />
+              학생에게 DM
+            </label>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <button
+          onClick={onSubmit}
+          disabled={busy || !form.answer.trim()}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          등록
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={busy}
+          className="px-3 py-2 text-text-muted hover:text-text-heading text-sm disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          <X className="w-3.5 h-3.5" />
+          취소
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function FollowUpPage() {
   const [tab, setTab] = useState<TabKey>('pending');
   const { data, error, isLoading, mutate } = useApiData<FollowUpListResponse>(
@@ -80,18 +241,13 @@ export default function FollowUpPage() {
   const [forms, setForms] = useState<Record<string, AnswerFormState>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
-  const items = data?.items ?? [];
   const counts = data?.counts ?? { pending: 0, answered: 0 };
 
   const sorted = useMemo(() => {
-    const list = [...items];
-    list.sort((a, b) => {
-      const ta = new Date(a.createdAt).getTime();
-      const tb = new Date(b.createdAt).getTime();
-      return tb - ta; // 최신 우선
-    });
+    const list = [...(data?.items ?? [])];
+    list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return list;
-  }, [items]);
+  }, [data?.items]);
 
   function getForm(id: string, item: FollowUpItem): AnswerFormState {
     if (forms[id]) return forms[id];
@@ -169,7 +325,7 @@ export default function FollowUpPage() {
   return (
     <div className="min-h-full pb-20 md:pb-12">
       {/* 헤더 */}
-      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4 sticky top-0 md:relative bg-bg-app/95 backdrop-blur z-10 border-b border-border md:border-b-0">
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
         <div className="flex items-center gap-3 mb-1">
           <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
           <div className="min-w-0">
@@ -184,39 +340,23 @@ export default function FollowUpPage() {
       </div>
 
       {/* 탭 */}
-      <div className="px-4 md:px-8 pt-3 pb-2 flex gap-2 overflow-x-auto">
-        <button
+      <div className="px-4 md:px-8 pt-1 pb-2 flex gap-2 overflow-x-auto">
+        <TabButton
+          active={tab === 'pending'}
           onClick={() => setTab('pending')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-            tab === 'pending'
-              ? 'bg-primary text-white'
-              : 'bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover border border-border'
-          }`}
-        >
-          <Inbox className="w-4 h-4" />
-          답변 대기
-          <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-            tab === 'pending' ? 'bg-white/20 text-white' : 'bg-primary-light text-primary'
-          }`}>
-            {counts.pending}
-          </span>
-        </button>
-        <button
+          icon={<Inbox className="w-4 h-4" />}
+          label="답변 대기"
+          count={counts.pending}
+          countTone="primary"
+        />
+        <TabButton
+          active={tab === 'answered'}
           onClick={() => setTab('answered')}
-          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-            tab === 'answered'
-              ? 'bg-primary text-white'
-              : 'bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover border border-border'
-          }`}
-        >
-          <CheckCircle className="w-4 h-4" />
-          답변 완료
-          <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-            tab === 'answered' ? 'bg-white/20 text-white' : 'bg-bg-input text-text-muted'
-          }`}>
-            {counts.answered}
-          </span>
-        </button>
+          icon={<CheckCircle className="w-4 h-4" />}
+          label="답변 완료"
+          count={counts.answered}
+          countTone="muted"
+        />
       </div>
 
       {/* 본문 */}
@@ -254,34 +394,13 @@ export default function FollowUpPage() {
               key={item.id}
               className="bg-bg-card border border-border rounded-lg overflow-hidden shadow-sm"
             >
-              {/* 카드 헤더 */}
-              <div className="p-4 md:p-5">
+              <div className="p-3 md:p-4">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-base md:text-lg font-semibold text-text-heading break-words">
+                    <h3 className="text-base md:text-lg font-semibold text-text-heading break-words leading-snug">
                       {item.question}
                     </h3>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
-                      <span className="inline-flex items-center gap-1">
-                        <User className="w-3.5 h-3.5" />
-                        {item.askedBy}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {timeAgo(item.createdAt)}
-                      </span>
-                      {item.slackChannelId && (
-                        <span className="inline-flex items-center gap-1 text-text-muted/80">
-                          <MessageSquare className="w-3.5 h-3.5" />
-                          Slack
-                        </span>
-                      )}
-                      {item.category && (
-                        <span className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] font-medium">
-                          {item.category}
-                        </span>
-                      )}
-                    </div>
+                    <QuestionMeta item={item} />
                   </div>
                 </div>
 
@@ -292,25 +411,10 @@ export default function FollowUpPage() {
                   </p>
                 )}
 
-                {/* 답변 표시 (answered 탭) */}
-                {tab === 'answered' && item.answer && (
-                  <div className="mt-2 bg-primary-light/50 rounded p-3 border border-primary/20">
-                    <p className="text-xs text-primary font-medium mb-1">
-                      답변 {item.resolvedBy ? `· ${item.resolvedBy}` : ''} {item.answeredAt ? `· ${timeAgo(item.answeredAt)}` : ''}
-                    </p>
-                    <p className="text-sm text-text-heading whitespace-pre-wrap break-words">{item.answer}</p>
-                    {item.faqId && (
-                      <p className="text-[10px] text-primary/80 mt-1.5">FAQ에 등록됨</p>
-                    )}
-                    {item.resolvedVia === 'skipped' && (
-                      <p className="text-[10px] text-text-muted mt-1.5">답변 없이 종료</p>
-                    )}
-                  </div>
-                )}
+                {tab === 'answered' && <AnsweredBlock item={item} />}
 
-                {/* 답변 입력 (pending 탭) */}
                 {tab === 'pending' && !isOpen && (
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <button
                       onClick={() => setOpenId(item.id)}
                       disabled={isBusy}
@@ -330,80 +434,16 @@ export default function FollowUpPage() {
                 )}
 
                 {tab === 'pending' && isOpen && (
-                  <div className="mt-3 space-y-3 border-t border-border pt-3">
-                    <div>
-                      <label className="block text-xs font-medium text-text-muted mb-1">답변</label>
-                      <textarea
-                        value={form.answer}
-                        onChange={e => setForm(item.id, { answer: e.target.value })}
-                        rows={5}
-                        placeholder="학생이 이해하기 쉽게 답변을 작성하세요..."
-                        className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-1 focus:ring-primary resize-y"
-                        autoFocus
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-text-muted mb-1">카테고리 (선택)</label>
-                        <input
-                          type="text"
-                          value={form.category}
-                          onChange={e => setForm(item.id, { category: e.target.value })}
-                          placeholder="예: 출장, 영수증, 장비"
-                          className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                      </div>
-                      <div className="flex items-end gap-3">
-                        <label className="inline-flex items-center gap-2 text-sm text-text-muted cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={form.addToFaq}
-                            onChange={e => setForm(item.id, { addToFaq: e.target.checked })}
-                            className="w-4 h-4 rounded accent-primary"
-                          />
-                          FAQ 추가
-                        </label>
-                        {(item.slackUserId || item.slackChannelId) && (
-                          <label className="inline-flex items-center gap-2 text-sm text-text-muted cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={form.notifyStudent}
-                              onChange={e => setForm(item.id, { notifyStudent: e.target.checked })}
-                              className="w-4 h-4 rounded accent-primary"
-                            />
-                            학생에게 DM
-                          </label>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <button
-                        onClick={() => onAnswer(item)}
-                        disabled={isBusy || !form.answer.trim()}
-                        className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
-                      >
-                        {isBusy ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
-                        등록
-                      </button>
-                      <button
-                        onClick={() => { setOpenId(null); }}
-                        disabled={isBusy}
-                        className="px-3 py-2 text-text-muted hover:text-text-heading text-sm disabled:opacity-50 inline-flex items-center gap-1"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        취소
-                      </button>
-                    </div>
-                  </div>
+                  <AnswerForm
+                    item={item}
+                    form={form}
+                    busy={isBusy}
+                    onChange={patch => setForm(item.id, patch)}
+                    onSubmit={() => onAnswer(item)}
+                    onCancel={() => setOpenId(null)}
+                  />
                 )}
 
-                {/* answered 탭 액션 */}
                 {tab === 'answered' && (
                   <div className="flex gap-2 mt-3">
                     <button

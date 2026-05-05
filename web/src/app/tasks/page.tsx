@@ -7,7 +7,6 @@ import {
   type Capture,
 } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-// Skeleton import removed — using inline spinner
 import {
   CheckCircle, Lightbulb, FileText, ClipboardList, Calendar, Mic,
   X, Pencil, Trash2, ExternalLink, PlayCircle, Send,
@@ -27,6 +26,13 @@ const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
   medium: { label: 'MED', color: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
   low: { label: 'LOW', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20' },
 };
+
+const TABS: ReadonlyArray<readonly [TabFilter, string]> = [
+  ['all', '전체'],
+  ['TASK', '할일'],
+  ['IDEA', '아이디어'],
+  ['MEMO', '메모'],
+];
 
 // URL detection
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g;
@@ -70,7 +76,6 @@ function renderContentWithLinks(text: string) {
 export default function TasksPage() {
   const [tab, setTab] = useState<TabFilter>('all');
   const [newInput, setNewInput] = useState('');
-  const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -232,51 +237,74 @@ export default function TasksPage() {
   }
 
   const firstLoad = loadingActive && !activeData;
-  if (firstLoad) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
-    </div>
-  );
+  if (firstLoad) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="w-10 h-10 rounded-full border-[3px] border-border border-t-primary animate-spin" />
+      </div>
+    );
+  }
+
+  const pendingLabel = meta?.taskStats?.pending ? `${meta.taskStats.pending} pending` : '';
+  const ideasCount = meta?.counts?.idea || 0;
 
   return (
     <div className="min-h-screen bg-bg flex flex-col">
       {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto pb-36">
-        <div className="max-w-2xl mx-auto px-4 pt-6">
-          {/* Header */}
-          <div className="mb-5">
-            <h1 className="text-2xl font-bold text-text-heading">Tasks & Ideas</h1>
-            <p className="text-text-muted text-sm mt-1">
-              {meta?.taskStats?.pending ? `${meta.taskStats.pending} pending` : ''}
-              {meta?.counts?.idea > 0 && <span className="ml-2">{meta.counts.idea} ideas</span>}
-            </p>
+      <div className="flex-1 overflow-y-auto pb-36 md:pb-32">
+        {/* 표준 헤더 */}
+        <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+          <div className="flex items-center gap-3 mb-1">
+            <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+                <ClipboardList className="w-6 h-6 text-primary flex-shrink-0" />
+                Tasks &amp; Ideas
+              </h1>
+              <p className="text-sm md:text-base text-text-muted mt-1">
+                {pendingLabel || '아이디어와 메모를 빠르게 캡처하세요'}
+                {ideasCount > 0 && pendingLabel && <span className="ml-2">· {ideasCount} ideas</span>}
+              </p>
+            </div>
           </div>
+        </div>
 
+        <div className="max-w-2xl mx-auto px-4 md:px-8">
           {/* Category tabs */}
-          <div className="flex bg-bg-card rounded-lg p-1 gap-1 mb-5 border border-border">
-            {([['all', '전체'], ['TASK', '할일'], ['IDEA', '아이디어'], ['MEMO', '메모']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  tab === key
-                    ? 'bg-primary text-white'
-                    : 'text-text-muted hover:text-text-heading'
-                }`}
-              >
-                {label}
-                {key !== 'all' && meta?.counts?.[key.toLowerCase()] > 0 && (
-                  <span className="ml-1 text-xs opacity-70">{meta.counts[key.toLowerCase()]}</span>
-                )}
-              </button>
-            ))}
+          <div className="flex bg-bg-card rounded-lg p-1 gap-1 mb-4 border border-border">
+            {TABS.map(([key, label]) => {
+              const count = key !== 'all' ? meta?.counts?.[key.toLowerCase()] || 0 : 0;
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`flex-1 px-2 sm:px-3 py-2 rounded-md text-sm font-medium transition-colors min-h-[36px] ${
+                    active
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'
+                  }`}
+                >
+                  {label}
+                  {count > 0 && (
+                    <span className={`ml-1 text-xs ${active ? 'opacity-90' : 'opacity-70'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Error */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4 text-red-400 text-sm flex items-center justify-between">
-              <span>{error}</span>
-              <button onClick={() => setError('')} className="ml-2 text-red-400 hover:text-red-300">
+              <span className="break-words">{error}</span>
+              <button
+                onClick={() => setError('')}
+                className="ml-2 text-red-400 hover:text-red-300 flex-shrink-0"
+                aria-label="에러 닫기"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -291,22 +319,7 @@ export default function TasksPage() {
 
           {/* Empty state */}
           {activeCaptures.length === 0 && completedCaptures.length === 0 ? (
-            <div className="text-center py-20">
-              <div className="mb-3 flex justify-center">
-                {tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> :
-                 tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-amber-600" /> :
-                 <ClipboardList className="w-10 h-10 text-text-muted" />}
-              </div>
-              <h3 className="text-text-heading font-medium mb-1">
-                {validatingActive ? '불러오는 중...' : '아직 항목이 없습니다'}
-              </h3>
-              {!validatingActive && (
-                <p className="text-text-muted text-sm">
-                  아래 입력창에 할일이나 아이디어를 입력하세요.<br />
-                  AI가 자동으로 분류합니다.
-                </p>
-              )}
-            </div>
+            <EmptyState tab={tab} validating={validatingActive} />
           ) : (
             <>
               {/* Active list */}
@@ -371,7 +384,7 @@ export default function TasksPage() {
       {/* Bottom input bar — sticky within content area */}
       <div className="sticky bottom-0 bg-bg-card border-t border-border z-30 mt-auto">
         <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4">
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-2 md:gap-3">
             <textarea
               ref={inputRef}
               value={newInput}
@@ -384,12 +397,13 @@ export default function TasksPage() {
               }}
               placeholder="할일, 아이디어, 메모를 입력하세요..."
               rows={1}
-              className="flex-1 bg-bg-input border border-border rounded-xl px-5 py-3.5 text-base text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none min-h-[52px] max-h-[120px]"
+              className="flex-1 bg-bg-input border border-border rounded-xl px-4 md:px-5 py-3 md:py-3.5 text-base text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none min-h-[48px] md:min-h-[52px] max-h-[120px]"
             />
             <button
               onClick={handleAdd}
               disabled={!newInput.trim()}
-              className="flex-shrink-0 bg-primary text-white p-3.5 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
+              aria-label="추가"
+              className="flex-shrink-0 bg-primary text-white p-3 md:p-3.5 rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -397,6 +411,30 @@ export default function TasksPage() {
           <div className="h-[env(safe-area-inset-bottom)]" />
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Empty state ──────────────────────────────────────────
+
+function EmptyState({ tab, validating }: { tab: TabFilter; validating: boolean }) {
+  const icon =
+    tab === 'TASK' ? <CheckCircle className="w-10 h-10 text-green-400" /> :
+    tab === 'IDEA' ? <Lightbulb className="w-10 h-10 text-amber-600" /> :
+    <ClipboardList className="w-10 h-10 text-text-muted" />;
+
+  return (
+    <div className="text-center py-16 md:py-20">
+      <div className="mb-3 flex justify-center">{icon}</div>
+      <h3 className="text-text-heading font-medium mb-1">
+        {validating ? '불러오는 중...' : '아직 항목이 없습니다'}
+      </h3>
+      {!validating && (
+        <p className="text-text-muted text-sm leading-relaxed">
+          아래 입력창에 할일이나 아이디어를 입력하세요.<br />
+          AI가 자동으로 분류합니다.
+        </p>
+      )}
     </div>
   );
 }
@@ -431,21 +469,29 @@ function TaskCard({
   onEditContentChange,
 }: TaskCardProps) {
   const pri = PRIORITY_INFO[c.priority] || PRIORITY_INFO.low;
+  const dateLabel = c.actionDate
+    ? c.actionDate.split('T')[0].slice(5)
+    : new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
 
   return (
     <div
       className={`bg-bg-card rounded-xl border transition-all duration-200 ${
-        c.completed ? 'border-border opacity-50' : 'border-border hover:border-primary/30'
+        c.completed
+          ? 'border-border opacity-50'
+          : expanded
+          ? 'border-primary/40 shadow-sm'
+          : 'border-border hover:border-primary/30'
       }`}
     >
       {/* Compact row */}
       <div
-        className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+        className="flex items-center gap-3 px-3 md:px-4 py-3 cursor-pointer"
         onClick={onToggleExpand}
       >
         {/* Checkbox */}
         <button
           onClick={(e) => { e.stopPropagation(); onToggleComplete(); }}
+          aria-label={c.completed ? '완료 해제' : '완료 처리'}
           className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-200 ${
             c.completed
               ? 'bg-green-500 border-green-500 text-white'
@@ -463,24 +509,18 @@ function TaskCard({
         </span>
 
         {/* Right: category icon + date */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
           {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
-          {c.actionDate ? (
-            <span className="text-xs text-text-muted flex items-center gap-0.5">
-              <Calendar className="w-3 h-3" />
-              {c.actionDate.split('T')[0].slice(5)}
-            </span>
-          ) : (
-            <span className="text-xs text-text-muted">
-              {new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-            </span>
-          )}
+          <span className="text-xs text-text-muted inline-flex items-center gap-0.5">
+            {c.actionDate && <Calendar className="w-3 h-3" />}
+            {dateLabel}
+          </span>
         </div>
       </div>
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-border pt-3 space-y-3 animate-msg-in">
+        <div className="px-3 md:px-4 pb-3 md:pb-4 border-t border-border pt-3 space-y-3 animate-msg-in">
           {editing ? (
             <div className="space-y-2">
               <textarea
@@ -492,31 +532,29 @@ function TaskCard({
               <div className="flex gap-2 justify-end">
                 <button
                   onClick={onCancelEdit}
-                  className="text-xs text-text-muted hover:text-text-heading px-3 py-1.5 rounded-lg border border-border hover:bg-bg-input transition-colors"
+                  className="text-xs text-text-muted hover:text-text-heading px-3 py-2 rounded-lg border border-border hover:bg-bg-input transition-colors h-9"
                 >
                   취소
                 </button>
                 <button
                   onClick={onSaveEdit}
-                  className="text-xs text-white bg-primary px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
+                  className="text-xs text-white bg-primary px-3 py-2 rounded-lg hover:bg-primary/90 transition-colors h-9"
                 >
                   저장
                 </button>
               </div>
             </div>
           ) : (
-            <>
-              {c.content && (
-                <p className="text-sm text-text-heading leading-relaxed whitespace-pre-wrap">
-                  {renderContentWithLinks(c.content)}
-                </p>
-              )}
-            </>
+            c.content && (
+              <p className="text-sm text-text-heading leading-relaxed whitespace-pre-wrap break-words">
+                {renderContentWithLinks(c.content)}
+              </p>
+            )
           )}
 
           {/* Meta: tags, priority */}
           {!editing && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {c.category === 'task' && c.priority && (
                 <span className={`text-xs px-2 py-0.5 rounded border ${pri.color}`}>
                   {pri.label}
@@ -528,7 +566,7 @@ function TaskCard({
                 </span>
               ))}
               {c.sourceType === 'voice' && (
-                <span className="text-xs text-text-muted flex items-center gap-1">
+                <span className="text-xs text-text-muted inline-flex items-center gap-1">
                   <Mic className="w-3 h-3" /> 음성
                 </span>
               )}
@@ -537,16 +575,16 @@ function TaskCard({
 
           {/* Action buttons */}
           {!editing && (
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-1.5 pt-1 flex-wrap">
               <button
                 onClick={(e) => { e.stopPropagation(); onStartEdit(); }}
-                className="text-xs text-text-muted hover:text-text-heading flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-bg-input transition-colors"
+                className="text-xs text-text-muted hover:text-text-heading inline-flex items-center gap-1 px-2 py-2 rounded-lg hover:bg-bg-input transition-colors h-9"
               >
                 <Pencil className="w-3.5 h-3.5" /> 수정
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="text-xs text-text-muted hover:text-red-400 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-500/10 transition-colors"
+                className="text-xs text-text-muted hover:text-red-400 inline-flex items-center gap-1 px-2 py-2 rounded-lg hover:bg-red-500/10 transition-colors h-9"
               >
                 <Trash2 className="w-3.5 h-3.5" /> 삭제
               </button>

@@ -26,6 +26,32 @@ function isAcceptedAudioFile(file: File): boolean {
   return ACCEPTED_EXTENSIONS.includes(ext);
 }
 
+function groupMeetingsByMonth(meetings: Meeting[]): Array<{
+  monthKey: string;
+  year: string;
+  month: number;
+  monthMeetings: Meeting[];
+}> {
+  const groups = new Map<string, Meeting[]>();
+  for (const m of meetings) {
+    const d = new Date(m.createdAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(m);
+  }
+  return Array.from(groups.entries()).map(([monthKey, monthMeetings]) => {
+    const [y, mo] = monthKey.split('-');
+    return { monthKey, year: y, month: parseInt(mo), monthMeetings };
+  });
+}
+
+function formatMeetingDate(iso: string): string {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' });
+  const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  return `${date} ${time}`;
+}
+
 type RecordingState = 'idle' | 'recording' | 'stopped';
 
 export default function MeetingsPage() {
@@ -219,7 +245,7 @@ export default function MeetingsPage() {
   };
 
   // ── File handling ──
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = useCallback((file: File) => {
     if (!isAcceptedAudioFile(file)) {
       setError('지원하는 형식: webm, mp3, m4a, wav');
       return;
@@ -227,13 +253,15 @@ export default function MeetingsPage() {
     setError(null);
     setAttachedFile(file);
     setAudioBlob(null);
-    if (audioUrl) URL.revokeObjectURL(audioUrl);
-    setAudioUrl(URL.createObjectURL(file));
+    setAudioUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
     setRecordingState('stopped');
     // Pre-fill title from filename
     const name = file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
     setAudioTitle(name);
-  };
+  }, []);
 
   const onFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -260,7 +288,7 @@ export default function MeetingsPage() {
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
     if (file) handleFileSelect(file);
-  }, []);
+  }, [handleFileSelect]);
 
   // ── Submit (non-blocking: 즉시 idle로 복귀, 백그라운드 업로드) ──
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -322,7 +350,7 @@ export default function MeetingsPage() {
 
   return (
     <div
-      className="relative min-h-full"
+      className="relative min-h-full pb-20 md:pb-12"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -338,15 +366,22 @@ export default function MeetingsPage() {
         </div>
       )}
 
-      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
-        {/* Header */}
-        <div>
-          <h2 className="text-3xl font-bold text-text-heading flex items-center gap-2"><Mic className="w-6 h-6 text-primary" /> 회의 노트</h2>
-          <p className="text-text-muted text-base mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
+      {/* Standard header */}
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <Mic className="w-6 h-6 text-primary flex-shrink-0" /> 회의 노트
+            </h1>
+            <p className="text-sm md:text-base text-text-muted mt-1">녹음 또는 오디오 업로드로 자동 트랜스크립션 및 요약</p>
+          </div>
         </div>
+      </div>
 
+      <div className="px-4 md:px-8 max-w-4xl mx-auto space-y-4 md:space-y-6">
         {/* Recording / Upload Card */}
-        <div className="bg-bg-card rounded-xl border border-border p-6">
+        <div className="bg-bg-card rounded-xl border border-border p-4 md:p-6">
           {/* Idle state — big mic button */}
           {recordingState === 'idle' && (
             <div className="flex flex-col items-center gap-4">
@@ -515,88 +550,89 @@ export default function MeetingsPage() {
 
         {/* Meeting list */}
         {meetings.length === 0 ? (
-          <div className="text-center py-16 text-text-muted">
-            <Mic className="w-12 h-12 text-text-muted/40 mx-auto mb-4" />
-            <p className="text-lg mb-2">아직 회의 기록이 없습니다</p>
-            <p className="text-base">녹음하거나 오디오 파일을 업로드해 보세요.</p>
-            <p className="text-sm mt-4 text-text-muted">
-              음성을 자동으로 텍스트로 변환하고, 요약 및 액션아이템을 생성합니다.
+          <div className="text-center py-12 md:py-16">
+            <Mic className="w-10 h-10 text-text-muted/40 mx-auto mb-3" />
+            <p className="text-base font-medium text-text-heading mb-1">아직 회의 기록이 없습니다</p>
+            <p className="text-sm text-text-muted">녹음하거나 오디오 파일을 업로드해 보세요.</p>
+            <p className="text-xs mt-3 text-text-muted/80">
+              음성을 자동으로 텍스트로 변환하고 요약 · 액션 아이템을 생성합니다.
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* 월별 그룹핑 */}
-            {(() => {
-              const monthGroups = new Map<string, Meeting[]>();
-              for (const m of meetings) {
-                const d = new Date(m.createdAt);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                if (!monthGroups.has(key)) monthGroups.set(key, []);
-                monthGroups.get(key)!.push(m);
-              }
-              return Array.from(monthGroups.entries()).map(([monthKey, monthMeetings]) => {
-                const [y, mo] = monthKey.split('-');
-                return (
-                  <div key={monthKey}>
-                    <h3 className="text-base font-semibold text-text-muted uppercase tracking-wider mb-3">
-                      {y}년 {parseInt(mo)}월 ({monthMeetings.length}건)
-                    </h3>
-                    <div className="space-y-3">
-            {monthMeetings.map((m) => {
-              const expanded = expandedId === m.id;
-              return (
-                <div
-                  key={m.id}
-                  className="bg-bg-card rounded-xl border border-border overflow-hidden hover:border-primary/30 transition-colors"
-                >
-                  <div
-                    className="p-4 flex items-center justify-between cursor-pointer"
-                    onClick={() => setExpandedId(expanded ? null : m.id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-base font-medium text-text-heading">{m.title}</p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-xs text-text-muted">
-                          {new Date(m.createdAt).toLocaleDateString('ko-KR', {
-                            month: 'short',
-                            day: 'numeric',
-                            weekday: 'short',
-                          })}
-                          {' '}
-                          {new Date(m.createdAt).toLocaleTimeString('ko-KR', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                        {m.actionItems.length > 0 && (
-                          <span className="text-xs text-amber-600 flex items-center gap-1">
-                            <ClipboardList className="w-3 h-3" /> {m.actionItems.length} 액션아이템
-                          </span>
-                        )}
-                        {m.summary && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> 요약 완료</span>}
-                      </div>
-                    </div>
-                    {expanded ? <ChevronUp className="w-4 h-4 text-text-muted" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
-                  </div>
-
-                  {expanded && (
-                    <MeetingExpanded
-                      meeting={m}
-                      onDelete={() => handleDelete(m.id)}
-                      onRefresh={() => refreshMeetings()}
-                    />
-                  )}
+            {groupMeetingsByMonth(meetings).map(({ monthKey, monthMeetings, year, month }) => (
+              <div key={monthKey}>
+                <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                  {year}년 {month}월 ({monthMeetings.length}건)
+                </h3>
+                <div className="space-y-2">
+                  {monthMeetings.map((m) => {
+                    const expanded = expandedId === m.id;
+                    return (
+                      <MeetingCard
+                        key={m.id}
+                        meeting={m}
+                        expanded={expanded}
+                        onToggle={() => setExpandedId(expanded ? null : m.id)}
+                        onDelete={() => handleDelete(m.id)}
+                        onRefresh={() => refreshMeetings()}
+                      />
+                    );
+                  })}
                 </div>
-              );
-            })}
-                    </div>
-                  </div>
-                );
-              });
-            })()}
+              </div>
+            ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── 회의록 카드 (목록 항목) ──
+function MeetingCard({ meeting: m, expanded, onToggle, onDelete, onRefresh }: {
+  meeting: Meeting;
+  expanded: boolean;
+  onToggle: () => void;
+  onDelete: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="bg-bg-card rounded-lg border border-border overflow-hidden hover:border-primary/30 transition-colors">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full p-3 md:p-4 flex items-start gap-3 text-left"
+      >
+        <div className="flex-1 min-w-0">
+          <p className="text-sm md:text-base font-medium text-text-heading break-words">{m.title}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+            <span className="text-xs text-text-muted">{formatMeetingDate(m.createdAt)}</span>
+            {m.actionItems.length > 0 && (
+              <span className="text-xs text-amber-600 flex items-center gap-1">
+                <ClipboardList className="w-3 h-3" /> {m.actionItems.length} 액션
+              </span>
+            )}
+            {m.summary && (
+              <span className="text-xs text-green-500 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" /> 요약
+              </span>
+            )}
+          </div>
+        </div>
+        {expanded
+          ? <ChevronUp className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />
+          : <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />}
+      </button>
+
+      {expanded && (
+        <MeetingExpanded
+          meeting={m}
+          onDelete={onDelete}
+          onRefresh={onRefresh}
+        />
+      )}
     </div>
   );
 }
@@ -845,7 +881,7 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
       )}
 
       {/* 공유/액션 버튼 */}
-      <div className="pt-4 mt-4 border-t border-border/30 flex items-center gap-3">
+      <div className="pt-4 mt-4 border-t border-border/30 flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           onClick={(e) => {
             e.stopPropagation();

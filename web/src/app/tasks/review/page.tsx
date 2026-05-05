@@ -42,7 +42,9 @@ type ReviewFormState = {
   memo: string;
 };
 
-const PRIORITY_OPTIONS: Array<{ value: PriorityChoice; label: string }> = [
+type DateShortcut = readonly [label: string, value: string];
+
+const PRIORITY_OPTIONS: ReadonlyArray<{ value: PriorityChoice; label: string }> = [
   { value: 'AUTO', label: '자동' },
   { value: 'HIGH', label: 'HIGH' },
   { value: 'MEDIUM', label: 'MEDIUM' },
@@ -84,6 +86,15 @@ function oneMonthLater(): Date {
 
 function defaultActionDate(): string {
   return toDateInput(addDays(new Date(), 1));
+}
+
+function dateShortcuts(): DateShortcut[] {
+  return [
+    ['내일', toDateInput(addDays(new Date(), 1))],
+    ['이번주말', toDateInput(nextWeekend())],
+    ['다음주월', toDateInput(nextMonday())],
+    ['한달후', toDateInput(oneMonthLater())],
+  ];
 }
 
 function timeAgo(dateStr: string): string {
@@ -151,7 +162,17 @@ export default function BlissTaskReviewPage() {
   const [directBusy, setDirectBusy] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
 
-  const members = useMemo(() => (membersData || []).filter((m: LabMemberOption) => m.name), [membersData]);
+  const members = useMemo(
+    () => (membersData || []).filter((m: LabMemberOption) => m.name),
+    [membersData]
+  );
+
+  const activeStats = useMemo(() => {
+    const list = activeData || [];
+    const pending = list.filter((t: BlissTaskActiveItem) => !t.completed).length;
+    const done = list.filter((t: BlissTaskActiveItem) => t.completed).length;
+    return { pending, done, total: list.length };
+  }, [activeData]);
 
   useEffect(() => {
     if (!queueData) return;
@@ -171,6 +192,14 @@ export default function BlissTaskReviewPage() {
       ...prev,
       [id]: { ...(prev[id] || defaultForm()), ...patch },
     }));
+  }
+
+  function clearBusy(id: string) {
+    setBusy(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }
 
   function removeTask(id: string) {
@@ -211,11 +240,7 @@ export default function BlissTaskReviewPage() {
     } catch (error) {
       toast(error instanceof Error ? error.message : '확정 실패', 'error');
     } finally {
-      setBusy(prev => {
-        const next = { ...prev };
-        delete next[task.id];
-        return next;
-      });
+      clearBusy(task.id);
     }
   }
 
@@ -223,7 +248,7 @@ export default function BlissTaskReviewPage() {
     setBusy(prev => ({ ...prev, [task.id]: 'hold' }));
     try {
       await holdBlissTask(task.id);
-      const heldTask = {
+      const heldTask: BlissTaskReviewItem = {
         ...task,
         metadata: { ...(task.metadata || {}), heldAt: new Date().toISOString() },
       };
@@ -233,11 +258,7 @@ export default function BlissTaskReviewPage() {
     } catch (error) {
       toast(error instanceof Error ? error.message : '보류 실패', 'error');
     } finally {
-      setBusy(prev => {
-        const next = { ...prev };
-        delete next[task.id];
-        return next;
-      });
+      clearBusy(task.id);
     }
   }
 
@@ -252,11 +273,7 @@ export default function BlissTaskReviewPage() {
     } catch (error) {
       toast(error instanceof Error ? error.message : '취소 실패', 'error');
     } finally {
-      setBusy(prev => {
-        const next = { ...prev };
-        delete next[task.id];
-        return next;
-      });
+      clearBusy(task.id);
     }
   }
 
@@ -309,145 +326,45 @@ export default function BlissTaskReviewPage() {
   const firstLoad = isLoading && !queueData;
 
   return (
-    <div className="min-h-screen bg-bg">
-      <div className="max-w-5xl mx-auto px-4 py-6 md:px-8 md:py-8">
-        <header className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-text-heading flex items-center gap-2">
-              <ClipboardList className="w-6 h-6 text-primary" />
-              📥 BLISS 검토 대기 큐
-            </h1>
-            <p className="text-sm text-text-muted mt-1">{tasks.length}개 대기 중 · 진행 중 {(activeData || []).filter((t: BlissTaskActiveItem) => !t.completed).length}건</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowDirect(prev => !prev)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-hover shadow-card text-sm font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            직접 추가
-          </button>
-        </header>
-
-        {showDirect && (
-          <section className="mb-6 bg-bg-card border border-border rounded-lg shadow-card p-4 md:p-5">
-            <h2 className="text-sm font-semibold text-text-heading mb-3">+ 새 할 일 직접 추가 (즉시 학생에게 발송)</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">제목</label>
-                <input
-                  type="text"
-                  value={directForm.title}
-                  onChange={e => setDirectForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="예: BRL 영수증 처리"
-                  className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
+    <div className="min-h-screen bg-bg pb-20 md:pb-12">
+      {/* 표준 헤더 */}
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+        <div className="flex items-start gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0 mt-1" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+                  <ClipboardList className="w-6 h-6 text-primary flex-shrink-0" />
+                  BLISS 검토 큐
+                </h1>
+                <p className="text-sm md:text-base text-text-muted mt-1">
+                  {tasks.length}개 대기 중 · 진행 중 {activeStats.pending}건
+                </p>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">설명 (선택)</label>
-                <textarea
-                  value={directForm.content}
-                  onChange={e => setDirectForm(f => ({ ...f, content: e.target.value }))}
-                  rows={2}
-                  placeholder="task 상세 설명. 비우면 제목만 사용."
-                  className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">마감일</label>
-                  <div className="flex flex-col gap-2">
-                    <div className="relative">
-                      <Calendar className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="date"
-                        value={directForm.actionDate}
-                        onChange={e => setDirectForm(f => ({ ...f, actionDate: e.target.value }))}
-                        className="w-full bg-bg-input border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {[
-                        ['내일', toDateInput(addDays(new Date(), 1))],
-                        ['이번주말', toDateInput(nextWeekend())],
-                        ['다음주월', toDateInput(nextMonday())],
-                        ['한달후', toDateInput(oneMonthLater())],
-                      ].map(([label, value]) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => setDirectForm(f => ({ ...f, actionDate: value }))}
-                          className="px-2 py-1.5 text-xs rounded-lg border border-border bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover"
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-muted mb-1.5">담당자</label>
-                  <select
-                    value={directForm.ownerName}
-                    onChange={e => setDirectForm(f => ({ ...f, ownerName: e.target.value }))}
-                    className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  >
-                    <option value="">담당자 선택</option>
-                    {members.map(member => (
-                      <option key={member.id} value={member.name}>
-                        {member.name}{member.role ? ` · ${member.role}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <label className="block text-xs font-medium text-text-muted mt-3 mb-1.5">우선순위</label>
-                  <div className="grid grid-cols-4 gap-1 bg-bg-input border border-border rounded-lg p-1">
-                    {PRIORITY_OPTIONS.map(option => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setDirectForm(f => ({ ...f, priority: option.value }))}
-                        className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                          directForm.priority === option.value
-                            ? 'bg-primary text-white'
-                            : 'text-text-muted hover:text-text-heading hover:bg-bg-card'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1.5">메모 (선택, Slack DM에 함께 전송)</label>
-                <textarea
-                  value={directForm.memo}
-                  onChange={e => setDirectForm(f => ({ ...f, memo: e.target.value }))}
-                  rows={2}
-                  className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowDirect(false)}
-                  disabled={directBusy}
-                  className="px-4 py-2 rounded-lg border border-border text-text-muted hover:text-text-heading hover:bg-bg-hover disabled:opacity-50 text-sm"
-                >
-                  취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDirectCreate}
-                  disabled={directBusy}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50 shadow-card text-sm font-medium"
-                >
-                  {directBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  추가 + 학생 알림
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowDirect(prev => !prev)}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 shadow-card text-sm font-medium h-9 flex-shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                직접 추가
+              </button>
             </div>
-          </section>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 md:px-8">
+        {showDirect && (
+          <DirectAddForm
+            form={directForm}
+            members={members}
+            busy={directBusy}
+            onChange={patch => setDirectForm(prev => ({ ...prev, ...patch }))}
+            onCancel={() => setShowDirect(false)}
+            onSubmit={handleDirectCreate}
+          />
         )}
 
         {firstLoad ? (
@@ -455,253 +372,500 @@ export default function BlissTaskReviewPage() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : tasks.length === 0 ? (
-          <div className="bg-bg-card border border-border rounded-lg shadow-card p-8 text-center">
-            <CheckCircle className="w-10 h-10 mx-auto text-accent mb-3" />
-            <p className="text-text-heading font-medium">검토할 요청이 없습니다.</p>
-          </div>
+          <EmptyState
+            icon={<CheckCircle className="w-10 h-10 text-accent" />}
+            title="검토할 요청이 없습니다."
+          />
         ) : (
-          <div className="space-y-4">
-            {tasks.map(task => {
-              const form = forms[task.id] || defaultForm();
-              const source = sourceFromMetadata(task.metadata);
-              const taskBusy = busy[task.id];
-              const expandedContent = Boolean(expanded[task.id]);
-
-              return (
-                <article
-                  key={task.id}
-                  className={`bg-bg-card border border-border rounded-lg shadow-card transition-all duration-200 ${
-                    dismissing[task.id] ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
-                  } ${isHeld(task) ? 'border-amber-500/30' : ''}`}
-                >
-                  <div className="p-4 md:p-5 border-b border-border">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          {isHeld(task) && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                              보류
-                            </span>
-                          )}
-                          <h2 className="text-lg font-semibold text-text-heading break-words">{task.title}</h2>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-text-muted">
-                          <span className="inline-flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {timeAgo(task.createdAt)}
-                          </span>
-                          {source.requesterName && (
-                            <span className="inline-flex items-center gap-1">
-                              <User className="w-3.5 h-3.5" />
-                              {source.requesterName}
-                            </span>
-                          )}
-                          {source.sourceChannel && <span>#{source.sourceChannel}</span>}
-                          {source.slackPermalink && (
-                            <a
-                              href={source.slackPermalink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-primary hover:underline"
-                            >
-                              Slack <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 text-sm text-text-main leading-6 whitespace-pre-wrap break-words bg-bg-input/40 border border-border rounded-lg p-3">
-                      {previewText(task.content, expandedContent)}
-                      {task.content.length > 200 && (
-                        <button
-                          type="button"
-                          onClick={() => setExpanded(prev => ({ ...prev, [task.id]: !expandedContent }))}
-                          className="ml-2 text-primary text-sm hover:underline"
-                        >
-                          {expandedContent ? '접기' : '더보기'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="p-4 md:p-5">
-                    <div className="grid gap-4 lg:grid-cols-[1.15fr_0.9fr]">
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-xs font-medium text-text-muted mb-1.5">마감일</label>
-                          <div className="flex flex-col gap-2 sm:flex-row">
-                            <div className="relative sm:w-48">
-                              <Calendar className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                              <input
-                                type="date"
-                                value={form.actionDate}
-                                onChange={event => updateForm(task.id, { actionDate: event.target.value })}
-                                className="w-full bg-bg-input border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 sm:flex gap-1.5">
-                              {[
-                                ['내일', toDateInput(addDays(new Date(), 1))],
-                                ['이번주말', toDateInput(nextWeekend())],
-                                ['다음주월', toDateInput(nextMonday())],
-                                ['한달후', toDateInput(oneMonthLater())],
-                              ].map(([label, value]) => (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() => updateForm(task.id, { actionDate: value })}
-                                  className="px-3 py-2 text-xs rounded-lg border border-border bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover"
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <label className="block text-xs font-medium text-text-muted mb-1.5">담당자</label>
-                            <select
-                              value={form.ownerName}
-                              onChange={event => updateForm(task.id, { ownerName: event.target.value })}
-                              className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
-                            >
-                              <option value="">담당자 선택</option>
-                              {members.map(member => (
-                                <option key={member.id} value={member.name}>
-                                  {member.name}{member.role ? ` · ${member.role}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-medium text-text-muted mb-1.5">우선순위</label>
-                            <div className="grid grid-cols-4 gap-1 bg-bg-input border border-border rounded-lg p-1">
-                              {PRIORITY_OPTIONS.map(option => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => updateForm(task.id, { priority: option.value })}
-                                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                    form.priority === option.value
-                                      ? 'bg-primary text-white'
-                                      : 'text-text-muted hover:text-text-heading hover:bg-bg-card'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-medium text-text-muted mb-1.5">메모</label>
-                        <textarea
-                          value={form.memo}
-                          onChange={event => updateForm(task.id, { memo: event.target.value })}
-                          rows={5}
-                          placeholder="학생에게 전달할 메모"
-                          className="w-full min-h-[116px] resize-none bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handleArchive(task)}
-                        disabled={Boolean(taskBusy)}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-border text-text-muted hover:text-text-heading hover:bg-bg-hover disabled:opacity-50"
-                      >
-                        {taskBusy === 'archive' ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                        취소
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleHold(task)}
-                        disabled={Boolean(taskBusy)}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-amber-500/20 text-amber-600 hover:bg-amber-500/10 disabled:opacity-50"
-                      >
-                        {taskBusy === 'hold' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
-                        보류
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleConfirm(task)}
-                        disabled={Boolean(taskBusy)}
-                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary-hover disabled:opacity-50 shadow-card"
-                      >
-                        {taskBusy === 'confirm' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        확정 + 알림
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+          <div className="space-y-3 md:space-y-4">
+            {tasks.map(task => (
+              <ReviewCard
+                key={task.id}
+                task={task}
+                form={forms[task.id] || defaultForm()}
+                members={members}
+                expanded={Boolean(expanded[task.id])}
+                taskBusy={busy[task.id]}
+                dismissing={Boolean(dismissing[task.id])}
+                onUpdateForm={patch => updateForm(task.id, patch)}
+                onToggleExpand={() => setExpanded(prev => ({ ...prev, [task.id]: !prev[task.id] }))}
+                onArchive={() => handleArchive(task)}
+                onHold={() => handleHold(task)}
+                onConfirm={() => handleConfirm(task)}
+              />
+            ))}
           </div>
         )}
 
         {/* 진행 중 task list */}
         {activeData && activeData.length > 0 && (
-          <section className="mt-10">
-            <h2 className="text-lg font-semibold text-text-heading mb-3 flex items-center gap-2">
+          <section className="mt-8 md:mt-10">
+            <h2 className="text-base md:text-lg font-semibold text-text-heading mb-3 flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-text-muted" />
-              진행 중 ({activeData.filter((t: BlissTaskActiveItem) => !t.completed).length}건 · 완료 {activeData.filter((t: BlissTaskActiveItem) => t.completed).length}건)
+              진행 중
+              <span className="text-sm text-text-muted font-normal">
+                ({activeStats.pending}건 · 완료 {activeStats.done}건)
+              </span>
             </h2>
-            <ul className="bg-bg-card border border-border rounded-lg divide-y divide-border">
-              {activeData.map((task: BlissTaskActiveItem) => {
-                const owner = task.metadata?.assignedOwner || task.metadata?.blissDirect?.assignedOwner || '?';
-                const due = task.actionDate ? new Date(task.actionDate).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }) : '미정';
-                const overdue = task.actionDate && !task.completed && new Date(task.actionDate).getTime() < Date.now() - 24 * 3600 * 1000;
-                return (
-                  <li key={task.id} className={`flex items-center gap-3 p-3 ${task.completed ? 'opacity-50' : ''}`}>
-                    <button
-                      type="button"
-                      onClick={() => handleComplete(task)}
-                      disabled={completingId === task.id}
-                      className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                        task.completed ? 'bg-accent border-accent' : 'border-border hover:border-primary'
-                      } disabled:opacity-50`}
-                      title={task.completed ? '완료 취소' : '완료 처리'}
-                    >
-                      {completingId === task.id ? (
-                        <Loader2 className="w-3 h-3 animate-spin text-text-muted" />
-                      ) : task.completed ? (
-                        <Check className="w-3.5 h-3.5 text-white" />
-                      ) : null}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <div className={`text-sm font-medium text-text-heading break-words ${task.completed ? 'line-through' : ''}`}>
-                        {task.title}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-text-muted">
-                        <span className="inline-flex items-center gap-1">
-                          <User className="w-3 h-3" />{owner}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 ${overdue ? 'text-red-500 font-medium' : ''}`}>
-                          <Calendar className="w-3 h-3" />{due}
-                        </span>
-                        {task.priority === 'HIGH' && <span className="text-red-500">HIGH</span>}
-                        {task.metadata?.blissSource?.slackPermalink && (
-                          <a href={task.metadata.blissSource.slackPermalink} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">
-                            Slack <ExternalLink className="w-3 h-3" />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
+            <ul className="bg-bg-card border border-border rounded-lg divide-y divide-border overflow-hidden">
+              {activeData.map((task: BlissTaskActiveItem) => (
+                <ActiveTaskRow
+                  key={task.id}
+                  task={task}
+                  completing={completingId === task.id}
+                  onComplete={() => handleComplete(task)}
+                />
+              ))}
             </ul>
           </section>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── 직접 추가 폼 ──────────────────────────────────────────
+
+interface DirectAddFormProps {
+  form: {
+    title: string;
+    content: string;
+    actionDate: string;
+    ownerName: string;
+    priority: PriorityChoice;
+    memo: string;
+  };
+  members: LabMemberOption[];
+  busy: boolean;
+  onChange: (patch: Partial<DirectAddFormProps['form']>) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}
+
+function DirectAddForm({ form, members, busy, onChange, onCancel, onSubmit }: DirectAddFormProps) {
+  const shortcuts = dateShortcuts();
+  return (
+    <section className="mb-4 md:mb-6 bg-bg-card border border-border rounded-lg shadow-card p-3 md:p-5">
+      <h2 className="text-sm font-semibold text-text-heading mb-3">
+        새 할 일 직접 추가 (즉시 학생에게 발송)
+      </h2>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-text-muted mb-1.5">제목</label>
+          <input
+            type="text"
+            value={form.title}
+            onChange={e => onChange({ title: e.target.value })}
+            placeholder="예: BRL 영수증 처리"
+            className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-text-muted mb-1.5">설명 (선택)</label>
+          <textarea
+            value={form.content}
+            onChange={e => onChange({ content: e.target.value })}
+            rows={2}
+            placeholder="task 상세 설명. 비우면 제목만 사용."
+            className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-medium text-text-muted mb-1.5">마감일</label>
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <Calendar className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="date"
+                  value={form.actionDate}
+                  onChange={e => onChange({ actionDate: e.target.value })}
+                  className="w-full bg-bg-input border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {shortcuts.map(([label, value]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => onChange({ actionDate: value })}
+                    className={`px-2 py-2 text-xs rounded-lg border border-border ${
+                      form.actionDate === value
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-muted mb-1.5">담당자</label>
+            <select
+              value={form.ownerName}
+              onChange={e => onChange({ ownerName: e.target.value })}
+              className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="">담당자 선택</option>
+              {members.map(member => (
+                <option key={member.id} value={member.name}>
+                  {member.name}{member.role ? ` · ${member.role}` : ''}
+                </option>
+              ))}
+            </select>
+            <label className="block text-xs font-medium text-text-muted mt-3 mb-1.5">우선순위</label>
+            <PriorityPicker
+              value={form.priority}
+              onChange={priority => onChange({ priority })}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-text-muted mb-1.5">
+            메모 (선택, Slack DM에 함께 전송)
+          </label>
+          <textarea
+            value={form.memo}
+            onChange={e => onChange({ memo: e.target.value })}
+            rows={2}
+            className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="px-4 py-2 rounded-lg border border-border text-text-muted hover:text-text-heading hover:bg-bg-hover disabled:opacity-50 text-sm h-9"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={busy}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 shadow-card text-sm font-medium h-9"
+          >
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            추가 + 학생 알림
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ── 검토 카드 ─────────────────────────────────────────────
+
+interface ReviewCardProps {
+  task: BlissTaskReviewItem;
+  form: ReviewFormState;
+  members: LabMemberOption[];
+  expanded: boolean;
+  taskBusy: string | undefined;
+  dismissing: boolean;
+  onUpdateForm: (patch: Partial<ReviewFormState>) => void;
+  onToggleExpand: () => void;
+  onArchive: () => void;
+  onHold: () => void;
+  onConfirm: () => void;
+}
+
+function ReviewCard({
+  task,
+  form,
+  members,
+  expanded,
+  taskBusy,
+  dismissing,
+  onUpdateForm,
+  onToggleExpand,
+  onArchive,
+  onHold,
+  onConfirm,
+}: ReviewCardProps) {
+  const source = sourceFromMetadata(task.metadata);
+  const held = isHeld(task);
+  const shortcuts = dateShortcuts();
+  const busyAny = Boolean(taskBusy);
+
+  return (
+    <article
+      className={`bg-bg-card border rounded-lg shadow-card transition-all duration-200 ${
+        dismissing ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'
+      } ${held ? 'border-amber-500/40 ring-1 ring-amber-500/10' : 'border-border'}`}
+    >
+      {/* 헤더: 제목 + 메타 */}
+      <div className="p-3 md:p-5 border-b border-border">
+        <div className="min-w-0">
+          {held && (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 mb-2">
+              <Pause className="w-3 h-3" /> 보류 중
+            </span>
+          )}
+          <h2 className="text-base md:text-lg font-semibold text-text-heading break-words leading-snug">
+            {task.title}
+          </h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-text-muted">
+            <span className="inline-flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {timeAgo(task.createdAt)}
+            </span>
+            {source.requesterName && (
+              <span className="inline-flex items-center gap-1">
+                <User className="w-3.5 h-3.5" />
+                {source.requesterName}
+              </span>
+            )}
+            {source.sourceChannel && (
+              <span className="text-text-muted">#{source.sourceChannel}</span>
+            )}
+            {source.slackPermalink && (
+              <a
+                href={source.slackPermalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                Slack <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 text-sm text-text-main leading-relaxed whitespace-pre-wrap break-words bg-bg-input/40 border border-border rounded-lg p-3">
+          {previewText(task.content, expanded)}
+          {task.content.length > 200 && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="ml-2 text-primary text-sm hover:underline"
+            >
+              {expanded ? '접기' : '더보기'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 폼 영역 */}
+      <div className="p-3 md:p-5">
+        <div className="grid gap-4 lg:grid-cols-[1.15fr_0.9fr]">
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1.5">마감일</label>
+              <div className="flex flex-col gap-2">
+                <div className="relative">
+                  <Calendar className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={form.actionDate}
+                    onChange={event => onUpdateForm({ actionDate: event.target.value })}
+                    className="w-full bg-bg-input border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {shortcuts.map(([label, value]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => onUpdateForm({ actionDate: value })}
+                      className={`px-2 py-2 text-xs rounded-lg border border-border ${
+                        form.actionDate === value
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-bg-card text-text-muted hover:text-text-heading hover:bg-bg-hover'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">담당자</label>
+                <select
+                  value={form.ownerName}
+                  onChange={event => onUpdateForm({ ownerName: event.target.value })}
+                  className="w-full bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">담당자 선택</option>
+                  {members.map(member => (
+                    <option key={member.id} value={member.name}>
+                      {member.name}{member.role ? ` · ${member.role}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1.5">우선순위</label>
+                <PriorityPicker
+                  value={form.priority}
+                  onChange={priority => onUpdateForm({ priority })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-muted mb-1.5">메모</label>
+            <textarea
+              value={form.memo}
+              onChange={event => onUpdateForm({ memo: event.target.value })}
+              rows={5}
+              placeholder="학생에게 전달할 메모"
+              className="w-full min-h-[100px] md:min-h-[116px] resize-none bg-bg-input border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </div>
+
+        {/* 액션 버튼: 모바일에서 wrap, 데스크탑에서 우측 정렬 */}
+        <div className="mt-4 flex flex-wrap gap-2 sm:justify-end">
+          <button
+            type="button"
+            onClick={onArchive}
+            disabled={busyAny}
+            className="flex-1 sm:flex-none min-w-[6rem] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border text-text-muted hover:text-text-heading hover:bg-bg-hover disabled:opacity-50 text-sm h-9"
+          >
+            {taskBusy === 'archive' ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={onHold}
+            disabled={busyAny}
+            className={`flex-1 sm:flex-none min-w-[6rem] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-sm h-9 disabled:opacity-50 ${
+              held
+                ? 'border-amber-500/40 bg-amber-500/15 text-amber-600'
+                : 'border-amber-500/20 text-amber-600 hover:bg-amber-500/10'
+            }`}
+          >
+            {taskBusy === 'hold' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
+            {held ? '보류됨' : '보류'}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busyAny}
+            className="flex-1 sm:flex-none min-w-[8rem] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 disabled:opacity-50 shadow-card text-sm font-medium h-9"
+          >
+            {taskBusy === 'confirm' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            확정 + 알림
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ── 우선순위 picker ────────────────────────────────────────
+
+function PriorityPicker({
+  value,
+  onChange,
+}: {
+  value: PriorityChoice;
+  onChange: (value: PriorityChoice) => void;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1 bg-bg-input border border-border rounded-lg p-1">
+      {PRIORITY_OPTIONS.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            value === option.value
+              ? 'bg-primary text-white'
+              : 'text-text-muted hover:text-text-heading hover:bg-bg-card'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── 진행 중 task row ──────────────────────────────────────
+
+interface ActiveTaskRowProps {
+  task: BlissTaskActiveItem;
+  completing: boolean;
+  onComplete: () => void;
+}
+
+function ActiveTaskRow({ task, completing, onComplete }: ActiveTaskRowProps) {
+  const owner = task.metadata?.assignedOwner || task.metadata?.blissDirect?.assignedOwner || '?';
+  const due = task.actionDate
+    ? new Date(task.actionDate).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })
+    : '미정';
+  const overdue =
+    task.actionDate && !task.completed && new Date(task.actionDate).getTime() < Date.now() - 24 * 3600 * 1000;
+  const slackLink = task.metadata?.blissSource?.slackPermalink;
+
+  return (
+    <li className={`flex items-center gap-3 p-3 ${task.completed ? 'opacity-50' : ''}`}>
+      <button
+        type="button"
+        onClick={onComplete}
+        disabled={completing}
+        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+          task.completed ? 'bg-accent border-accent' : 'border-border hover:border-primary'
+        } disabled:opacity-50`}
+        title={task.completed ? '완료 취소' : '완료 처리'}
+      >
+        {completing ? (
+          <Loader2 className="w-3 h-3 animate-spin text-text-muted" />
+        ) : task.completed ? (
+          <Check className="w-3.5 h-3.5 text-white" />
+        ) : null}
+      </button>
+      <div className="min-w-0 flex-1">
+        <div
+          className={`text-sm font-medium text-text-heading break-words leading-snug ${
+            task.completed ? 'line-through' : ''
+          }`}
+        >
+          {task.title}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-text-muted">
+          <span className="inline-flex items-center gap-1">
+            <User className="w-3 h-3" />{owner}
+          </span>
+          <span className={`inline-flex items-center gap-1 ${overdue ? 'text-red-500 font-medium' : ''}`}>
+            <Calendar className="w-3 h-3" />{due}
+          </span>
+          {task.priority === 'HIGH' && (
+            <span className="text-red-500 font-medium">HIGH</span>
+          )}
+          {slackLink && (
+            <a
+              href={slackLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline inline-flex items-center gap-0.5"
+            >
+              Slack <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+// ── Empty state ───────────────────────────────────────────
+
+function EmptyState({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <div className="bg-bg-card border border-border rounded-lg shadow-card p-8 text-center">
+      <div className="mx-auto mb-3 flex justify-center">{icon}</div>
+      <p className="text-text-heading font-medium">{title}</p>
     </div>
   );
 }

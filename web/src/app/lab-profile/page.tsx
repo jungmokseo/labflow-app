@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   getLabProfile, createLab, updateLab, addLabMember, removeLabMember, addLabProject, addDictEntry,
   analyzeSeedPapers, applySeedPaperResults, getLabCompleteness, runPaperCrawl, uploadPaperPdf,
@@ -64,9 +64,11 @@ export default function LabProfilePage() {
   const [applyingHomepage, setApplyingHomepage] = useState(false);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadProfile(); }, []);
+  const loadCompleteness = useCallback(async () => {
+    try { setCompleteness(await getLabCompleteness()); } catch {}
+  }, []);
 
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     try {
       const data = await getLabProfile();
       setLab(data);
@@ -75,11 +77,9 @@ export default function LabProfilePage() {
       if (err.message.includes('404') || err.message.includes('설정되지')) setShowOnboarding(true);
       else setError(err.message);
     } finally { setLoading(false); }
-  }
+  }, [loadCompleteness]);
 
-  async function loadCompleteness() {
-    try { setCompleteness(await getLabCompleteness()); } catch {}
-  }
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
   // ── 온보딩 Step 1: 기본 정보 ──
   async function handleStep1() {
@@ -468,16 +468,26 @@ export default function LabProfilePage() {
   //  기존 Lab Profile 관리 화면
   // ═══════════════════════════════════════════════
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-text-heading flex items-center gap-2"><FlaskConical className="w-6 h-6 text-primary" /> {lab.name}</h1>
-          <p className="text-text-muted text-base mt-1">{lab.institution} {lab.department}</p>
+    <div className="min-h-full pb-20 md:pb-12">
+      {/* Standard header */}
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <FlaskConical className="w-6 h-6 text-primary flex-shrink-0" /> <span className="truncate">{lab.name}</span>
+            </h1>
+            <p className="text-sm md:text-base text-text-muted mt-1">
+              {[lab.institution, lab.department].filter(Boolean).join(' · ') || '소속 미등록'}
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
+
+        {/* Stats badges — 모바일에서 헤더 아래로 wrap */}
+        <div className="flex flex-wrap items-center gap-2 mt-3 ml-4 md:ml-7">
           {completeness && (
-            <div className="flex items-center gap-2 bg-bg-card px-3 py-1.5 rounded-full">
-              <div className="w-20 h-2 bg-bg-input rounded-full overflow-hidden">
+            <div className="flex items-center gap-2 bg-bg-card border border-border px-3 py-1.5 rounded-full">
+              <div className="w-16 md:w-20 h-1.5 bg-bg-input rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full" style={{ width: `${completeness.percentage}%` }} />
               </div>
               <span className="text-xs text-text-muted">{completeness.percentage}%</span>
@@ -488,28 +498,39 @@ export default function LabProfilePage() {
         </div>
       </div>
 
-      {/* 완성도 제안 */}
-      {completeness && completeness.suggestions.length > 0 && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
-          <p className="text-primary text-xs font-medium mb-2 flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> 프로필 완성도를 높여보세요</p>
-          {completeness.suggestions.map((s: string, i: number) => (
-            <p key={i} className="text-text-muted text-xs mt-1">• {s}</p>
-          ))}
+      <div className="px-4 md:px-8 space-y-4">
+        {/* 완성도 제안 */}
+        {completeness && completeness.suggestions.length > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 md:p-4">
+            <p className="text-primary text-xs font-medium mb-1.5 flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> 프로필 완성도를 높여보세요</p>
+            <ul className="space-y-0.5">
+              {completeness.suggestions.map((s: string, i: number) => (
+                <li key={i} className="text-text-muted text-xs">• {s}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 탭 — 모바일 가로 스크롤 */}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border min-w-max md:min-w-0">
+            {(['info', 'members', 'projects', 'dict'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 md:flex-1 px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+                  tab === t ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'
+                }`}
+              >
+                {t === 'info' ? '기본 정보' : t === 'members' ? `구성원 (${(lab.members || []).length})` : t === 'projects' ? `과제 (${(lab.projects || []).length})` : `교정 사전 (${(lab.domainDict || []).length})`}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
 
-      {/* 탭 */}
-      <div className="flex gap-1 bg-bg-card rounded-lg p-1">
-        {(['info', 'members', 'projects', 'dict'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 px-3 py-2 rounded text-sm ${tab === t ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading'}`}>
-            {t === 'info' ? '기본 정보' : t === 'members' ? `구성원 (${(lab.members || []).length})` : t === 'projects' ? `과제 (${(lab.projects || []).length})` : `교정 사전 (${(lab.domainDict || []).length})`}
-          </button>
-        ))}
-      </div>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-
-      <div className="bg-bg-card rounded-xl p-6">
+        <div className="bg-bg-card rounded-lg border border-border p-4 md:p-6">
         {tab === 'info' && (
           <div className="space-y-4">
             {editingInfo ? (
@@ -547,14 +568,14 @@ export default function LabProfilePage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div className="grid grid-cols-2 gap-4 flex-1">
-                    <div><span className="text-text-muted text-xs">PI</span><p className="text-text-heading text-sm">{lab.piName || '미등록'}</p></div>
-                    <div><span className="text-text-muted text-xs">학과</span><p className="text-text-heading text-sm">{lab.department || '미등록'}</p></div>
-                    <div><span className="text-text-muted text-xs">소속</span><p className="text-text-heading text-sm">{lab.institution || '미등록'}</p></div>
-                    <div><span className="text-text-muted text-xs">PI 이메일</span><p className="text-text-heading text-sm">{lab.piEmail || '미등록'}</p></div>
+                <div className="flex justify-between items-start gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className="min-w-0"><span className="text-text-muted text-xs">PI</span><p className="text-text-heading text-sm truncate">{lab.piName || '미등록'}</p></div>
+                    <div className="min-w-0"><span className="text-text-muted text-xs">학과</span><p className="text-text-heading text-sm truncate">{lab.department || '미등록'}</p></div>
+                    <div className="min-w-0"><span className="text-text-muted text-xs">소속</span><p className="text-text-heading text-sm truncate">{lab.institution || '미등록'}</p></div>
+                    <div className="min-w-0"><span className="text-text-muted text-xs">PI 이메일</span><p className="text-text-heading text-sm truncate">{lab.piEmail || '미등록'}</p></div>
                   </div>
-                  <button onClick={startEditing} className="text-xs text-primary hover:text-primary/80 px-3 py-1.5 rounded-lg hover:bg-primary-light">수정</button>
+                  <button onClick={startEditing} className="text-xs text-primary hover:text-primary/80 px-3 py-1.5 rounded-lg hover:bg-primary-light flex-shrink-0">수정</button>
                 </div>
                 <div>
                   <span className="text-text-muted text-xs">연구 분야</span>
@@ -584,26 +605,28 @@ export default function LabProfilePage() {
 
         {tab === 'members' && (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="이름 (한국어)" className="w-28 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <input value={newMemberNameEn} onChange={e => setNewMemberNameEn(e.target.value)} placeholder="English Name" className="w-36 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
+            <div className="grid grid-cols-2 md:grid-cols-[7rem_9rem_auto_1fr_auto] gap-2">
+              <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder="이름" className="bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              <input value={newMemberNameEn} onChange={e => setNewMemberNameEn(e.target.value)} placeholder="English Name" className="bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
               <select value={newMemberRole} onChange={e => setNewMemberRole(e.target.value)} className="bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm">
                 {['학부연구생', '석사과정', '박사과정', '포닥', '교수'].map(r => <option key={r}>{r}</option>)}
               </select>
-              <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} placeholder="이메일" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <button onClick={handleAddMember} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
+              <input value={newMemberEmail} onChange={e => setNewMemberEmail(e.target.value)} placeholder="이메일" className="col-span-2 md:col-span-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              <button onClick={handleAddMember} className="col-span-2 md:col-span-1 px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
-            {(lab.members || []).map((m: any) => (
-              <div key={m.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
-                <User className="w-5 h-5 text-text-muted" />
-                <div className="flex-1">
-                  <p className="text-text-heading text-sm font-medium">{m.name}{m.nameEn ? ` (${m.nameEn})` : ''}</p>
-                  <p className="text-text-muted text-xs">{m.role} · {m.email || '이메일 미등록'}</p>
+            <div className="space-y-2">
+              {(lab.members || []).map((m: any) => (
+                <div key={m.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
+                  <User className="w-5 h-5 text-text-muted flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-text-heading text-sm font-medium truncate">{m.name}{m.nameEn ? ` (${m.nameEn})` : ''}</p>
+                    <p className="text-text-muted text-xs truncate">{m.role} · {m.email || '이메일 미등록'}</p>
+                  </div>
+                  <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-text-muted hover:text-red-400 p-1.5 rounded hover:bg-red-500/10 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
                 </div>
-                <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-xs text-text-muted hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10"><X className="w-3.5 h-3.5" /></button>
-              </div>
-            ))}
-            {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. Brain 대화에서도 가능해요: "김태영 박사과정 추가해줘"</p>}
+              ))}
+            </div>
+            {(lab.members || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">구성원을 추가해보세요. Brain 대화에서도 가능해요: &quot;김태영 박사과정 추가해줘&quot;</p>}
             {lab.homepageUrl && (
               <div className="pt-3 border-t border-border/30">
                 <button onClick={handleFetchHomepage} disabled={fetchingHomepage}
@@ -619,34 +642,36 @@ export default function LabProfilePage() {
 
         {tab === 'projects' && (
           <div className="space-y-4">
-            <div className="flex gap-2">
-              <input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="과제명" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <input value={newProjectFunder} onChange={e => setNewProjectFunder(e.target.value)} placeholder="지원기관" className="w-40 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="과제명" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              <input value={newProjectFunder} onChange={e => setNewProjectFunder(e.target.value)} placeholder="지원기관" className="sm:w-40 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
               <button onClick={handleAddProject} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
-            {(lab.projects || []).map((p: any) => (
-              <div key={p.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
-                <ClipboardList className="w-5 h-5 text-text-muted" />
-                <div className="flex-1">
-                  <p className="text-text-heading text-sm font-medium">{p.name}</p>
-                  <p className="text-text-muted text-xs">{p.funder || '미등록'} · {p.status}</p>
+            <div className="space-y-2">
+              {(lab.projects || []).map((p: any) => (
+                <div key={p.id} className="flex items-center gap-3 bg-bg-input p-3 rounded-lg">
+                  <ClipboardList className="w-5 h-5 text-text-muted flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-text-heading text-sm font-medium truncate">{p.name}</p>
+                    <p className="text-text-muted text-xs truncate">{p.funder || '미등록'} · {p.status}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
             {(lab.projects || []).length === 0 && <p className="text-text-muted text-xs text-center py-4">과제 정보를 등록하면 사사 문구를 빠르게 조회할 수 있어요</p>}
           </div>
         )}
 
         {tab === 'dict' && (
           <div className="space-y-4">
-            <p className="text-text-muted text-xs mb-2">회의록과 대화에서 전문용어를 자동 교정합니다. 대표 논문 DOI를 입력하면 자동 구축됩니다.</p>
-            <div className="flex gap-2">
-              <input value={newDictWrong} onChange={e => setNewDictWrong(e.target.value)} placeholder="잘못된 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
-              <span className="text-text-muted self-center">→</span>
-              <input value={newDictCorrect} onChange={e => setNewDictCorrect(e.target.value)} placeholder="올바른 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none" />
+            <p className="text-text-muted text-xs">회의록과 대화에서 전문용어를 자동 교정합니다. 대표 논문 DOI를 입력하면 자동 구축됩니다.</p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input value={newDictWrong} onChange={e => setNewDictWrong(e.target.value)} placeholder="잘못된 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
+              <span className="hidden sm:inline text-text-muted self-center">→</span>
+              <input value={newDictCorrect} onChange={e => setNewDictCorrect(e.target.value)} placeholder="올바른 표현" className="flex-1 bg-bg-input text-text-heading px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary" />
               <button onClick={handleAddDict} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {(lab.domainDict || []).map((d: any) => (
                 <div key={d.id} className="bg-bg-input p-2 rounded-lg flex items-center gap-2">
                   <span className="text-red-400 text-xs line-through">{d.wrongForm}</span>
@@ -657,6 +682,7 @@ export default function LabProfilePage() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* 홈페이지 정보 미리보기 모달 */}

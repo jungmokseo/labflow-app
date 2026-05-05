@@ -184,11 +184,17 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
   return (
     <>
       <div className="p-4 pb-2 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-text-heading">
-          <FlaskConical className="w-4 h-4 text-primary inline-block" /> <span className="text-primary">Research Flow</span>
+        <h1 className="text-lg font-bold text-text-heading flex items-center gap-1.5">
+          <FlaskConical className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-primary">Research Flow</span>
         </h1>
         {onToggleCollapse && (
-          <button onClick={onToggleCollapse} className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors" title="사이드바 접기">
+          <button
+            onClick={onToggleCollapse}
+            className="p-2 -mr-1 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors focus-ring"
+            aria-label="사이드바 접기"
+            title="사이드바 접기"
+          >
             <PanelLeftClose className="w-4 h-4" />
           </button>
         )}
@@ -208,16 +214,20 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
               href={item.href}
               onClick={onNavigate}
               onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 focus-ring ${
+              aria-current={active ? 'page' : undefined}
+              className={`flex items-center gap-3 px-3 py-2 md:py-2 rounded-lg text-sm min-h-[40px] transition-all duration-150 focus-ring ${
                 active
                   ? 'bg-primary-light text-primary font-medium'
                   : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
               }`}
             >
-              <item.icon className="w-4 h-4" />
-              <span className="flex-1">{item.label}</span>
+              <item.icon className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 truncate">{item.label}</span>
               {showFollowUpBadge && (
-                <span className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white min-w-[18px] text-center">
+                <span
+                  className="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white min-w-[18px] text-center flex-shrink-0"
+                  aria-label={`답변 대기 ${followUpPending}건`}
+                >
                   {followUpPending}
                 </span>
               )}
@@ -341,9 +351,9 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
         </div>
       )}
 
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-border safe-bottom">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+          <div className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
             {user?.email?.charAt(0).toUpperCase() || '?'}
           </div>
           <div className="min-w-0 flex-1">
@@ -353,14 +363,16 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
           </div>
           <button
             onClick={toggle}
-            className="p-1 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+            className="p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors focus-ring"
+            aria-label={dark ? '라이트 모드로 전환' : '다크 모드로 전환'}
             title={dark ? '라이트 모드' : '다크 모드'}
           >
             {dark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
           <button
             onClick={onSignOut}
-            className="p-1 rounded-lg text-text-muted hover:text-red-500 hover:bg-bg-hover transition-colors"
+            className="p-2 rounded-lg text-text-muted hover:text-red-500 hover:bg-bg-hover transition-colors focus-ring"
+            aria-label="로그아웃"
             title="로그아웃"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -442,22 +454,36 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className={`hidden md:flex flex-col bg-bg-sidebar border-r border-border-strong transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside
+        className={`hidden md:flex flex-col bg-bg-sidebar border-r border-border-strong transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}
+        aria-label="사이드바 내비게이션"
+      >
         {collapsed ? (
           <div className="flex flex-col h-full items-center py-4">
-            <button onClick={() => setCollapsed(false)} className="p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover mb-4" title="사이드바 펼치기">
+            <button
+              onClick={() => setCollapsed(false)}
+              className="p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover mb-4 focus-ring"
+              aria-label="사이드바 펼치기"
+              title="사이드바 펼치기"
+            >
               <PanelLeft className="w-5 h-5" />
             </button>
             {NAV_ITEMS.map((item) => {
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
               const showBadge = item.href === '/follow-up' && followUpPending > 0;
               return (
-                <Link key={item.href} href={item.href} onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
-                  className={`relative p-2.5 rounded-lg mb-1 transition-colors ${active ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'}`}
-                  title={`${item.label}${showBadge ? ` (${followUpPending})` : ''}`}>
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={`${item.label}${showBadge ? `, 답변 대기 ${followUpPending}건` : ''}`}
+                  className={`relative p-2.5 rounded-lg mb-1 transition-colors focus-ring ${active ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'}`}
+                  title={`${item.label}${showBadge ? ` (${followUpPending})` : ''}`}
+                >
                   <item.icon className="w-4 h-4" />
                   {showBadge && (
-                    <span className="absolute -top-0.5 -right-0.5 px-1 min-w-[16px] h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    <span className="absolute top-0 right-0 px-1 min-w-[16px] h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center pointer-events-none">
                       {followUpPending > 9 ? '9+' : followUpPending}
                     </span>
                   )}
@@ -465,9 +491,12 @@ export function Sidebar() {
               );
             })}
             <div className="flex-1" />
-            <button onClick={handleSignOut}
-              className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center text-sm font-bold mb-2"
-              title="로그아웃">
+            <button
+              onClick={handleSignOut}
+              className="w-8 h-8 rounded-full bg-primary-light text-primary flex items-center justify-center text-sm font-bold mb-2 focus-ring hover:bg-primary/20 transition-colors"
+              aria-label="로그아웃"
+              title="로그아웃"
+            >
               {user?.email?.charAt(0).toUpperCase() || '?'}
             </button>
           </div>
@@ -477,34 +506,35 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-3 bg-bg-sidebar/90 backdrop-blur border-b border-border">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 h-14 flex items-center px-2 bg-bg-sidebar/90 backdrop-blur border-b border-border">
         <button
           onClick={() => setMobileOpen(true)}
-          className="p-2 rounded-lg text-text-heading"
+          className="p-2.5 rounded-lg text-text-heading hover:bg-bg-hover transition-colors focus-ring"
           aria-label="메뉴 열기"
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M3 5h14M3 10h14M3 15h14" />
           </svg>
         </button>
-        <span className="flex-1 text-center text-base font-semibold text-text-heading">Research Flow</span>
-        <div className="w-9" /> {/* Spacer to center title */}
+        <span className="flex-1 text-center text-base font-semibold text-text-heading truncate px-2">Research Flow</span>
+        <div className="w-10" aria-hidden="true" /> {/* Spacer to center title */}
       </div>
 
       {/* Mobile drawer overlay */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 flex">
+        <div className="md:hidden fixed inset-0 z-50 flex" role="dialog" aria-modal="true" aria-label="메인 메뉴">
           <div
             className="fixed inset-0 bg-[var(--color-overlay)] backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
           />
-          <aside className="relative w-72 flex flex-col bg-bg-card border-r border-border animate-in slide-in-from-left duration-200">
+          <aside className="relative w-72 max-w-[85vw] flex flex-col bg-bg-card border-r border-border animate-in slide-in-from-left duration-200">
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-4 p-1 text-text-muted hover:text-text-heading"
+              className="absolute top-3 right-3 p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors focus-ring z-10"
               aria-label="메뉴 닫기"
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M5 5l10 10M15 5L5 15" />
               </svg>
             </button>

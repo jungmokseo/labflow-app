@@ -38,7 +38,7 @@ export function QuickCapture() {
       // URL에서 파라미터 제거
       router.replace(pathname, { scroll: false });
     }
-  }, [searchParams]);
+  }, [searchParams, pathname, router]);
 
   // 오픈 시 자동 포커스
   useEffect(() => {
@@ -95,12 +95,13 @@ export function QuickCapture() {
       {!hideFab && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed z-40 bottom-6 right-4 w-12 h-12 rounded-full bg-primary text-white shadow-lg flex items-center justify-center
-            hover:bg-primary/90 active:scale-95 transition-all duration-150"
+          className="fixed z-40 right-4 w-12 h-12 rounded-full bg-primary text-white shadow-lg flex items-center justify-center
+            hover:bg-primary/90 active:scale-95 transition-all duration-150 focus-ring"
+          style={{ bottom: 'max(1.5rem, calc(1.5rem + env(safe-area-inset-bottom)))' }}
           aria-label="빠른 캡처 (Cmd+Shift+N)"
           title="빠른 캡처 (Cmd+Shift+N)"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5" aria-hidden="true" />
         </button>
       )}
 
@@ -111,25 +112,33 @@ export function QuickCapture() {
           <div
             className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
             onClick={() => setOpen(false)}
+            aria-hidden="true"
           />
 
           {/* 시트 본체 */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-bg-card rounded-t-2xl shadow-2xl
-            animate-in slide-in-from-bottom duration-200 safe-bottom">
+          <div
+            className="fixed bottom-0 left-0 right-0 z-50 bg-bg-card rounded-t-2xl shadow-2xl
+              animate-in slide-in-from-bottom duration-200 safe-bottom max-h-[90dvh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-label="빠른 캡처"
+          >
             {/* 드래그 핸들 */}
             <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-border" />
+              <div className="w-10 h-1 rounded-full bg-border" aria-hidden="true" />
             </div>
 
             <div className="px-4 pb-6 pt-2">
               {/* 카테고리 탭 + 닫기 */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex gap-1.5">
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <div className="flex gap-1.5 flex-wrap" role="tablist" aria-label="카테고리">
                   {CATEGORIES.map(c => (
                     <button
                       key={c.value}
                       onClick={() => { setCategory(c.value); textareaRef.current?.focus(); }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                      role="tab"
+                      aria-selected={category === c.value}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors focus-ring ${
                         category === c.value
                           ? 'bg-primary text-white'
                           : 'bg-bg-input text-text-muted hover:bg-bg-hover hover:text-text-heading'
@@ -142,9 +151,10 @@ export function QuickCapture() {
                 </div>
                 <button
                   onClick={() => setOpen(false)}
-                  className="p-1.5 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+                  className="p-2 rounded-lg text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors focus-ring flex-shrink-0"
+                  aria-label="닫기"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults,
   getJournalFields, searchJournals, addCustomJournal,
@@ -162,19 +162,16 @@ export default function PapersPage() {
   const apiTotalFetched: number | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.totalFetched ?? null);
   const apiWeeklyInsight: string | null = Array.isArray(resultsResponse) ? null : ((resultsResponse as any)?.weeklyInsight ?? null);
 
-  useEffect(() => { loadAlerts(); }, []);
-
   const totalJournals = selectedJournals.length + customFeeds.length;
 
-  // BLISS Lab 기본 저널 (설정 복원용)
-  const DEFAULT_JOURNALS = [
-    'Nature', 'Science', 'Nature Materials', 'Nature Nanotechnology',
-    'Nature Biomedical Engineering', 'Nature Electronics', 'Science Advances',
-    'Science Robotics', 'Advanced Materials', 'Advanced Functional Materials',
-    'Nature Sensors', 'Nature Chemical Engineering', 'ACS Nano', 'ACS Sensors',
-  ];
-
-  async function loadAlerts() {
+  const loadAlerts = useCallback(async () => {
+    // BLISS Lab 기본 저널 (설정 복원용)
+    const DEFAULT_JOURNALS = [
+      'Nature', 'Science', 'Nature Materials', 'Nature Nanotechnology',
+      'Nature Biomedical Engineering', 'Nature Electronics', 'Science Advances',
+      'Science Robotics', 'Advanced Materials', 'Advanced Functional Materials',
+      'Nature Sensors', 'Nature Chemical Engineering', 'ACS Nano', 'ACS Sensors',
+    ];
     try {
       const data = await getPaperAlerts();
       const alertList = data.alerts || data.data || [];
@@ -203,7 +200,9 @@ export default function PapersPage() {
         savePaperAlert({ keywords: themeKws, journals: DEFAULT_JOURNALS }).catch(() => {});
       }
     } catch {}
-  }
+  }, []);
+
+  useEffect(() => { loadAlerts(); }, [loadAlerts]);
 
   async function loadFields() {
     try {
@@ -388,377 +387,467 @@ export default function PapersPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5 md:space-y-7">
-      {/* Header — 모바일에서 stack, 데스크톱에서 row */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div className="min-w-0 flex-1 flex items-center gap-3">
-          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
-              <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 연구동향
-            </h1>
-            <p className="text-text-muted text-sm md:text-base mt-1">
-              {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
-            </p>
+    <div className="min-h-full pb-20 md:pb-12">
+      {/* Header — 표준 패턴 */}
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex items-center gap-3 mb-1 min-w-0 flex-1">
+            <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+                <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 연구동향
+              </h1>
+              <p className="text-sm md:text-base text-text-muted mt-1">
+                {totalJournals}개 저널 모니터링 · 주간 자동 업데이트
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button onClick={handleCrawl} disabled={crawling}
-            className="flex-1 sm:flex-none px-4 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 inline-flex items-center justify-center gap-1">
-            {crawling ? '수집 중...' : <><RefreshCw className="w-4 h-4" /> 수집</>}
-          </button>
-          <button onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
-            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm inline-flex items-center justify-center gap-1 ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading'}`}>
-            <Settings className="w-4 h-4" /> 설정
-          </button>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={handleCrawl}
+              disabled={crawling}
+              className="flex-1 sm:flex-none px-3 py-2 bg-bg-card text-text-muted border border-border rounded-lg text-sm hover:text-text-heading hover:bg-bg-hover transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1.5 whitespace-nowrap"
+            >
+              {crawling ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> 수집 중</>
+              ) : (
+                <><RefreshCw className="w-4 h-4" /> 수집</>
+              )}
+            </button>
+            <button
+              onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadFields(); }}
+              className={`flex-1 sm:flex-none px-3 py-2 rounded-lg text-sm transition-colors inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${showSettings ? 'bg-primary text-white' : 'bg-bg-card text-text-muted border border-border hover:text-text-heading hover:bg-bg-hover'}`}
+            >
+              <Settings className="w-4 h-4" /> 설정
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* 수집 진행 상태 */}
-      {crawling && (
-        <div className="bg-bg-card rounded-xl border border-border p-5">
-          <StepProgress
-            steps={['설정 저장', 'RSS 수집 + 키워드 매칭', '결과 정리', '완료']}
-            currentStep={crawlStep}
-          />
-        </div>
-      )}
-
-      {error && <div className="bg-red-500/10 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center justify-between">{error}<button onClick={() => setError('')}><X className="w-4 h-4" /></button></div>}
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="bg-bg-card rounded-xl border border-border p-5 space-y-5">
-          <div className="flex items-center justify-between">
-            <h3 className="text-text-heading font-semibold">저널 & 키워드 설정</h3>
-            <span className="text-xs text-text-muted">{totalJournals}/{MAX_JOURNALS}</span>
+      <div className="px-4 md:px-8 space-y-5 md:space-y-6">
+        {/* 수집 진행 상태 */}
+        {crawling && (
+          <div className="bg-bg-card rounded-lg border border-border p-4 md:p-5">
+            <StepProgress
+              steps={['설정 저장', 'RSS 수집 + 키워드 매칭', '결과 정리', '완료']}
+              currentStep={crawlStep}
+            />
           </div>
+        )}
 
-          {/* Current journals */}
-          <div className="flex flex-wrap gap-2">
-            {selectedJournals.map(j => (
-              <span key={j} className="flex items-center gap-1 px-3 py-1.5 bg-primary-light text-primary rounded-full text-xs">
-                {j} <button onClick={() => toggleJournal(j)} className="text-primary/50 hover:text-primary ml-1"><X className="w-3 h-3 inline" /></button>
-              </span>
-            ))}
-            {customFeeds.map(f => (
-              <span key={f.rssUrl} className="px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-full text-xs">{f.name}</span>
-            ))}
-          </div>
-
-          {/* Add journal */}
-          <div className="flex gap-2">
-            <input value={addInput} onChange={e => setAddInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && handleAddJournal()}
-              placeholder="저널명 또는 RSS URL..."
-              className="flex-1 bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            <button onClick={handleAddJournal} disabled={addLoading}
-              className="px-5 py-2.5 bg-primary text-white rounded-lg text-sm disabled:opacity-50">
-              {addLoading ? '...' : '추가'}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm flex items-center justify-between gap-2">
+            <span className="flex-1 break-words">{error}</span>
+            <button onClick={() => setError('')} className="flex-shrink-0 hover:opacity-70" aria-label="닫기">
+              <X className="w-4 h-4" />
             </button>
           </div>
-          {searchResultsJ.length > 0 && (
-            <div className="space-y-1 max-h-40 overflow-y-auto">
-              {searchResultsJ.map((j, i) => (
-                <button key={i} onClick={async () => {
-                  if (j.source === 'built-in') { toggleJournal(j.name); }
-                  else if (j.rssUrl) { await addCustomJournal({ name: j.name, rssUrl: j.rssUrl, publisher: j.publisher }); setCustomFeeds(prev => [...prev, { name: j.name, rssUrl: j.rssUrl }]); }
-                  setSearchResultsJ([]); setAddInput('');
-                }} className="w-full flex items-center justify-between bg-bg-input hover:bg-bg-hover rounded-lg p-3 text-left">
-                  <div><p className="text-sm text-text-heading">{j.name}</p><p className="text-xs text-text-muted">{j.publisher || ''}</p></div>
-                  <span className="text-xs text-primary">+ 추가</span>
+        )}
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="bg-bg-card rounded-lg border border-border p-4 md:p-5 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-text-heading">저널 & 키워드 설정</h3>
+              <span className="text-xs text-text-muted">{totalJournals}/{MAX_JOURNALS}</span>
+            </div>
+
+            {/* Current journals */}
+            {(selectedJournals.length > 0 || customFeeds.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {selectedJournals.map(j => (
+                  <span key={j} className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-light text-primary rounded-full text-xs">
+                    {j}
+                    <button
+                      onClick={() => toggleJournal(j)}
+                      className="text-primary/50 hover:text-primary ml-0.5"
+                      aria-label={`${j} 제거`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+                {customFeeds.map(f => (
+                  <span key={f.rssUrl} className="px-3 py-1.5 bg-blue-500/10 text-blue-500 rounded-full text-xs">{f.name}</span>
+                ))}
+              </div>
+            )}
+
+            {/* Add journal */}
+            <div className="flex gap-2">
+              <input
+                value={addInput}
+                onChange={e => setAddInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && handleAddJournal()}
+                placeholder="저널명 또는 RSS URL..."
+                className="flex-1 bg-bg-input text-text-heading px-4 py-2.5 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <button
+                onClick={handleAddJournal}
+                disabled={addLoading}
+                className="px-5 py-2.5 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              >
+                {addLoading ? '...' : '추가'}
+              </button>
+            </div>
+            {searchResultsJ.length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {searchResultsJ.map((j, i) => (
+                  <button
+                    key={i}
+                    onClick={async () => {
+                      if (j.source === 'built-in') {
+                        toggleJournal(j.name);
+                      } else if (j.rssUrl) {
+                        await addCustomJournal({ name: j.name, rssUrl: j.rssUrl, publisher: j.publisher });
+                        setCustomFeeds(prev => [...prev, { name: j.name, rssUrl: j.rssUrl }]);
+                      }
+                      setSearchResultsJ([]);
+                      setAddInput('');
+                    }}
+                    className="w-full flex items-center justify-between bg-bg-input hover:bg-bg-hover rounded-lg p-3 text-left transition-colors"
+                  >
+                    <div>
+                      <p className="text-sm text-text-heading">{j.name}</p>
+                      <p className="text-xs text-text-muted">{j.publisher || ''}</p>
+                    </div>
+                    <span className="text-xs text-primary font-medium">+ 추가</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Field picker */}
+            <div className="flex flex-wrap gap-2">
+              {allFields.map(field => (
+                <button
+                  key={field}
+                  onClick={() => setExpandedField(expandedField === field ? null : field)}
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${expandedField === field ? 'bg-primary text-white border-primary' : 'bg-bg-input text-text-muted border-border hover:text-text-heading hover:bg-bg-hover'}`}
+                >
+                  {field}
                 </button>
               ))}
             </div>
-          )}
+            {expandedField && fieldData[expandedField] && (
+              <div className="bg-bg-input rounded-lg p-3 md:p-4 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {fieldData[expandedField].map(j => (
+                  <label
+                    key={j.name}
+                    className={`flex items-center gap-2 text-xs cursor-pointer px-2 py-1.5 rounded hover:bg-bg-hover/50 transition-colors ${!j.hasRss ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedJournals.includes(j.name)}
+                      onChange={() => toggleJournal(j.name)}
+                      disabled={!j.hasRss}
+                      className="accent-primary rounded"
+                    />
+                    <span className="text-text-heading">{j.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
 
-          {/* Field picker */}
-          <div className="flex flex-wrap gap-2">
-            {allFields.map(field => (
-              <button key={field} onClick={() => setExpandedField(expandedField === field ? null : field)}
-                className={`px-3 py-1.5 rounded-lg text-xs border ${expandedField === field ? 'bg-primary text-white border-primary' : 'bg-bg-input text-text-muted border-border hover:text-text-heading'}`}>
-                {field}
-              </button>
-            ))}
-          </div>
-          {expandedField && fieldData[expandedField] && (
-            <div className="bg-bg-input rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {fieldData[expandedField].map(j => (
-                <label key={j.name} className={`flex items-center gap-2 text-xs cursor-pointer px-2 py-1.5 rounded hover:bg-bg-hover/30 ${!j.hasRss ? 'opacity-50' : ''}`}>
-                  <input type="checkbox" checked={selectedJournals.includes(j.name)} onChange={() => toggleJournal(j.name)} disabled={!j.hasRss} className="accent-primary rounded" />
-                  <span className="text-text-heading">{j.name}</span>
-                </label>
-              ))}
-            </div>
-          )}
-
-          {/* Keywords */}
-          <div>
-            <p className="text-xs text-text-muted mb-2">연구 키워드 (쉼표 구분)</p>
-            <textarea value={keywords} onChange={e => setKeywords(e.target.value)} rows={2}
-              placeholder="biosensor, flexible electronics, hydrogel..."
-              className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
-          </div>
-
-          {/* Schedule info + Reset */}
-          <div className="flex items-center justify-between bg-bg-input rounded-lg px-4 py-3">
+            {/* Keywords */}
             <div>
-              <p className="text-sm text-text-heading font-medium">자동 수집 주기</p>
-              <p className="text-xs text-text-muted">매주 자동 실행 · 수동 수집도 가능</p>
+              <p className="text-xs text-text-muted mb-2">연구 키워드 (쉼표 구분)</p>
+              <textarea
+                value={keywords}
+                onChange={e => setKeywords(e.target.value)}
+                rows={2}
+                placeholder="biosensor, flexible electronics, hydrogel..."
+                className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+              />
             </div>
-            <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">주간</span>
+
+            {/* Schedule info */}
+            <div className="flex items-center justify-between bg-bg-input rounded-lg px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-text-heading">자동 수집 주기</p>
+                <p className="text-xs text-text-muted mt-0.5">매주 자동 실행 · 수동 수집도 가능</p>
+              </div>
+              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium flex-shrink-0">주간</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                onClick={async () => {
+                  if (!confirm('기존 수집 결과를 모두 삭제하고 다시 수집합니다. 계속하시겠습니까?')) return;
+                  try {
+                    await resetPaperAlertResults();
+                    refreshResults();
+                    setShowSettings(false);
+                  } catch { }
+                }}
+                className="w-full py-2.5 text-red-500 border border-red-500/20 rounded-lg text-sm hover:bg-red-500/10 transition-colors"
+              >
+                결과 초기화
+              </button>
+              <button
+                onClick={() => {
+                  setShowSettings(false);
+                  const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
+                  if (kws.length > 0) savePaperAlert({ keywords: kws, journals: selectedJournals }).catch(() => setShowSettings(true));
+                }}
+                className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                설정 저장
+              </button>
+            </div>
           </div>
+        )}
 
-          <button onClick={async () => {
-            if (!confirm('기존 수집 결과를 모두 삭제하고 다시 수집합니다. 계속하시겠습니까?')) return;
-            try {
-              await resetPaperAlertResults();
-              refreshResults();
-              setShowSettings(false);
-            } catch { }
-          }} className="w-full py-2.5 text-red-400 border border-red-500/20 rounded-lg text-sm hover:bg-red-500/10 transition-colors">
-            결과 초기화 (설정 유지)
-          </button>
+        {/* ── 주차별 논문 대시보드 ── */}
+        {resultsLoading ? (
+          <div className="flex items-center justify-center py-16 text-text-muted">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            불러오는 중...
+          </div>
+        ) : results.length === 0 ? (
+          <div className="bg-bg-card rounded-lg border border-border p-8 md:p-10 text-center">
+            <BookOpen className="w-12 h-12 text-primary/30 mx-auto mb-4" />
+            <p className="text-base md:text-lg font-semibold text-text-heading mb-2">아직 수집된 논문이 없습니다</p>
+            <p className="text-sm text-text-muted mb-6">
+              {totalJournals}개 저널이 설정되어 있습니다.<br />
+              아래 버튼으로 지금 바로 수집을 시작하세요.
+            </p>
+            <button
+              onClick={handleCrawl}
+              disabled={crawling}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${crawling ? 'animate-spin' : ''}`} />
+              {crawling ? '수집 중...' : '지금 수집하기'}
+            </button>
+            <p className="text-xs text-text-muted/70 mt-4">매주 월요일 자동으로 수집됩니다</p>
+          </div>
+        ) : weekGroups.map(week => (
+          <div key={week.label} className="space-y-4">
+            {/* 주차 헤더 */}
+            <div className="border-t border-border/30 pt-5 md:pt-6 space-y-4">
+              <h2 className="text-lg md:text-2xl font-bold text-text-heading flex items-center gap-2 leading-tight">
+                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary flex-shrink-0" />
+                <span className="break-keep">{week.label}</span>
+              </h2>
 
-          <button onClick={() => {
-            // Optimistic: close settings immediately
-            setShowSettings(false);
-            const kws = keywords.split(',').map(k => k.trim()).filter(Boolean);
-            if (kws.length > 0) savePaperAlert({ keywords: kws, journals: selectedJournals }).catch(() => setShowSettings(true));
-          }} className="w-full py-2.5 bg-primary text-white rounded-lg text-sm font-medium">설정 저장</button>
-        </div>
-      )}
-
-      {/* ── 주차별 논문 대시보드 ── */}
-      {resultsLoading ? (
-        <div className="flex items-center justify-center min-h-[40vh]">
-          <div className="w-8 h-8 rounded-full border-[3px] border-border border-t-primary animate-spin" />
-        </div>
-      ) : results.length === 0 ? (
-        <div className="bg-bg-card rounded-xl border border-border p-10 text-center">
-          <BookOpen className="w-12 h-12 text-primary/30 mx-auto mb-4" />
-          <p className="text-text-heading font-semibold text-lg mb-2">아직 수집된 논문이 없습니다</p>
-          <p className="text-text-muted text-sm mb-6">
-            {totalJournals}개 저널이 설정되어 있습니다.<br />
-            아래 버튼으로 지금 바로 수집을 시작하세요.
-          </p>
-          <button
-            onClick={handleCrawl}
-            disabled={crawling}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${crawling ? 'animate-spin' : ''}`} />
-            {crawling ? '수집 중...' : '지금 수집하기'}
-          </button>
-          <p className="text-text-muted/60 text-xs mt-4">매주 월요일 자동으로 수집됩니다</p>
-        </div>
-      ) : weekGroups.map(week => (
-        <div key={week.label} className="space-y-4">
-          {/* 주차 헤더 */}
-          <div className="border-t border-border/30 pt-6 space-y-4">
-            <h2 className="text-xl md:text-2xl font-bold text-text-heading flex items-center gap-2">
-              <Calendar className="w-5 h-5 md:w-6 md:h-6 text-primary flex-shrink-0" /> {week.label}
-            </h2>
-
-            {/* KPI 카드 — 한눈에 들어오는 숫자 */}
-            <div className="grid grid-cols-3 gap-2 md:gap-3">
-              <div className="bg-bg-card border border-border rounded-xl p-3 md:p-4">
-                <p className="text-xs text-text-muted font-medium">수집</p>
-                <p className="text-2xl md:text-3xl font-bold text-text-heading mt-0.5 leading-none">
-                  {week.totalFetched ? week.totalFetched.toLocaleString() : '—'}
-                </p>
-                <p className="text-xs text-text-muted mt-1">{week.journals.length}개 저널</p>
+              {/* KPI 카드 */}
+              <div className="grid grid-cols-3 gap-2 md:gap-3">
+                <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
+                  <p className="text-xs font-medium text-text-muted">수집</p>
+                  <p className="text-2xl md:text-3xl font-bold text-text-heading mt-0.5 leading-none">
+                    {week.totalFetched ? week.totalFetched.toLocaleString() : '—'}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1.5">{week.journals.length}개 저널</p>
+                </div>
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 md:p-4">
+                  <p className="text-xs font-medium text-primary">관련</p>
+                  <p className="text-2xl md:text-3xl font-bold text-primary mt-0.5 leading-none">
+                    {week.papers.length + week.otherPapers.length}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1.5">키워드 매칭</p>
+                </div>
+                <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 md:p-4">
+                  <p className="text-xs font-medium text-emerald-600">핵심</p>
+                  <p className="text-2xl md:text-3xl font-bold text-emerald-600 mt-0.5 leading-none">
+                    {week.papers.length}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1.5">★★ 이상</p>
+                </div>
               </div>
-              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 md:p-4">
-                <p className="text-xs text-primary font-medium">관련</p>
-                <p className="text-2xl md:text-3xl font-bold text-primary mt-0.5 leading-none">
-                  {week.papers.length + week.otherPapers.length}
-                </p>
-                <p className="text-xs text-text-muted mt-1">키워드 매칭</p>
-              </div>
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-3 md:p-4">
-                <p className="text-xs text-emerald-600 font-medium">핵심</p>
-                <p className="text-2xl md:text-3xl font-bold text-emerald-600 mt-0.5 leading-none">
-                  {week.papers.length}
-                </p>
-                <p className="text-xs text-text-muted mt-1">★★ 이상</p>
-              </div>
+
+              {/* 테마별 분포 */}
+              {week.themes.size > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-text-muted">핵심 테마</span>
+                  {Array.from(week.themes.entries()).map(([t, ps]) => (
+                    <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                      {t}
+                      <span className="text-primary/70">{ps.length}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* 수집 저널 — 접기/펼치기 */}
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-text-muted hover:text-text-heading inline-flex items-center gap-1 list-none transition-colors">
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
+                  수집 저널 {week.journals.length}개 보기
+                </summary>
+                <div className="mt-2 flex flex-wrap gap-1.5 pl-5">
+                  {week.journals.map(j => (
+                    <span key={j} className="px-2 py-0.5 bg-bg-input text-text-muted rounded text-xs">{j}</span>
+                  ))}
+                </div>
+              </details>
+
+              {/* AI 핵심 시사점 */}
+              {(week.aiInsight || week.insight) && (
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                  <h3 className="text-xs md:text-sm font-bold uppercase tracking-wider text-primary mb-3 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4" /> 핵심 시사점
+                  </h3>
+                  <InsightBullets text={week.aiInsight || week.insight} />
+                </div>
+              )}
             </div>
 
-            {/* 테마별 분포 — 칩 형태 */}
-            {Array.from(week.themes.entries()).length > 0 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-text-muted">핵심 테마</span>
-                {Array.from(week.themes.entries()).map(([t, ps]) => (
-                  <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">
-                    {t} <span className="text-primary/70">{ps.length}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* 수집 저널 — 접기/펼치기 */}
-            <details className="group">
-              <summary className="cursor-pointer text-sm text-text-muted hover:text-text-heading inline-flex items-center gap-1 list-none">
-                <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" />
-                수집 저널 {week.journals.length}개 보기
-              </summary>
-              <div className="mt-2 flex flex-wrap gap-1.5 pl-5">
-                {week.journals.map(j => (
-                  <span key={j} className="px-2 py-0.5 bg-bg-input text-text-muted rounded text-xs">{j}</span>
-                ))}
-              </div>
-            </details>
-
-            {/* AI 생성 핵심 시사점 — bullet으로 분리 */}
-            {(week.aiInsight || week.insight) && (
-              <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-4">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-primary mb-3 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4" /> 핵심 시사점
+            {/* 테마별 섹션 (★2-3 논문) */}
+            {Array.from(week.themes.entries()).map(([theme, papers]) => (
+              <div key={theme} className="bg-bg-card rounded-lg border border-border p-3 md:p-4">
+                <h3 className="text-base md:text-lg font-semibold text-primary mb-3 flex items-center gap-1.5 leading-tight">
+                  {getThemeIcon(theme)}
+                  <span>{theme}</span>
+                  <span className="text-text-muted/70 font-normal text-sm">({papers.length}편)</span>
                 </h3>
-                <InsightBullets text={week.aiInsight || week.insight} />
+
+                {/* 논문 토글 리스트 */}
+                <div className="space-y-1">
+                  {papers.map(paper => {
+                    const stars = (paper as any).stars || 1;
+                    const si = STAR_INFO[stars] || STAR_INFO[1];
+                    const isOpen = expandedPapers.has(paper.id);
+                    const matched: string[] = (paper as any).matchedKeywords || [];
+
+                    return (
+                      <div key={paper.id}>
+                        <button
+                          onClick={() => togglePaper(paper.id)}
+                          className="w-full text-left py-2.5 px-2 md:px-3 rounded-lg hover:bg-bg-hover/40 transition-colors"
+                        >
+                          <div className="flex items-start gap-2">
+                            {isOpen ? (
+                              <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm md:text-base font-medium text-text-heading leading-snug line-clamp-2 break-words">
+                                {paper.title}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                                <span className="text-xs text-text-muted">{paper.journal}</span>
+                                <span className={`text-xs inline-flex items-center gap-0.5 ${si.color}`}>
+                                  <StarRating count={si.stars} /> {si.label}
+                                </span>
+                                {matched.length > 0 && (
+                                  <span className="text-xs text-text-muted/70 truncate min-w-0">
+                                    · {matched.slice(0, 3).join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+
+                        {isOpen && (
+                          <div className="ml-6 mb-3 pl-3 md:pl-4 border-l-2 border-border space-y-2.5">
+                            <p className="text-xs md:text-sm text-text-muted leading-relaxed">
+                              <span className="font-medium">저널</span>: {paper.journal}
+                              {(paper as any).pubDate && (
+                                <> | <span className="font-medium">발행일</span>: {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>
+                              )}
+                            </p>
+                            {((paper as any).doi || paper.url) && (
+                              <p className="text-xs md:text-sm flex items-center gap-1">
+                                <Link2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                {(paper as any).doi ? (
+                                  <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
+                                ) : paper.url ? (
+                                  <a href={paper.url} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
+                                ) : null}
+                              </p>
+                            )}
+                            {stars === 2 && (paper as any).aiReason && (
+                              <div className="bg-orange-500/10 border border-orange-500/20 rounded-md px-3 py-2">
+                                <p className="text-xs md:text-sm text-orange-500 leading-relaxed">
+                                  <span className="font-semibold">확인 추천</span> — {(paper as any).aiReason}
+                                </p>
+                              </div>
+                            )}
+                            {paper.aiSummary && (
+                              <p className="text-sm md:text-base text-text-main leading-[1.7] break-words">{paper.aiSummary}</p>
+                            )}
+                            {((paper as any).matchedKeywords || (paper as any).themes) && (
+                              <p className="text-xs md:text-sm text-text-muted leading-relaxed">
+                                <span className="font-medium">키워드 매칭</span>: {((paper as any).matchedKeywords || (paper as any).themes || []).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* 기타 논문 섹션 (★1) */}
+            {week.otherPapers.length > 0 && (
+              <div className="bg-bg-card/60 rounded-lg border border-border/50 p-3 md:p-4">
+                <h3 className="text-sm md:text-base font-semibold text-text-muted mb-1 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4" />
+                  기타 논문
+                  <span className="text-text-muted/70 font-normal">({week.otherPapers.length}편)</span>
+                </h3>
+                <p className="text-xs text-text-muted/70 mb-3">동향 파악용 — 키워드 매칭되었으나 직접 연관은 낮은 논문</p>
+                <div className="space-y-1">
+                  {week.otherPapers.map(paper => {
+                    const isOpen = expandedPapers.has(paper.id);
+                    return (
+                      <div key={paper.id}>
+                        <button
+                          onClick={() => togglePaper(paper.id)}
+                          className="w-full text-left py-2 px-2 md:px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
+                        >
+                          <div className="flex items-start gap-2">
+                            {isOpen ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-text-muted/60 flex-shrink-0 mt-1" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-text-muted/60 flex-shrink-0 mt-1" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-text-muted leading-snug line-clamp-2 break-words">{paper.title}</p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                <span className="text-xs text-text-muted/60">{paper.journal}</span>
+                                <span className="text-xs text-gray-500 inline-flex items-center gap-0.5">
+                                  <StarRating count={1} className="text-gray-500" /> 참고
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <div className="ml-6 mb-2 pl-3 md:pl-4 border-l-2 border-border/30 space-y-2">
+                            <p className="text-xs md:text-sm text-text-muted leading-relaxed">
+                              {paper.journal}
+                              {(paper as any).pubDate && <> | {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
+                              {((paper as any).doi || paper.url) && (
+                                <>
+                                  {' | '}<Link2 className="w-3 h-3 inline" />{' '}
+                                  {(paper as any).doi ? (
+                                    <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
+                                  ) : paper.url ? (
+                                    <a href={paper.url} target="_blank" rel="noopener" className="text-primary hover:underline">링크</a>
+                                  ) : null}
+                                </>
+                              )}
+                            </p>
+                            {paper.aiSummary && (
+                              <p className="text-xs md:text-sm text-text-muted/90 leading-relaxed break-words">{paper.aiSummary}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
-
-          {/* 테마별 섹션 (★2-3 논문) */}
-          {Array.from(week.themes.entries()).map(([theme, papers]) => (
-            <div key={theme} className="bg-bg-card rounded-xl border border-border p-4 md:p-5">
-              <h3 className="text-primary font-semibold text-lg mb-3 flex items-center gap-1.5">
-                {getThemeIcon(theme)} {theme} ({papers.length}편)
-              </h3>
-
-              {/* 논문 토글 리스트 */}
-              <div className="space-y-1">
-                {papers.map(paper => {
-                  const stars = (paper as any).stars || 1;
-                  const si = STAR_INFO[stars] || STAR_INFO[1];
-                  const isOpen = expandedPapers.has(paper.id);
-
-                  return (
-                    <div key={paper.id}>
-                      {/* 닫힘 상태: 모바일은 stack, 데스크톱은 inline */}
-                      <button
-                        onClick={() => togglePaper(paper.id)}
-                        className="w-full text-left py-2.5 px-3 rounded-lg hover:bg-bg-hover/30 transition-colors"
-                      >
-                        <div className="flex items-start gap-2">
-                          {isOpen ? <ChevronDown className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" /> : <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0 mt-1" />}
-                          <div className="flex-1 min-w-0">
-                            {/* 제목 — 두 줄까지 표시, 잘리지 않음 */}
-                            <p className="text-base text-text-heading leading-snug font-medium line-clamp-2">
-                              {paper.title}
-                            </p>
-                            {/* 메타 — 저널 + 별점 + 키워드 한 줄에 */}
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
-                              <span className="text-xs text-text-muted">{paper.journal}</span>
-                              <span className={`text-xs inline-flex items-center gap-0.5 ${si.color}`}>
-                                <StarRating count={si.stars} /> {si.label}
-                              </span>
-                              {(paper as any).matchedKeywords && (paper as any).matchedKeywords.length > 0 && (
-                                <span className="text-xs text-text-muted/70 truncate">· {((paper as any).matchedKeywords as string[]).slice(0, 3).join(', ')}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* 열림 상태: 상세 */}
-                      {isOpen && (
-                        <div className="ml-6 mb-3 pl-4 border-l-2 border-border space-y-2.5">
-                          <p className="text-sm text-text-muted leading-relaxed">
-                            <span className="font-medium">저널</span>: {paper.journal}
-                            {(paper as any).pubDate && <> | <span className="font-medium">발행일</span>: {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
-                          </p>
-                          {((paper as any).doi || paper.url) && (
-                            <p className="text-sm flex items-center gap-1">
-                              <Link2 className="w-3.5 h-3.5" />
-                              {(paper as any).doi ? (
-                                <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
-                              ) : paper.url ? (
-                                <a href={paper.url} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
-                              ) : null}
-                            </p>
-                          )}
-                          {/* ★2 확인 추천 코멘트 */}
-                          {stars === 2 && (paper as any).aiReason && (
-                            <div className="bg-orange-500/8 border border-orange-500/15 rounded-md px-3 py-2">
-                              <p className="text-sm text-orange-300 leading-relaxed">
-                                <span className="font-semibold">확인 추천</span> — {(paper as any).aiReason}
-                              </p>
-                            </div>
-                          )}
-                          {paper.aiSummary && (
-                            <p className="text-base text-text-main leading-[1.7]">{paper.aiSummary}</p>
-                          )}
-                          {((paper as any).matchedKeywords || (paper as any).themes) && (
-                            <p className="text-sm text-text-muted leading-relaxed">
-                              <span className="font-medium">키워드 매칭</span>: {((paper as any).matchedKeywords || (paper as any).themes || []).join(', ')}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          {/* 기타 논문 섹션 (★1) */}
-          {week.otherPapers.length > 0 && (
-            <div className="bg-bg-card/60 rounded-xl border border-border/50 p-4 md:p-5">
-              <h3 className="text-text-muted font-semibold text-base mb-2 flex items-center gap-1.5">
-                <FileText className="w-4 h-4" /> 기타 논문 ({week.otherPapers.length}편)
-              </h3>
-              <p className="text-sm text-text-muted/70 mb-3">동향 파악용 — 키워드 매칭되었으나 직접 연관은 낮은 논문</p>
-              <div className="space-y-1">
-                {week.otherPapers.map(paper => {
-                  const isOpen = expandedPapers.has(paper.id);
-                  return (
-                    <div key={paper.id}>
-                      <button
-                        onClick={() => togglePaper(paper.id)}
-                        className="w-full text-left py-2 px-3 rounded-lg hover:bg-bg-hover/20 transition-colors"
-                      >
-                        <div className="flex items-start gap-2">
-                          {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-text-muted/50 flex-shrink-0 mt-1" /> : <ChevronRight className="w-3.5 h-3.5 text-text-muted/50 flex-shrink-0 mt-1" />}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-text-muted leading-snug line-clamp-2">{paper.title}</p>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                              <span className="text-xs text-text-muted/50">{paper.journal}</span>
-                              <span className="text-xs text-gray-500 inline-flex items-center gap-0.5">
-                                <StarRating count={1} className="text-gray-500" /> 참고
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                      {isOpen && (
-                        <div className="ml-6 mb-2 pl-4 border-l-2 border-border/30 space-y-2">
-                          <p className="text-sm text-text-muted leading-relaxed">
-                            {paper.journal}
-                            {(paper as any).pubDate && <> | {new Date((paper as any).pubDate).toLocaleDateString('ko-KR')}</>}
-                            {((paper as any).doi || paper.url) && <>
-                              {' | '}<Link2 className="w-3 h-3 inline" />{' '}
-                              {(paper as any).doi ? (
-                                <a href={`https://doi.org/${(paper as any).doi}`} target="_blank" rel="noopener" className="text-primary hover:underline">논문 링크</a>
-                              ) : paper.url ? (
-                                <a href={paper.url} target="_blank" rel="noopener" className="text-primary hover:underline">링크</a>
-                              ) : null}
-                            </>}
-                          </p>
-                          {paper.aiSummary && <p className="text-sm text-text-muted/90 leading-relaxed">{paper.aiSummary}</p>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

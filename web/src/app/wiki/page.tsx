@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -129,7 +129,7 @@ export default function WikiPage() {
     return () => clearInterval(interval);
   }, [logOpen, isIngestRunning, logs]);
 
-  async function loadDetail(id: string) {
+  const loadDetail = useCallback(async (id: string) => {
     setSelectedId(id);
     setEditing(false);
     setDetailLoading(true);
@@ -141,7 +141,7 @@ export default function WikiPage() {
     } finally {
       setDetailLoading(false);
     }
-  }
+  }, []);
 
   function startEdit() {
     if (!detail) return;
@@ -374,11 +374,65 @@ export default function WikiPage() {
     }
   }
 
-  const filtered = articles.filter(a => {
+  const filtered = useMemo(() => articles.filter(a => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return a.title.toLowerCase().includes(q) || a.tags.some(t => t.toLowerCase().includes(q));
-  });
+  }), [articles, searchQuery]);
+
+  // [[Title]] 위키링크 → 마크다운 링크 (#wikilink:Title) 프리프로세싱
+  const processedContent = useMemo(
+    () => detail?.content.replace(/\[\[([^\]]+)\]\]/g, (_, title: string) => `[${title}](#wikilink:${encodeURIComponent(title)})`) ?? '',
+    [detail?.content],
+  );
+
+  // ReactMarkdown 커스텀 렌더러 — 위키링크 + 토큰 일관성
+  const markdownComponents = useMemo(() => ({
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+      if (href?.startsWith('#wikilink:')) {
+        const title = decodeURIComponent(href.slice('#wikilink:'.length));
+        const matched = articles.find(a => a.title === title);
+        if (matched) {
+          return (
+            <button
+              type="button"
+              onClick={() => loadDetail(matched.id)}
+              className="text-primary hover:underline inline"
+            >
+              {children}
+            </button>
+          );
+        }
+        return (
+          <span className="text-text-muted italic" title="연결된 아티클 없음">
+            {children}
+          </span>
+        );
+      }
+      return <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>;
+    },
+    code: ({ children, className }: { children?: React.ReactNode; className?: string }) => {
+      const isBlock = className?.startsWith('language-');
+      return isBlock ? (
+        <code className="block bg-bg-input border border-border rounded-lg px-4 py-3 text-xs overflow-x-auto font-mono">{children}</code>
+      ) : (
+        <code className="bg-bg-input border border-border rounded px-1.5 py-0.5 text-xs font-mono">{children}</code>
+      );
+    },
+    h1: ({ children }: { children?: React.ReactNode }) => <h1 className="text-xl font-bold text-text-heading mt-4 mb-2">{children}</h1>,
+    h2: ({ children }: { children?: React.ReactNode }) => <h2 className="text-lg font-bold text-text-heading mt-4 mb-2">{children}</h2>,
+    h3: ({ children }: { children?: React.ReactNode }) => <h3 className="text-base font-semibold text-text-heading mt-3 mb-1.5">{children}</h3>,
+    p: ({ children }: { children?: React.ReactNode }) => <p className="text-sm text-text-main leading-relaxed mb-2">{children}</p>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc list-inside space-y-1 mb-2 text-sm text-text-main">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal list-inside space-y-1 mb-2 text-sm text-text-main">{children}</ol>,
+    li: ({ children }: { children?: React.ReactNode }) => <li className="text-sm text-text-main leading-relaxed">{children}</li>,
+    blockquote: ({ children }: { children?: React.ReactNode }) => <blockquote className="border-l-2 border-primary pl-3 text-text-muted italic my-2">{children}</blockquote>,
+    table: ({ children }: { children?: React.ReactNode }) => <div className="overflow-x-auto mb-2"><table className="text-sm border-collapse w-full">{children}</table></div>,
+    th: ({ children }: { children?: React.ReactNode }) => <th className="border border-border px-3 py-1.5 text-left font-semibold bg-bg-input text-text-heading">{children}</th>,
+    td: ({ children }: { children?: React.ReactNode }) => <td className="border border-border px-3 py-1.5 text-text-main">{children}</td>,
+    strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-semibold text-text-heading">{children}</strong>,
+    hr: () => <hr className="border-border my-3" />,
+  }), [articles, loadDetail]);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-1.5rem)] overflow-hidden">
@@ -391,36 +445,27 @@ export default function WikiPage() {
         </div>
       )}
 
-      {/* Header — 모바일: 세로 쌓기, 데스크탑: 가로 */}
-      <div className="px-4 md:px-6 py-3 md:py-4 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-5 h-5 text-primary flex-shrink-0" />
+      {/* Header — 표준 패턴 (vacations 참고) */}
+      <div className="px-4 md:px-8 pt-4 md:pt-6 pb-3 md:pb-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <h1 className="text-base md:text-lg font-bold text-text-heading">지식 위키</h1>
-            {status && (
-              <p className="text-[11px] md:text-xs text-text-muted truncate">
-                {status.totalArticles}개 · 대기 {status.pendingQueueItems}건
-                {status.lastIngestAt && ` · ${timeAgo(status.lastIngestAt)}`}
-              </p>
-            )}
-          </div>
-          {/* 모바일: 로그 토글 + 목록/상세 토글 */}
-          <div className="flex items-center gap-1 md:hidden">
-            <button
-              onClick={() => setLogOpen(!logOpen)}
-              className={`p-2 rounded-lg ${logOpen ? 'bg-primary text-white' : 'bg-bg-input text-text-muted'}`}
-              aria-label="로그"
-            >
-              <Terminal className="w-4 h-4" />
-            </button>
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <BookOpen className="w-6 h-6 text-primary flex-shrink-0" /> 지식 위키
+            </h1>
+            <p className="text-sm md:text-base text-text-muted mt-1">
+              {status
+                ? `${status.totalArticles}개 아티클 · 대기 ${status.pendingQueueItems}건${status.lastIngestAt ? ` · 갱신 ${timeAgo(status.lastIngestAt)}` : ''}`
+                : '연구실 지식베이스'}
+            </p>
           </div>
         </div>
         {/* 액션 버튼 묶음 — 모바일에서 가로 스크롤 */}
-        <div className="flex items-center gap-2 mt-2 md:mt-3 overflow-x-auto -mx-1 px-1 pb-1 md:flex-wrap md:overflow-visible">
+        <div className="flex items-center gap-2 mt-3 overflow-x-auto -mx-1 px-1 pb-1 md:flex-wrap md:overflow-visible">
           <button
             onClick={handleIngest}
             disabled={ingestLoading}
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {ingestLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             Ingest
@@ -439,16 +484,16 @@ export default function WikiPage() {
             onClick={handleWeeklyBriefing}
             disabled={briefingLoading}
             title="지난 7일 변경 사항 요약 브리핑 생성"
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 transition-colors"
           >
-            {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : '📬'}
+            {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             주간 브리핑
           </button>
           <button
             onClick={() => setLogOpen(!logOpen)}
             title="실시간 로그"
-            className={`flex-shrink-0 hidden md:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border ${
-              logOpen ? 'bg-primary text-white' : 'bg-bg-input text-text-muted hover:bg-bg-hover hover:text-text-heading'
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-border transition-colors ${
+              logOpen ? 'bg-primary text-white border-primary' : 'bg-bg-input text-text-muted hover:bg-bg-hover hover:text-text-heading'
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
@@ -458,7 +503,7 @@ export default function WikiPage() {
           <button
             onClick={handleDiagnoseNotion}
             title="Notion 연결 상태 진단"
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading transition-colors"
           >
             Notion 진단
           </button>
@@ -466,12 +511,16 @@ export default function WikiPage() {
             onClick={handleResetNotion}
             disabled={ingestLoading}
             title="Notion 페이지 큐 초기화"
-            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover disabled:opacity-50"
+            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-muted rounded-lg hover:bg-bg-hover hover:text-text-heading disabled:opacity-50 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             재처리
           </button>
-          <button onClick={loadArticles} className="flex-shrink-0 p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg">
+          <button
+            onClick={loadArticles}
+            title="새로고침"
+            className="flex-shrink-0 p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg transition-colors"
+          >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
@@ -480,14 +529,14 @@ export default function WikiPage() {
       <div className="flex flex-1 min-h-0">
         {/* Left panel — article list */}
         {/* 모바일: 아티클 선택 시 숨김, 데스크탑: 항상 표시 */}
-        <div className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-72 flex-shrink-0 border-r border-border flex-col min-h-0`}>
+        <div className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-shrink-0 border-r border-border flex-col min-h-0`}>
           {/* Search + filter */}
-          <div className="p-3 space-y-2 border-b border-border">
+          <div className="p-3 md:p-4 space-y-2.5 border-b border-border">
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="제목, 태그 검색..."
-              className="w-full bg-bg-input text-text-heading px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-border"
+              className="w-full bg-bg-input text-text-heading placeholder:text-text-muted px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-border"
             />
             {/* Category chips */}
             <div className="flex flex-wrap gap-1">
@@ -497,8 +546,8 @@ export default function WikiPage() {
                   onClick={() => setCategoryFilter(c.value)}
                   className={`px-2 py-0.5 rounded text-xs transition-colors ${
                     categoryFilter === c.value
-                      ? 'bg-primary text-white'
-                      : 'bg-bg-input text-text-muted hover:bg-bg-hover border border-border'
+                      ? 'bg-primary text-white border border-primary'
+                      : 'bg-bg-input text-text-muted hover:bg-bg-hover hover:text-text-heading border border-border'
                   }`}
                 >
                   {c.label}
@@ -520,39 +569,43 @@ export default function WikiPage() {
                 <p className="text-xs text-text-muted mt-1">Ingest를 실행하면 자동 생성됩니다</p>
               </div>
             ) : (
-              filtered.map(article => (
-                <button
-                  key={article.id}
-                  onClick={() => loadDetail(article.id)}
-                  className={`w-full text-left px-3 py-3 border-b border-border hover:bg-bg-hover transition-colors ${
-                    selectedId === article.id ? 'bg-primary-light border-l-2 border-l-primary' : ''
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-text-muted transition-transform ${selectedId === article.id ? 'rotate-90 text-primary' : ''}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className={`text-sm font-medium truncate ${selectedId === article.id ? 'text-primary' : 'text-text-heading'}`}>
-                        {article.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <CategoryBadge category={article.category} />
-                        <span className="text-[10px] text-text-muted">v{article.version}</span>
-                      </div>
-                      {article.tags.length > 0 && (
-                        <p className="text-[10px] text-text-muted mt-1 truncate">
-                          {article.tags.slice(0, 3).join(' · ')}
+              filtered.map(article => {
+                const active = selectedId === article.id;
+                return (
+                  <button
+                    key={article.id}
+                    onClick={() => loadDetail(article.id)}
+                    className={`w-full text-left px-3 md:px-4 py-3 border-b border-border hover:bg-bg-hover transition-colors ${
+                      active ? 'bg-primary-light border-l-2 border-l-primary' : ''
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <ChevronRight className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 transition-transform ${active ? 'rotate-90 text-primary' : 'text-text-muted'}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-medium truncate leading-snug ${active ? 'text-primary' : 'text-text-heading'}`}>
+                          {article.title}
                         </p>
-                      )}
-                      <p className="text-[10px] text-text-muted mt-0.5">{timeAgo(article.updatedAt)}</p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <CategoryBadge category={article.category} />
+                          <span className="text-[10px] text-text-muted">v{article.version}</span>
+                          <span className="text-[10px] text-text-muted">·</span>
+                          <span className="text-[10px] text-text-muted">{timeAgo(article.updatedAt)}</span>
+                        </div>
+                        {article.tags.length > 0 && (
+                          <p className="text-[10px] text-text-muted mt-1 truncate">
+                            {article.tags.slice(0, 3).join(' · ')}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
 
           {/* Footer count */}
-          <div className="px-3 py-2 border-t border-border">
+          <div className="px-3 md:px-4 py-2 border-t border-border">
             <p className="text-xs text-text-muted flex items-center gap-1">
               <Filter className="w-3 h-3" />
               {filtered.length}개 표시
@@ -564,41 +617,40 @@ export default function WikiPage() {
         {/* 모바일: 아티클 미선택 시 숨김 */}
         <div className={`${selectedId ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 flex-col min-h-0`}>
           {!selectedId ? (
-            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 md:py-8">
               <div className="max-w-xl mx-auto">
                 <div className="flex items-center gap-2 mb-3">
                   <BookOpen className="w-5 h-5 text-primary" />
-                  <h2 className="text-base font-semibold text-text-heading">지식 위키 사용법</h2>
+                  <h2 className="text-lg font-semibold text-text-heading">지식 위키 사용법</h2>
                 </div>
-                <p className="text-sm text-text-muted mb-4">
+                <p className="text-sm text-text-main leading-relaxed mb-4">
                   연구실의 프로젝트 · 미팅 · 인적 데이터 · 최신 동향을 통합한 연구 지식베이스입니다.
                   Notion / 미팅 노트 / GDrive 데이터를 매일 자동 수집하여 카테고리별 아티클로 정리합니다.
                 </p>
 
                 <div className="space-y-2 mb-6">
-                  <div className="p-3 bg-bg-input rounded-lg border border-border">
-                    <p className="text-xs font-medium text-text-heading mb-1">📂 카테고리 필터</p>
+                  <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
+                    <p className="text-sm font-medium text-text-heading mb-1">카테고리 필터</p>
                     <p className="text-xs text-text-muted leading-relaxed">
                       상단 칩으로 연구원·과제·연구동향·미팅·실험·협업별로 좁혀볼 수 있습니다.
                     </p>
                   </div>
-                  <div className="p-3 bg-bg-input rounded-lg border border-border">
-                    <p className="text-xs font-medium text-text-heading mb-1">🔗 아티클 간 연결</p>
+                  <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
+                    <p className="text-sm font-medium text-text-heading mb-1">아티클 간 연결</p>
                     <p className="text-xs text-text-muted leading-relaxed">
                       본문에 나오는 <span className="text-primary">파란색 링크</span>를 누르면 관련 아티클로 바로 이동합니다 (예: 프로젝트 → 담당자, 미팅 → 관련 프로젝트).
                     </p>
                   </div>
-                  <div className="p-3 bg-bg-input rounded-lg border border-border">
-                    <p className="text-xs font-medium text-text-heading mb-1">🔍 검색</p>
+                  <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
+                    <p className="text-sm font-medium text-text-heading mb-1">검색</p>
                     <p className="text-xs text-text-muted leading-relaxed">
                       상단 검색창에 제목 또는 태그 일부를 입력하여 빠르게 찾을 수 있습니다.
                     </p>
                   </div>
-                  <div className="p-3 bg-bg-input rounded-lg border border-border">
-                    <p className="text-xs font-medium text-text-heading mb-1">⚡ 갱신</p>
+                  <div className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
+                    <p className="text-sm font-medium text-text-heading mb-1">갱신</p>
                     <p className="text-xs text-text-muted leading-relaxed">
-                      <span className="text-primary font-medium">Ingest</span> 버튼: Notion·GDrive에서 신규 변경만 가져와 반영.
-                      <span className="text-primary font-medium"> 딥 리뷰</span> 버튼: 전체 위키 재분석 & 연결고리 발견.
+                      <span className="text-primary font-medium">Ingest</span> 버튼: Notion·GDrive에서 신규 변경만 가져와 반영합니다.
                     </p>
                   </div>
                 </div>
@@ -622,11 +674,11 @@ export default function WikiPage() {
           ) : detail ? (
             <>
               {/* Article toolbar */}
-              <div className="px-4 md:px-6 py-3 border-b border-border flex items-center gap-2 md:gap-3 flex-shrink-0">
+              <div className="px-4 md:px-8 py-3 border-b border-border flex items-center gap-2 md:gap-3 flex-shrink-0">
                 {/* 모바일 전용: 목록으로 돌아가기 */}
                 <button
                   onClick={() => { setSelectedId(null); setDetail(null); }}
-                  className="md:hidden p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg"
+                  className="md:hidden p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg flex-shrink-0"
                   aria-label="목록"
                 >
                   <ChevronLeft className="w-5 h-5" />
@@ -636,7 +688,7 @@ export default function WikiPage() {
                     <input
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
-                      className="flex-1 bg-bg-input text-text-heading px-3 py-1.5 rounded-lg text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-primary border border-border"
+                      className="flex-1 min-w-0 bg-bg-input text-text-heading px-3 py-1.5 rounded-lg text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-primary border border-border"
                     />
                     <select
                       value={editCategory}
@@ -650,14 +702,15 @@ export default function WikiPage() {
                     <button
                       onClick={saveEdit}
                       disabled={saveLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors flex-shrink-0"
                     >
                       {saveLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                       저장
                     </button>
                     <button
                       onClick={() => setEditing(false)}
-                      className="p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg"
+                      className="p-1.5 text-text-muted hover:text-text-heading hover:bg-bg-hover rounded-lg flex-shrink-0"
+                      aria-label="편집 취소"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -665,28 +718,28 @@ export default function WikiPage() {
                 ) : (
                   <>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-base font-bold text-text-heading truncate">{detail.title}</h2>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <h2 className="text-base md:text-lg font-bold text-text-heading truncate leading-snug">{detail.title}</h2>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <CategoryBadge category={detail.category} />
                         <span className="text-xs text-text-muted">v{detail.version}</span>
-                        <span className="text-xs text-text-muted flex items-center gap-0.5">
+                        <span className="text-xs text-text-muted flex items-center gap-1">
                           <Clock className="w-3 h-3" />{timeAgo(detail.updatedAt)}
                         </span>
                       </div>
                     </div>
                     <button
                       onClick={startEdit}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-heading rounded-lg hover:bg-bg-hover transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-bg-input border border-border text-text-heading rounded-lg hover:bg-bg-hover transition-colors flex-shrink-0"
                     >
                       <Pencil className="w-3.5 h-3.5" />
-                      편집
+                      <span className="hidden sm:inline">편집</span>
                     </button>
                     <button
                       onClick={() => handleDelete(detail.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg transition-colors flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      삭제
+                      <span className="hidden sm:inline">삭제</span>
                     </button>
                   </>
                 )}
@@ -694,9 +747,9 @@ export default function WikiPage() {
 
               {/* Tags row */}
               {editing ? (
-                <div className="px-6 py-2 border-b border-border flex-shrink-0">
+                <div className="px-4 md:px-8 py-2 border-b border-border flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <Tag className="w-3.5 h-3.5 text-text-muted" />
+                    <Tag className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
                     <input
                       value={editTagsStr}
                       onChange={e => setEditTagsStr(e.target.value)}
@@ -706,7 +759,7 @@ export default function WikiPage() {
                   </div>
                 </div>
               ) : detail.tags.length > 0 ? (
-                <div className="px-6 py-2 border-b border-border flex-shrink-0 flex flex-wrap gap-1.5">
+                <div className="px-4 md:px-8 py-2 border-b border-border flex-shrink-0 flex flex-wrap gap-1.5">
                   {detail.tags.map(tag => (
                     <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 bg-bg-input border border-border rounded text-xs text-text-muted">
                       <Hash className="w-2.5 h-2.5" />{tag}
@@ -721,62 +774,16 @@ export default function WikiPage() {
                   <textarea
                     value={editContent}
                     onChange={e => setEditContent(e.target.value)}
-                    className="w-full h-full px-4 md:px-6 py-4 bg-transparent text-text-heading text-sm font-mono resize-none focus:outline-none leading-relaxed"
+                    className="w-full h-full px-4 md:px-8 py-4 bg-transparent text-text-heading text-sm font-mono resize-none focus:outline-none leading-relaxed"
                     placeholder="마크다운 내용을 입력하세요..."
                   />
                 ) : (
-                  <div className="px-4 md:px-6 py-4 prose prose-sm max-w-none dark:prose-invert">
+                  <div className="notion-note px-4 md:px-8 py-4 max-w-none">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children }) => {
-                          // [[Title]] 위키링크 — 프리프로세싱 시 #wikilink:Title 로 변환된 href를 처리
-                          if (href?.startsWith('#wikilink:')) {
-                            const title = decodeURIComponent(href.slice('#wikilink:'.length));
-                            const matched = articles.find(a => a.title === title);
-                            if (matched) {
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => loadDetail(matched.id)}
-                                  className="text-primary hover:underline inline"
-                                >
-                                  {children}
-                                </button>
-                              );
-                            }
-                            return (
-                              <span className="text-text-muted italic" title="연결된 아티클 없음">
-                                {children}
-                              </span>
-                            );
-                          }
-                          return <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{children}</a>;
-                        },
-                        code: ({ children, className }) => {
-                          const isBlock = className?.startsWith('language-');
-                          return isBlock ? (
-                            <code className="block bg-bg-input border border-border rounded-lg px-4 py-3 text-xs overflow-x-auto font-mono">{children}</code>
-                          ) : (
-                            <code className="bg-bg-input border border-border rounded px-1.5 py-0.5 text-xs font-mono">{children}</code>
-                          );
-                        },
-                        h1: ({ children }) => <h1 className="text-lg font-bold text-text-heading mt-4 mb-2">{children}</h1>,
-                        h2: ({ children }) => <h2 className="text-base font-bold text-text-heading mt-3 mb-1.5">{children}</h2>,
-                        h3: ({ children }) => <h3 className="text-sm font-semibold text-text-heading mt-2 mb-1">{children}</h3>,
-                        p: ({ children }) => <p className="text-sm text-text-main leading-relaxed mb-2">{children}</p>,
-                        ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 mb-2">{children}</ul>,
-                        ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 mb-2">{children}</ol>,
-                        li: ({ children }) => <li className="text-sm text-text-main">{children}</li>,
-                        blockquote: ({ children }) => <blockquote className="border-l-2 border-primary pl-3 text-text-muted italic">{children}</blockquote>,
-                        table: ({ children }) => <div className="overflow-x-auto mb-2"><table className="text-sm border-collapse w-full">{children}</table></div>,
-                        th: ({ children }) => <th className="border border-border px-3 py-1.5 text-left font-semibold bg-bg-input text-text-heading">{children}</th>,
-                        td: ({ children }) => <td className="border border-border px-3 py-1.5 text-text-main">{children}</td>,
-                        strong: ({ children }) => <strong className="font-semibold text-text-heading">{children}</strong>,
-                        hr: () => <hr className="border-border my-3" />,
-                      }}
+                      components={markdownComponents}
                     >
-                      {detail.content.replace(/\[\[([^\]]+)\]\]/g, (_: string, title: string) => `[${title}](#wikilink:${encodeURIComponent(title)})`)}
+                      {processedContent}
                     </ReactMarkdown>
                   </div>
                 )}
@@ -784,7 +791,7 @@ export default function WikiPage() {
 
               {/* Sources footer */}
               {!editing && detail.sources && Array.isArray(detail.sources) && detail.sources.length > 0 && (
-                <div className="px-6 py-2 border-t border-border flex-shrink-0 flex items-center gap-2 flex-wrap">
+                <div className="px-4 md:px-8 py-2 border-t border-border flex-shrink-0 flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-text-muted">출처:</span>
                   {(detail.sources as Array<{ type: string; id: string; date?: string }>).map((s, i) => (
                     <span key={i} className="text-xs text-text-muted bg-bg-input border border-border px-1.5 py-0.5 rounded">

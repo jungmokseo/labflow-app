@@ -20,10 +20,10 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  ANNUAL: 'bg-blue-100 text-blue-700',
-  SICK: 'bg-orange-100 text-orange-700',
-  SPECIAL: 'bg-purple-100 text-purple-700',
-  OFFICIAL: 'bg-gray-100 text-gray-700',
+  ANNUAL: 'bg-blue-500/10 text-blue-500',
+  SICK: 'bg-orange-500/10 text-orange-500',
+  SPECIAL: 'bg-purple-500/10 text-purple-500',
+  OFFICIAL: 'bg-bg-input text-text-muted',
 };
 
 function fmtDate(iso: string): string {
@@ -60,11 +60,10 @@ export default function VacationsPage() {
   );
 
   const recentItems = recent.data?.items ?? [];
-  const balanceItems = balance.data?.items ?? [];
 
   const sortedBalances = useMemo(
-    () => [...balanceItems].sort((a, b) => b.usedDays - a.usedDays),
-    [balanceItems],
+    () => [...(balance.data?.items ?? [])].sort((a, b) => b.usedDays - a.usedDays),
+    [balance.data?.items],
   );
 
   return (
@@ -126,30 +125,33 @@ export default function VacationsPage() {
               </div>
             )}
             {recent.error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                <AlertCircle className="w-4 h-4 inline mr-1" />
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm text-red-500 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 불러오지 못했습니다
               </div>
             )}
-            {!recent.isLoading && recentItems.length === 0 && (
-              <div className="text-center py-12 text-text-muted text-sm">최근 휴가 신청이 없습니다.</div>
+            {!recent.isLoading && !recent.error && recentItems.length === 0 && (
+              <div className="bg-bg-card border border-border rounded-lg p-8 md:p-10 text-center">
+                <Clock className="w-10 h-10 text-primary/30 mx-auto mb-3" />
+                <p className="text-sm text-text-muted">최근 휴가 신청이 없습니다.</p>
+              </div>
             )}
             {recentItems.map(v => (
               <article key={v.id} className="bg-bg-card border border-border rounded-lg p-3 md:p-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${TYPE_COLOR[v.type] || 'bg-gray-100 text-gray-700'}`}>
+                  <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${TYPE_COLOR[v.type] || 'bg-bg-input text-text-muted'}`}>
                     {TYPE_LABEL[v.type] || v.type}
                   </span>
                   <span className="text-sm font-semibold text-text-heading">{v.memberName}</span>
                   <span className="text-xs text-text-muted">· {fmtRange(v.startDate, v.endDate)}</span>
                   <span className="text-xs text-text-muted">· {v.days}일</span>
                   {v.status === 'CANCELLED' && (
-                    <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-[10px]">취소</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-500 text-[10px] font-medium">취소</span>
                   )}
                   <span className="ml-auto text-[10px] text-text-muted/70">{timeAgo(v.createdAt)}</span>
                 </div>
                 {v.reason && (
-                  <p className="mt-1.5 text-xs text-text-muted bg-bg-input rounded px-2 py-1.5 border border-border break-words">
+                  <p className="mt-2 text-xs text-text-muted bg-bg-input rounded px-2.5 py-1.5 border border-border break-words leading-relaxed">
                     {v.reason}
                   </p>
                 )}
@@ -167,7 +169,10 @@ export default function VacationsPage() {
               </div>
             )}
             {!balance.isLoading && sortedBalances.length === 0 && (
-              <div className="text-center py-12 text-text-muted text-sm">잔여 휴가 정보가 없습니다.</div>
+              <div className="bg-bg-card border border-border rounded-lg p-8 md:p-10 text-center">
+                <User className="w-10 h-10 text-primary/30 mx-auto mb-3" />
+                <p className="text-sm text-text-muted">잔여 휴가 정보가 없습니다.</p>
+              </div>
             )}
             {sortedBalances.map(m => {
               const pct = m.totalDays > 0 ? Math.min(100, (m.usedDays / m.totalDays) * 100) : 0;
@@ -181,14 +186,14 @@ export default function VacationsPage() {
                     )}
                     <span className="ml-auto text-xs text-text-muted">
                       {m.usedDays}/{m.totalDays}일
-                      <span className={`ml-2 font-medium ${tight ? 'text-red-600' : 'text-text-heading'}`}>
+                      <span className={`ml-2 font-medium ${tight ? 'text-red-500' : 'text-text-heading'}`}>
                         잔여 {m.remainingDays}일
                       </span>
                     </span>
                   </div>
                   <div className="h-2 bg-bg-input rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${tight ? 'bg-red-500' : 'bg-primary'}`}
+                      className={`h-full rounded-full transition-all ${tight ? 'bg-red-500' : 'bg-primary'}`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>

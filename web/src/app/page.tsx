@@ -25,13 +25,13 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5 md:space-y-7">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-5 md:space-y-7 pb-20 md:pb-12">
       {/* 헤더 — 페이지 제목 좌측에 컬러 인디케이터 */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <span className="w-1 h-8 md:h-10 bg-primary rounded-full" />
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight leading-tight">오늘의 대시보드</h2>
+      <div className="flex items-start md:items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight leading-tight">오늘의 대시보드</h1>
             <p className="text-sm md:text-base text-text-muted mt-1">
               {new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
             </p>
@@ -41,9 +41,10 @@ export default function DashboardPage() {
           {pendingCount > 0 && (
             <Link
               href="/follow-up"
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-colors focus-ring"
+              aria-label={`FAQ 답변 대기 ${pendingCount}건으로 이동`}
             >
-              <span className="relative flex h-2 w-2">
+              <span className="relative flex h-2 w-2" aria-hidden="true">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
               </span>
@@ -55,41 +56,41 @@ export default function DashboardPage() {
       </div>
 
       {/* 바로가기 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <a href="/brain" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
-          <Brain className="w-7 h-7 text-primary" />
-          <h3 className="text-base font-medium text-text-heading mt-3">Brain</h3>
-          <p className="text-sm text-text-muted mt-1">이메일, 일정, 메모 -- 대화로 요청</p>
-        </a>
-        <a href="/tasks" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
-          <ClipboardList className="w-7 h-7 text-blue-400" />
-          <h3 className="text-base font-medium text-text-heading mt-3">Tasks & Ideas</h3>
-          <p className="text-sm text-text-muted mt-1">할일, 아이디어, 메모 관리</p>
-        </a>
-        <a href="/papers" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
-          <BookOpen className="w-7 h-7 text-green-400" />
-          <h3 className="text-base font-medium text-text-heading mt-3">연구동향</h3>
-          <p className="text-sm text-text-muted mt-1">주간 자동 논문 모니터링</p>
-        </a>
-        <a href="/meetings" className="bg-bg-card rounded-xl border border-border p-5 card-hover hover:border-primary/30">
-          <Mic className="w-7 h-7 text-amber-600" />
-          <h3 className="text-base font-medium text-text-heading mt-3">회의 노트</h3>
-          <p className="text-sm text-text-muted mt-1">{meetings === null ? '...' : `${meetings.length}건의 회의 기록`}</p>
-        </a>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+        <Link href="/brain" className="bg-bg-card rounded-xl border border-border p-4 md:p-5 card-hover hover:border-primary/30 focus-ring">
+          <Brain className="w-6 h-6 md:w-7 md:h-7 text-primary" />
+          <h3 className="text-sm md:text-base font-medium text-text-heading mt-3">Brain</h3>
+          <p className="text-xs md:text-sm text-text-muted mt-1 line-clamp-2">이메일, 일정, 메모 -- 대화로 요청</p>
+        </Link>
+        <Link href="/tasks" className="bg-bg-card rounded-xl border border-border p-4 md:p-5 card-hover hover:border-primary/30 focus-ring">
+          <ClipboardList className="w-6 h-6 md:w-7 md:h-7 text-blue-400" />
+          <h3 className="text-sm md:text-base font-medium text-text-heading mt-3">Tasks & Ideas</h3>
+          <p className="text-xs md:text-sm text-text-muted mt-1 line-clamp-2">할일, 아이디어, 메모 관리</p>
+        </Link>
+        <Link href="/papers" className="bg-bg-card rounded-xl border border-border p-4 md:p-5 card-hover hover:border-primary/30 focus-ring">
+          <BookOpen className="w-6 h-6 md:w-7 md:h-7 text-green-400" />
+          <h3 className="text-sm md:text-base font-medium text-text-heading mt-3">연구동향</h3>
+          <p className="text-xs md:text-sm text-text-muted mt-1 line-clamp-2">주간 자동 논문 모니터링</p>
+        </Link>
+        <Link href="/meetings" className="bg-bg-card rounded-xl border border-border p-4 md:p-5 card-hover hover:border-primary/30 focus-ring">
+          <Mic className="w-6 h-6 md:w-7 md:h-7 text-amber-600" />
+          <h3 className="text-sm md:text-base font-medium text-text-heading mt-3">회의 노트</h3>
+          <p className="text-xs md:text-sm text-text-muted mt-1 line-clamp-2">{meetings === null ? '...' : `${meetings.length}건의 회의 기록`}</p>
+        </Link>
       </div>
 
       {/* 미답변 질문 미리보기 — 답변 대기 시 항상 표시 */}
       {pendingQs && pendingQs.length > 0 && (
-        <div className="bg-amber-50/40 dark:bg-amber-500/5 border border-amber-500/30 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-text-heading flex items-center gap-2">
-              <HelpCircle className="w-4 h-4 text-amber-600" />
-              BLISS-bot 미답변 질문
-              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white">
+        <section className="bg-amber-50/40 dark:bg-amber-500/5 border border-amber-500/30 rounded-xl p-4 md:p-5">
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+            <h2 className="text-base md:text-lg font-semibold text-text-heading flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="truncate">BLISS-bot 미답변 질문</span>
+              <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white flex-shrink-0">
                 {pendingCount}건
               </span>
-            </h3>
-            <Link href="/follow-up" className="text-sm text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1">
+            </h2>
+            <Link href="/follow-up" className="text-sm text-amber-700 dark:text-amber-300 hover:underline inline-flex items-center gap-1 focus-ring rounded">
               모두 답변하기 <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
@@ -101,16 +102,16 @@ export default function DashboardPage() {
               <Link
                 key={q.id}
                 href="/follow-up"
-                className="block bg-bg-card rounded-lg border border-amber-500/20 hover:border-amber-500/40 transition-colors p-3"
+                className="block bg-bg-card rounded-lg border border-amber-500/20 hover:border-amber-500/40 transition-colors p-3 focus-ring"
               >
                 <p className="text-sm font-medium text-text-heading break-words">{q.question}</p>
-                <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted">
+                <div className="mt-1.5 flex items-center gap-3 text-xs text-text-muted flex-wrap">
                   <span className="inline-flex items-center gap-1">
-                    <User className="w-3 h-3" />
+                    <User className="w-3 h-3" aria-hidden="true" />
                     {q.askedBy}
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-3 h-3" aria-hidden="true" />
                     {timeAgoShort(q.createdAt)}
                   </span>
                   {q.reason && (
@@ -125,16 +126,19 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
-        </div>
+        </section>
       )}
 
       {/* 최근 회의 + AI 비용 — 2열 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* 최근 회의 */}
-        <div className="bg-bg-card rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-text-heading flex items-center gap-2"><Mic className="w-4 h-4 text-amber-600" /> 최근 회의</h3>
-            <a href="/meetings" className="text-sm text-primary hover:underline">모두 보기 →</a>
+        <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5">
+          <div className="flex items-center justify-between mb-4 gap-2">
+            <h2 className="text-base md:text-lg font-semibold text-text-heading flex items-center gap-2 min-w-0">
+              <Mic className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
+              <span className="truncate">최근 회의</span>
+            </h2>
+            <Link href="/meetings" className="text-sm text-primary hover:underline focus-ring rounded flex-shrink-0">모두 보기 →</Link>
           </div>
           {meetings === null ? (
             // 로딩 중 — shimmer placeholder (위젯 단위)
@@ -149,11 +153,11 @@ export default function DashboardPage() {
             <div className="space-y-3">
               {meetings.map((m) => (
                 <div key={m.id} className="p-3 rounded-lg bg-bg-input hover:bg-bg-hover/30 transition-colors">
-                  <p className="text-base font-medium text-text-heading">{m.title}</p>
+                  <p className="text-sm md:text-base font-medium text-text-heading">{m.title}</p>
                   {m.summary && (
                     <p className="text-sm text-text-muted mt-1 line-clamp-2">{m.summary}</p>
                   )}
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
                     {m.actionItems.length > 0 && (
                       <span className="text-xs text-amber-600">{m.actionItems.length} 액션아이템</span>
                     )}
@@ -165,13 +169,16 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
 
         {/* AI API 비용 */}
-        <div className="bg-bg-card rounded-xl border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-text-heading flex items-center gap-2"><DollarSign className="w-4 h-4 text-green-400" /> AI API 비용</h3>
-            <span className="text-xs text-text-muted">최근 30일</span>
+        <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5">
+          <div className="flex items-center justify-between mb-4 gap-2">
+            <h2 className="text-base md:text-lg font-semibold text-text-heading flex items-center gap-2 min-w-0">
+              <DollarSign className="w-4 h-4 text-green-400 flex-shrink-0" aria-hidden="true" />
+              <span className="truncate">AI API 비용</span>
+            </h2>
+            <span className="text-xs text-text-muted flex-shrink-0">최근 30일</span>
           </div>
           {costError ? (
             <p className="text-text-muted text-base py-8 text-center">사용 후 비용 데이터가 표시됩니다</p>
@@ -269,7 +276,7 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );

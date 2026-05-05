@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  brainChat, brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel,
+  brainChatStream, brainUpload, getBrainChannels, getChannelMessages, deleteBrainChannel,
   pollForAssistantMessage, apiFetch,
   type BrainMessage, type UploadResult, type PendingAction,
 } from '@/lib/api';
@@ -19,34 +19,13 @@ import {
   Brain, Paperclip, Loader2, X, Copy, Mic, MicOff, Send, Plus,
   MessageSquare, BarChart3, AlertTriangle, Calendar, CheckSquare,
   Mail, BookOpen, Users, FileText, Clock, Zap, Info,
-  ArrowDown, Square, ArrowRight, Quote, Hash,
-  Building2, User, ShoppingCart, Megaphone,
+  ArrowDown, Square, ArrowRight, Quote,
   RefreshCw, AlertCircle, Check, Sparkles,
 } from 'lucide-react';
 
-// 코드 블록 복사 버튼 (Claude/Gemini 스타일 헤더)
-function CodeCopyButton({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(content).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }).catch(() => {});
-      }}
-      className="flex items-center gap-1 px-2 py-1 rounded text-xs text-text-muted hover:text-text-heading hover:bg-bg-hover/50 transition-colors"
-    >
-      {copied ? (
-        <><Check className="w-3 h-3 text-green-400" /><span className="text-green-400">복사됨</span></>
-      ) : (
-        <><Copy className="w-3 h-3" />복사</>
-      )}
-    </button>
-  );
-}
-
+// ──────────────────────────────────────────────────────────
 // 이메일 전송 확인 카드
+// ──────────────────────────────────────────────────────────
 function EmailActionCard({ action, onDismiss }: { action: PendingAction; onDismiss: () => void }) {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -277,20 +256,257 @@ function formatRecordingTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+}
+
 const MAX_RECORDING_SECONDS = 180; // 3 minutes
+
+// ──────────────────────────────────────────────────────────
+// 채팅 메시지 컴포넌트들
+// ──────────────────────────────────────────────────────────
+
+// 사용자 메시지 — 오른쪽 파란 말풍선
+function UserMessage({ content, createdAt }: { content: string; createdAt: string }) {
+  return (
+    <div className="flex flex-col items-end">
+      <div className="bg-primary text-white rounded-2xl rounded-br-md max-w-[85%] md:max-w-[70%] px-4 py-2.5 text-base leading-relaxed whitespace-pre-wrap break-words">
+        {content}
+      </div>
+      <span className="text-[10px] text-text-muted mt-1 mr-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+        {formatTime(createdAt)}
+      </span>
+    </div>
+  );
+}
+
+// 에러 메시지 — 빨간 테두리 + 재시도
+function ErrorMessage({
+  content, lastUserInput, onRetry,
+}: { content: string; lastUserInput: string; onRetry: (input: string) => void }) {
+  return (
+    <div className="flex items-start gap-2.5 p-3 bg-red-500/5 border border-red-500/20 rounded-xl">
+      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-red-400 break-words">{content}</p>
+        {lastUserInput && (
+          <button
+            onClick={() => onRetry(lastUserInput)}
+            className="mt-2 flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+          >
+            <RefreshCw className="w-3 h-3" /> 다시 시도
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// AI 어시스턴트 메시지 — 왼쪽 정렬, 마크다운 렌더링 + 호버 액션
+function AssistantMessage({
+  msg, isLast, lastUserInput, loading, copiedId,
+  onCopy, onRetry,
+}: {
+  msg: BrainMessage;
+  isLast: boolean;
+  lastUserInput: string;
+  loading: boolean;
+  copiedId: string | null;
+  onCopy: (id: string, content: string) => void;
+  onRetry: (input: string) => void;
+}) {
+  return (
+    <div className="group relative">
+      <div className="brain-prose max-w-none">
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
+          {msg.content}
+        </ReactMarkdown>
+      </div>
+      {/* 호버 액션: 복사 + 재생성(마지막 메시지) + 타임스탬프 */}
+      <div className="flex items-center gap-1.5 mt-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-all duration-200">
+        <button
+          onClick={() => onCopy(msg.id, msg.content)}
+          className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+          title="복사"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+        {copiedId === msg.id && (
+          <span className="text-xs text-green-400">복사됨</span>
+        )}
+        {isLast && lastUserInput && !loading && (
+          <button
+            onClick={() => onRetry(lastUserInput)}
+            className="flex items-center gap-1 p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
+            title="다시 생성"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <span className="text-[10px] text-text-muted ml-1">
+          {formatTime(msg.createdAt)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// 빈 상태(empty state) — 환영 메시지 + 빠른 시작 카드 + 지난 대화
+const EMPTY_STATE_CATEGORIES: Array<{ icon: string; label: string; examples: string[] }> = [
+  {
+    icon: '📧',
+    label: '이메일 & 일정',
+    examples: ['지난 12시간 이메일 브리핑 해줘', '오늘 일정 알려줘', '김철수 교수 메일 초안 작성해줘'],
+  },
+  {
+    icon: '🔬',
+    label: '연구실 정보 조회',
+    examples: ['진행 중인 과제 알려줘', '이번 주 회의 요약해줘', '최근 논문 동향 알려줘'],
+  },
+  {
+    icon: '📝',
+    label: '빠른 메모 & 할일',
+    examples: ['내일 9시 장비 예약 메모해줘', '아이디어: 새 센서 방향 저장', '이번 주 제출 마감 태스크 추가'],
+  },
+  {
+    icon: '⚙️',
+    label: '설정 변경 — "기억해줘"',
+    examples: ['내 이름 언급 이메일 중요도 높여줘. 기억해줘', '브리핑에서 광고 섹션 빼줘. 기억해줘', '앞으로 답변 짧게 해줘. 기억해줘'],
+  },
+];
+
+function EmptyState({
+  sessions, activeChannelId,
+  onPickPrompt, onLoadSession,
+}: {
+  sessions: any[];
+  activeChannelId: string | null;
+  onPickPrompt: (prompt: string) => void;
+  onLoadSession: (id: string) => void;
+}) {
+  return (
+    <div className="text-text-muted py-6 max-w-lg mx-auto w-full">
+      <div className="text-center mb-6">
+        <Brain className="w-10 h-10 text-primary/40 mx-auto mb-3" />
+        <p className="text-base font-semibold text-text-heading">연구실 AI 비서</p>
+        <p className="text-xs mt-1 text-text-muted">자연어로 지시하면 이메일·일정·연구실 정보를 처리합니다</p>
+      </div>
+
+      {/* 기능 카테고리 힌트 */}
+      <div className="space-y-2">
+        {EMPTY_STATE_CATEGORIES.map(cat => (
+          <div key={cat.label} className="bg-bg-input rounded-xl p-3">
+            <p className="text-xs font-semibold text-text-heading mb-2">{cat.icon} {cat.label}</p>
+            <div className="flex flex-wrap gap-1.5">
+              {cat.examples.map(q => (
+                <button
+                  key={q}
+                  onClick={() => onPickPrompt(q)}
+                  className="px-2.5 py-1.5 bg-bg-card rounded-lg text-xs text-text-muted hover:text-primary hover:bg-primary/5 border border-border/50 hover:border-primary/30 transition-all"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-center text-[11px] text-text-muted mt-4 opacity-70">
+        예시를 클릭하거나 직접 입력하세요
+      </p>
+
+      {/* 지난 대화 목록 */}
+      {sessions.length > 0 && (
+        <div className="mt-6 text-left">
+          <h4 className="text-xs font-medium text-text-muted mb-2 px-1">지난 대화</h4>
+          <div className="space-y-0.5">
+            {sessions.slice(0, 8).map((ch: any) => (
+              <button
+                key={ch.id}
+                onClick={() => onLoadSession(ch.id)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                  activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate flex-1">{ch.name || `대화 #${ch.id.slice(-4)}`}</span>
+                  <span className="text-[10px] text-text-muted flex-shrink-0">{timeAgo(ch.lastMessageAt || ch.createdAt)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 생각 중 / 툴 실행 단계 표시
+function ThinkingIndicator({
+  thinkingSteps, hasStreamingContent,
+}: { thinkingSteps: string[]; hasStreamingContent: boolean }) {
+  if (thinkingSteps.length > 0) {
+    const last = thinkingSteps[thinkingSteps.length - 1];
+    return (
+      <div className="flex justify-start animate-msg-in">
+        <div className="flex items-center gap-2 text-sm md:text-base text-text-muted">
+          <Sparkles className="w-4 h-4 text-primary animate-pulse flex-shrink-0" />
+          <span key={last} className="truncate max-w-[16rem] md:max-w-md">{last}</span>
+        </div>
+      </div>
+    );
+  }
+  if (hasStreamingContent) return null;
+  return (
+    <div className="flex justify-start animate-msg-in">
+      <div className="flex items-center gap-2.5 text-sm md:text-base text-text-muted bg-bg-input/40 px-3 py-2 rounded-xl">
+        <Brain className="w-5 h-5 text-primary animate-pulse" />
+        <span className="thinking-dots font-medium">생각 중</span>
+      </div>
+    </div>
+  );
+}
+
+// 첨부 파일 칩
+type AttachedFile = {
+  id: string; name: string; size: number;
+  status: 'uploading' | 'ready' | 'error';
+  result?: UploadResult; error?: string;
+};
+
+function AttachedFileChip({ file, onRemove }: { file: AttachedFile; onRemove: (id: string) => void }) {
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border transition-all ${
+      file.status === 'uploading' ? 'bg-bg-hover border-border/50 animate-pulse' :
+      file.status === 'error' ? 'bg-red-500/10 border-red-500/30' :
+      'bg-bg-hover border-border/30'
+    }`}>
+      {file.status === 'uploading' ? (
+        <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin flex-shrink-0" />
+      ) : file.status === 'error' ? (
+        <FileText className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+      ) : (
+        <FileText className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+      )}
+      <span className={`max-w-[180px] truncate ${file.status === 'error' ? 'text-red-400' : 'text-text-heading'}`}>
+        {file.name}
+      </span>
+      <span className="text-text-muted">{(file.size / 1024 / 1024).toFixed(1)}MB</span>
+      <button onClick={() => onRemove(file.id)} className="text-text-muted hover:text-text-heading ml-0.5">
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
 
 export default function BrainPage() {
   // Use shared store for activeChannelId (synced with Sidebar)
   const { activeChannelId, setActive: setActiveChannelId } = useConversationsStore();
-  const { setSessions } = useBrainSessionsStore();
   const [localNewMessages, setLocalNewMessages] = useState<BrainMessage[]>([]);
   const [input, setInput] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState<Array<{
-    id: string; name: string; size: number;
-    status: 'uploading' | 'ready' | 'error';
-    result?: UploadResult; error?: string;
-  }>>([]);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -423,13 +639,39 @@ export default function BrainPage() {
     async () => { const res = await getBrainChannels(); return Array.isArray(res.data) ? res.data : []; },
     { revalidateOnFocus: false, dedupingInterval: 60000 }
   );
-  const sessions = channelsData || [];
-  useEffect(() => { if (channelsData) setSessions(channelsData); }, [channelsData]);
+  const sessions = useMemo(() => channelsData || [], [channelsData]);
+  useEffect(() => {
+    if (channelsData) useBrainSessionsStore.getState().setSessions(channelsData);
+  }, [channelsData]);
 
   // Derive messages from store or local state
-  const activeMessages = activeChannelId ? (conversations[activeChannelId]?.messages || []) : localNewMessages;
+  const activeMessages = useMemo(
+    () => (activeChannelId ? (conversations[activeChannelId]?.messages || []) : localNewMessages),
+    [activeChannelId, conversations, localNewMessages],
+  );
   const isChannelStreaming = activeChannelId ? (conversations[activeChannelId]?.isStreaming || false) : false;
   const loading = localLoading || isChannelStreaming;
+
+  const loadMessages = useCallback(async (channelId: string) => {
+    // 세션 명시적 선택 시 "새 대화 선택" 플래그 해제
+    userChoseNewSessionRef.current = false;
+    // Check store first
+    const conversationsNow = useConversationsStore.getState().conversations;
+    if (conversationsNow[channelId]?.messages?.length) {
+      setActiveChannelId(channelId);
+      shouldScrollToBottomRef.current = true;
+      return;
+    }
+    try {
+      const res = await getChannelMessages(channelId);
+      const msgs = res.data || res || [];
+      storeMessages(channelId, msgs);
+      setActiveChannelId(channelId);
+      shouldScrollToBottomRef.current = true;
+    } catch (err) {
+      console.error('Failed to load messages', err);
+    }
+  }, [setActiveChannelId, storeMessages]);
 
   // Auto-load first channel messages — 최초 진입 시 가장 최근 세션 자동 로드
   // userChoseNewSessionRef가 true이면 (사용자가 "새 대화" 클릭) SWR 재검증으로 인한 재로드 방지
@@ -437,14 +679,14 @@ export default function BrainPage() {
     if (sessions.length > 0 && !activeChannelId && !userChoseNewSessionRef.current) {
       loadMessages(sessions[0].id);
     }
-  }, [sessions]);
+  }, [sessions, activeChannelId, loadMessages]);
 
   // Load messages when activeChannelId changes (e.g. from Sidebar click)
   useEffect(() => {
     if (activeChannelId && !conversations[activeChannelId]?.messages?.length) {
       loadMessages(activeChannelId);
     }
-  }, [activeChannelId]);
+  }, [activeChannelId, conversations, loadMessages]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -497,26 +739,6 @@ export default function BrainPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
-
-  async function loadMessages(channelId: string) {
-    // 세션 명시적 선택 시 "새 대화 선택" 플래그 해제
-    userChoseNewSessionRef.current = false;
-    // Check store first
-    if (conversations[channelId]?.messages?.length) {
-      setActiveChannelId(channelId);
-      shouldScrollToBottomRef.current = true;
-      return;
-    }
-    try {
-      const res = await getChannelMessages(channelId);
-      const msgs = res.data || res || [];
-      storeMessages(channelId, msgs);
-      setActiveChannelId(channelId);
-      shouldScrollToBottomRef.current = true;
-    } catch (err) {
-      console.error('Failed to load messages', err);
-    }
-  }
 
   function handleNewSession() {
     userChoseNewSessionRef.current = true;
@@ -950,7 +1172,7 @@ export default function BrainPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] md:h-[calc(100dvh-2rem)] p-0 md:p-4">
+    <div className="flex h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-2rem)] p-0 md:p-4">
       {/* Main area — full width (sidebar is in the main nav now) */}
       <div
         className="flex-1 bg-bg-card rounded-xl flex flex-col relative"
@@ -1046,169 +1268,46 @@ export default function BrainPage() {
               </>
             )}
 
-            {/* Messages area — Claude-style */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4">
-              <div className="max-w-4xl mx-auto space-y-6">
+            {/* Messages area — Claude-style. 모바일 spacing은 더 컴팩트(space-y-4), 데스크톱은 space-y-6. */}
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 md:px-4 py-3 md:py-4">
+              <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
                 {activeMessages.length === 0 && (
-                  <div className="text-text-muted py-6 max-w-lg mx-auto w-full">
-                    <div className="text-center mb-6">
-                      <Brain className="w-10 h-10 text-primary/40 mx-auto mb-3" />
-                      <p className="text-base font-semibold text-text-heading">연구실 AI 비서</p>
-                      <p className="text-xs mt-1 text-text-muted">자연어로 지시하면 이메일·일정·연구실 정보를 처리합니다</p>
-                    </div>
-
-                    {/* 기능 카테고리 힌트 */}
-                    <div className="space-y-2">
-                      {[
-                        {
-                          icon: '📧',
-                          label: '이메일 & 일정',
-                          examples: ['지난 12시간 이메일 브리핑 해줘', '오늘 일정 알려줘', '김철수 교수 메일 초안 작성해줘'],
-                        },
-                        {
-                          icon: '🔬',
-                          label: '연구실 정보 조회',
-                          examples: ['진행 중인 과제 알려줘', '이번 주 회의 요약해줘', '최근 논문 동향 알려줘'],
-                        },
-                        {
-                          icon: '📝',
-                          label: '빠른 메모 & 할일',
-                          examples: ['내일 9시 장비 예약 메모해줘', '아이디어: 새 센서 방향 저장', '이번 주 제출 마감 태스크 추가'],
-                        },
-                        {
-                          icon: '⚙️',
-                          label: '설정 변경 — "기억해줘"',
-                          examples: ['내 이름 언급 이메일 중요도 높여줘. 기억해줘', '브리핑에서 광고 섹션 빼줘. 기억해줘', '앞으로 답변 짧게 해줘. 기억해줘'],
-                        },
-                      ].map(cat => (
-                        <div key={cat.label} className="bg-bg-input rounded-xl p-3">
-                          <p className="text-xs font-semibold text-text-heading mb-2">{cat.icon} {cat.label}</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {cat.examples.map(q => (
-                              <button
-                                key={q}
-                                onClick={() => setInput(q)}
-                                className="px-2.5 py-1.5 bg-bg-card rounded-lg text-xs text-text-muted hover:text-primary hover:bg-primary/5 border border-border/50 hover:border-primary/30 transition-all"
-                              >
-                                {q}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="text-center text-[11px] text-text-muted mt-4 opacity-70">
-                      예시를 클릭하거나 직접 입력하세요
-                    </p>
-
-                    {/* 지난 대화 목록 */}
-                    {sessions.length > 0 && (
-                      <div className="mt-6 text-left">
-                        <h4 className="text-xs font-medium text-text-muted mb-2 px-1">지난 대화</h4>
-                        <div className="space-y-0.5">
-                          {sessions.slice(0, 8).map((ch: any) => (
-                            <button
-                              key={ch.id}
-                              onClick={() => loadMessages(ch.id)}
-                              className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
-                                activeChannelId === ch.id ? 'bg-primary-light text-primary' : 'text-text-muted hover:bg-bg-hover hover:text-text-heading'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="truncate flex-1">{ch.name || `대화 #${ch.id.slice(-4)}`}</span>
-                                <span className="text-[10px] text-text-muted flex-shrink-0">{timeAgo(ch.lastMessageAt || ch.createdAt)}</span>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <EmptyState
+                    sessions={sessions}
+                    activeChannelId={activeChannelId}
+                    onPickPrompt={setInput}
+                    onLoadSession={loadMessages}
+                  />
                 )}
                 {activeMessages.map((msg, idx) => (
                   <div key={msg.id} className="animate-msg-in group/msg">
                     {msg.role === 'user' ? (
-                      /* 사용자 메시지: 오른쪽 파란 말풍선 */
-                      <div className="flex flex-col items-end">
-                        <div className="bg-primary text-white rounded-2xl rounded-br-sm max-w-[70%] px-4 py-3 text-sm whitespace-pre-wrap">
-                          {msg.content}
-                        </div>
-                        <span className="text-[10px] text-text-muted mt-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
-                          {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
+                      <UserMessage content={msg.content} createdAt={msg.createdAt} />
                     ) : msg.id.startsWith('err-') ? (
-                      /* 에러 메시지: 빨간 테두리 + 재시도 버튼 */
-                      <div className="flex items-start gap-2.5 p-3 bg-red-500/5 border border-red-500/20 rounded-xl">
-                        <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm text-red-400">{msg.content}</p>
-                          {lastUserInput && (
-                            <button
-                              onClick={() => handleSend(lastUserInput)}
-                              className="mt-2 flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-                            >
-                              <RefreshCw className="w-3 h-3" /> 다시 시도
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      <ErrorMessage
+                        content={msg.content}
+                        lastUserInput={lastUserInput}
+                        onRetry={handleSend}
+                      />
                     ) : (
-                      /* AI 메시지: 왼쪽 정렬, 마크다운 렌더링 */
-                      <div className="group relative">
-                        <div className="brain-prose max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={markdownComponents}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                        {/* 호버 액션: 복사 + 재생성(마지막 메시지) + 타임스탬프 */}
-                        <div className="flex items-center gap-1.5 mt-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                          <button
-                            onClick={() => handleCopyMessage(msg.id, msg.content)}
-                            className="p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
-                            title="복사"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                          {copiedId === msg.id && (
-                            <span className="text-xs text-green-400">복사됨</span>
-                          )}
-                          {/* 마지막 AI 메시지에만 재생성 버튼 */}
-                          {idx === activeMessages.length - 1 && lastUserInput && !loading && (
-                            <button
-                              onClick={() => handleSend(lastUserInput)}
-                              className="flex items-center gap-1 p-1.5 rounded-lg bg-bg-input/80 text-text-muted hover:text-text-heading hover:bg-bg-hover transition-colors"
-                              title="다시 생성"
-                            >
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <span className="text-[10px] text-text-muted ml-1">
-                            {new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </div>
+                      <AssistantMessage
+                        msg={msg}
+                        isLast={idx === activeMessages.length - 1}
+                        lastUserInput={lastUserInput}
+                        loading={loading}
+                        copiedId={copiedId}
+                        onCopy={handleCopyMessage}
+                        onRetry={handleSend}
+                      />
                     )}
                   </div>
                 ))}
-                {/* 툴 실행 단계 — Gemini 스타일 */}
-                {(loading || recovering) && thinkingSteps.length > 0 && (
-                  <div className="flex justify-start animate-msg-in">
-                    <div className="flex items-center gap-2 text-base text-text-muted transition-all duration-300">
-                      <Sparkles className="w-4 h-4 text-primary animate-pulse flex-shrink-0" />
-                      <span key={thinkingSteps[thinkingSteps.length - 1]} className="truncate max-w-xs">{thinkingSteps[thinkingSteps.length - 1]}</span>
-                    </div>
-                  </div>
-                )}
-                {/* 생각 중 — Brain 아이콘 + 단계별 텍스트, 더 두드러지게 */}
-                {loading && thinkingSteps.length === 0 && !streamingContent && (
-                  <div className="flex justify-start animate-msg-in">
-                    <div className="flex items-center gap-2.5 text-base text-text-muted bg-bg-input/40 px-3 py-2 rounded-xl">
-                      <Brain className="w-5 h-5 text-primary animate-pulse" />
-                      <span className="thinking-dots font-medium">생각 중</span>
-                    </div>
-                  </div>
+                {/* 생각 중 / 툴 실행 단계 표시 */}
+                {(loading || recovering) && (
+                  <ThinkingIndicator
+                    thinkingSteps={thinkingSteps}
+                    hasStreamingContent={!!streamingContent}
+                  />
                 )}
                 {/* Token streaming: show response as it arrives */}
                 {loading && streamingContent && (
@@ -1223,7 +1322,7 @@ export default function BrainPage() {
                 )}
                 {/* 이메일 전송 확인 카드 */}
                 {!loading && pendingActions.length > 0 && (
-                  <div className="px-4 pb-2">
+                  <div className="space-y-2">
                     {pendingActions.map((action, i) => (
                       <EmailActionCard
                         key={i}
@@ -1267,26 +1366,7 @@ export default function BrainPage() {
                 <div className="px-4 pt-3 max-w-4xl mx-auto w-full">
                   <div className="flex flex-wrap gap-2">
                     {attachedFiles.map(f => (
-                      <div key={f.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs border transition-all ${
-                        f.status === 'uploading' ? 'bg-bg-hover border-border/50 animate-pulse' :
-                        f.status === 'error' ? 'bg-red-500/10 border-red-500/30' :
-                        'bg-bg-hover border-border/30'
-                      }`}>
-                        {f.status === 'uploading' ? (
-                          <Loader2 className="w-3.5 h-3.5 text-text-muted animate-spin flex-shrink-0" />
-                        ) : f.status === 'error' ? (
-                          <FileText className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                        ) : (
-                          <FileText className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
-                        )}
-                        <span className={`max-w-[180px] truncate ${f.status === 'error' ? 'text-red-400' : 'text-text-heading'}`}>
-                          {f.name}
-                        </span>
-                        <span className="text-text-muted">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
-                        <button onClick={() => removeAttachedFile(f.id)} className="text-text-muted hover:text-text-heading ml-0.5">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <AttachedFileChip key={f.id} file={f} onRemove={removeAttachedFile} />
                     ))}
                   </div>
                 </div>

@@ -71,35 +71,45 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-4 md:space-y-6">
-      <div>
-        <h2 className="text-2xl md:text-3xl font-bold text-text-heading flex items-center gap-2"><SettingsIcon className="w-5 h-5 md:w-6 md:h-6 text-primary" /> 설정</h2>
-        <p className="text-text-muted text-sm md:text-base mt-1">연구실 설정 및 프로필 관리</p>
-      </div>
-
-      {/* Tab Navigation — 모바일에서 가로 스크롤 */}
-      <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
-        <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border min-w-max md:min-w-0">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex-shrink-0 py-2 px-3 rounded-md text-sm font-medium transition-colors relative whitespace-nowrap
-                ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
-            >
-              {TAB_ICONS[t.key]} {t.label}
-              {t.badge ? <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">{t.badge}</span> : null}
-            </button>
-          ))}
+    <div className="min-h-full pb-20 md:pb-12">
+      {/* Standard header */}
+      <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+              <SettingsIcon className="w-6 h-6 text-primary flex-shrink-0" /> 설정
+            </h1>
+            <p className="text-sm md:text-base text-text-muted mt-1">연구실 설정 및 프로필 관리</p>
+          </div>
         </div>
       </div>
 
-      {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} calendarConnected={calendarConnected} calendarMessage={calendarMessage} lab={lab} />}
-      {tab === 'ai-instructions' && <AIInstructionsTab />}
-      {tab === 'lab' && <LabTab lab={lab} onUpdate={setLab} />}
-      {tab === 'email' && <EmailTab connected={emailConnected} />}
-      {tab === 'dictionary' && <DictionaryTab />}
-      {tab === 'errors' && <ErrorLogTab onCountChange={setErrorCount} />}
+      <div className="px-4 md:px-8 max-w-4xl mx-auto space-y-4 md:space-y-6">
+        {/* Tab Navigation — 모바일에서 가로 스크롤 */}
+        <div className="overflow-x-auto -mx-1 px-1 pb-0.5">
+          <div className="flex gap-1 bg-bg-card rounded-lg p-1 border border-border min-w-max md:min-w-0">
+            {TABS.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex-shrink-0 py-2 px-3 rounded-md text-sm font-medium transition-colors relative whitespace-nowrap
+                  ${tab === t.key ? 'bg-primary text-white' : 'text-text-muted hover:text-text-heading hover:bg-bg-hover'}`}
+              >
+                {TAB_ICONS[t.key]} {t.label}
+                {t.badge ? <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-red-500 text-white">{t.badge}</span> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {tab === 'status' && <StatusTab health={health} emailConnected={emailConnected} calendarConnected={calendarConnected} calendarMessage={calendarMessage} lab={lab} />}
+        {tab === 'ai-instructions' && <AIInstructionsTab />}
+        {tab === 'lab' && <LabTab lab={lab} onUpdate={setLab} />}
+        {tab === 'email' && <EmailTab connected={emailConnected} />}
+        {tab === 'dictionary' && <DictionaryTab />}
+        {tab === 'errors' && <ErrorLogTab onCountChange={setErrorCount} />}
+      </div>
     </div>
   );
 }
@@ -293,9 +303,9 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-4">
         <h3 className="font-semibold text-text-heading text-base">시스템 상태</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3">
           <StatusItem label="API 서버" status={health === true ? 'healthy' : 'error'} detail="Railway" />
           <StatusItem label="Gmail" status={emailConnected ? 'healthy' : 'disconnected'} detail={emailConnected ? '연동됨' : '미연동'} />
           <StatusItem label="Calendar" status={calendarConnected ? 'healthy' : 'error'} detail={calendarConnected ? '연동됨' : calendarMessage || '미연동'} />
@@ -522,22 +532,26 @@ function LabTab({ lab, onUpdate }: { lab: LabProfile | null; onUpdate: (l: LabPr
       </section>
 
       {/* Members */}
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
         <h3 className="font-semibold text-text-heading text-base">팀원 ({members.length}명)</h3>
-        {members.map(m => (
-          <div key={m.id} className="flex items-center justify-between bg-bg-input rounded-lg p-3">
-            <div>
-              <span className="text-sm text-text-heading font-medium">{m.name}</span>
-              <span className="text-xs text-text-muted ml-2">{m.role}</span>
-              {m.email && <span className="text-xs text-primary ml-2">{m.email}</span>}
+        <div className="space-y-2">
+          {members.map(m => (
+            <div key={m.id} className="flex items-center justify-between gap-3 bg-bg-input rounded-lg p-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-sm text-text-heading font-medium truncate">{m.name}</span>
+                  <span className="text-xs text-text-muted">{m.role}</span>
+                </div>
+                {m.email && <span className="text-xs text-primary block truncate">{m.email}</span>}
+              </div>
+              <button onClick={() => handleRemoveMember(m.id)} className="text-xs text-red-400 hover:text-red-300 flex-shrink-0">삭제</button>
             </div>
-            <button onClick={() => handleRemoveMember(m.id)} className="text-xs text-red-400 hover:text-red-300">삭제</button>
-          </div>
-        ))}
-        <div className="flex gap-2">
-          <input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <input value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} placeholder="이메일" className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <button onClick={handleAddMember} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
+          ))}
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} placeholder="이름" className="flex-1 px-3 py-2 bg-bg-input rounded-lg text-sm text-text-heading border border-border focus:border-primary focus:outline-none" />
+          <input value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} placeholder="이메일" className="flex-1 px-3 py-2 bg-bg-input rounded-lg text-sm text-text-heading border border-border focus:border-primary focus:outline-none" />
+          <button onClick={handleAddMember} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
         </div>
       </section>
     </div>
@@ -599,33 +613,41 @@ function EmailTab({ connected }: { connected: boolean }) {
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-base">기관별 분류 그룹</h3>
-        <p className="text-xs text-text-muted">발신자 이메일 도메인 기반으로 기관별 자동 분류</p>
-        {groups.map((g, i) => (
-          <div key={i} className="grid grid-cols-[3rem_1fr_2fr] gap-2 items-end">
-            <div>
-              <label className="block text-xs text-text-muted mb-1">이모지</label>
-              <input value={g.emoji} onChange={e => { const n = [...groups]; n[i].emoji = e.target.value; setGroups(n); }}
-                className="w-full px-2 py-1.5 bg-bg-input rounded text-sm text-text-heading text-center border border-border" />
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold text-text-heading text-base">기관별 분류 그룹</h3>
+          <p className="text-xs text-text-muted mt-0.5">발신자 이메일 도메인 기반으로 기관별 자동 분류</p>
+        </div>
+        <div className="space-y-3">
+          {groups.map((g, i) => (
+            <div key={i} className="grid grid-cols-[3rem_1fr] sm:grid-cols-[3rem_1fr_2fr] gap-2 items-end">
+              <div>
+                <label className="block text-xs text-text-muted mb-1">이모지</label>
+                <input value={g.emoji} onChange={e => { const n = [...groups]; n[i].emoji = e.target.value; setGroups(n); }}
+                  className="w-full px-2 py-1.5 bg-bg-input rounded-lg text-sm text-text-heading text-center border border-border focus:border-primary focus:outline-none" />
+              </div>
+              <SInput label="기관명" value={g.name} onChange={v => { const n = [...groups]; n[i].name = v; setGroups(n); }} />
+              <div className="col-span-2 sm:col-span-1">
+                <SInput label="도메인 (쉼표 구분)" value={g.domains} onChange={v => { const n = [...groups]; n[i].domains = v; setGroups(n); }} />
+              </div>
             </div>
-            <SInput label="기관명" value={g.name} onChange={v => { const n = [...groups]; n[i].name = v; setGroups(n); }} />
-            <SInput label="도메인 (쉼표)" value={g.domains} onChange={v => { const n = [...groups]; n[i].domains = v; setGroups(n); }} />
-          </div>
-        ))}
-        <button onClick={() => setGroups([...groups, { name: '', domains: '', emoji: '🏫' }])} className="text-xs text-primary">+ 기관 추가</button>
+          ))}
+        </div>
+        <button onClick={() => setGroups([...groups, { name: '', domains: '', emoji: '🏫' }])} className="text-xs text-primary hover:text-primary-hover">+ 기관 추가</button>
       </section>
 
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-base">중요도 상향 키워드</h3>
-        <p className="text-xs text-text-muted">이 키워드가 이메일 제목/내용에 포함되면 중요도 1단계 상향</p>
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
+        <div>
+          <h3 className="font-semibold text-text-heading text-base">중요도 상향 키워드</h3>
+          <p className="text-xs text-text-muted mt-0.5">이 키워드가 이메일 제목/내용에 포함되면 중요도 1단계 상향</p>
+        </div>
         <SInput label="키워드 (쉼표 구분)" value={keywords} onChange={setKeywords} />
       </section>
 
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
         <h3 className="font-semibold text-text-heading text-base">시간대</h3>
         <select value={timezone} onChange={e => setTimezone(e.target.value)}
-          className="px-3 py-2 bg-bg-input rounded-lg text-text-heading text-sm border border-border">
+          className="w-full sm:w-auto px-3 py-2 bg-bg-input rounded-lg text-text-heading text-sm border border-border focus:border-primary focus:outline-none">
           <option value="America/New_York">미국 동부 (EDT/EST)</option>
           <option value="America/Los_Angeles">미국 서부 (PDT/PST)</option>
           <option value="Asia/Seoul">한국 (KST)</option>
@@ -678,17 +700,19 @@ function DictionaryTab() {
 
   return (
     <div className="space-y-4">
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-4">
-        <h3 className="font-semibold text-text-heading text-base">기술 용어 사전 ({entries.length}개)</h3>
-        <p className="text-xs text-text-muted">미팅 노트 교정, 논문 교정에서 공유되는 도메인 용어 사전</p>
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
+        <div>
+          <h3 className="font-semibold text-text-heading text-base">기술 용어 사전 ({entries.length}개)</h3>
+          <p className="text-xs text-text-muted mt-0.5">미팅 노트 교정, 논문 교정에서 공유되는 도메인 용어 사전</p>
+        </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input value={newWrong} onChange={e => setNewWrong(e.target.value)} placeholder="잘못된 표기"
-            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <span className="text-text-muted self-center">→</span>
+            className="flex-1 px-3 py-2 bg-bg-input rounded-lg text-sm text-text-heading border border-border focus:border-primary focus:outline-none" />
+          <span className="hidden sm:inline text-text-muted self-center">→</span>
           <input value={newCorrect} onChange={e => setNewCorrect(e.target.value)} placeholder="올바른 표기"
-            className="flex-1 px-3 py-1.5 bg-bg-input rounded text-sm text-text-heading border border-border" />
-          <button onClick={handleAdd} className="px-3 py-1.5 bg-primary text-white rounded text-sm">추가</button>
+            className="flex-1 px-3 py-2 bg-bg-input rounded-lg text-sm text-text-heading border border-border focus:border-primary focus:outline-none" />
+          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm">추가</button>
         </div>
 
         {loading ? (
@@ -723,10 +747,10 @@ function StatusItem({ label, status, detail }: { label: string; status: string; 
   };
   return (
     <div className="flex items-center gap-3 bg-bg-input rounded-lg p-3">
-      <span className={`w-2.5 h-2.5 rounded-full ${colors[status] || 'bg-gray-400'}`} />
-      <div>
-        <p className="text-xs font-medium text-text-heading">{label}</p>
-        <p className="text-xs text-text-muted">{detail}</p>
+      <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${colors[status] || 'bg-gray-400'}`} />
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-text-heading truncate">{label}</p>
+        <p className="text-xs text-text-muted truncate">{detail}</p>
       </div>
     </div>
   );
@@ -839,11 +863,11 @@ function ErrorLogTab({ onCountChange }: { onCountChange: (n: number) => void }) 
       )}
 
       {/* Filters + Actions */}
-      <section className="bg-bg-card rounded-xl border border-border p-5 space-y-3">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-2">
+      <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <select value={filter} onChange={e => setFilter(e.target.value)}
-              className="px-3 py-1.5 bg-bg-input rounded-lg text-text-heading text-sm border border-border">
+              className="px-3 py-1.5 bg-bg-input rounded-lg text-text-heading text-sm border border-border focus:border-primary focus:outline-none">
               <option value="all">전체 카테고리</option>
               {categories.map(c => (
                 <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>
@@ -855,7 +879,7 @@ function ErrorLogTab({ onCountChange }: { onCountChange: (n: number) => void }) 
               해결된 것도 표시
             </label>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {filter !== 'all' && (
               <button onClick={() => handleResolveAll(filter)}
                 className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium">
