@@ -14,6 +14,7 @@ import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
   getGrants, updateGrant, addGrantMilestone, patchGrantMilestone, deleteGrantMilestone,
+  syncGrants,
   type Grant, type GrantCounts, type GrantMilestone,
 } from '@/lib/api';
 import {
@@ -67,11 +68,25 @@ export default function GrantsPage() {
   const { toast } = useToast();
   const [tab, setTab] = useState<TabKey>('active');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
 
   const { data, error, isLoading, mutate } = useApiData<{ items: Grant[]; counts: GrantCounts }>(
     'grants',
     () => getGrants(),
   );
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const r = await syncGrants();
+      toast(`Sheets sync: ${r.projectRows}개 과제 갱신`, 'success');
+      mutate();
+    } catch (e: any) {
+      toast(`Sync 실패: ${e.message?.slice(0, 80)}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const counts = data?.counts;
@@ -106,14 +121,25 @@ export default function GrantsPage() {
               </p>
             </div>
           </div>
-          <a
-            href={SHEETS_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading whitespace-nowrap self-start sm:self-auto"
-          >
-            <ExternalLink className="w-4 h-4" /> Sheets 원본
-          </a>
+          <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 whitespace-nowrap"
+              title="GDrive Sheets에서 즉시 sync (시트 편집 후 즉시 반영용)"
+            >
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? '동기화 중…' : '동기화'}
+            </button>
+            <a
+              href={SHEETS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading whitespace-nowrap"
+            >
+              <ExternalLink className="w-4 h-4" /> Sheets 원본
+            </a>
+          </div>
         </div>
       </div>
 
@@ -259,7 +285,7 @@ function GrantRow({ g, expanded, onToggle, onMutated }: GrantRowProps) {
 
       {expanded && (
         <div className="px-3 pb-3 pt-1 border-t border-border/60 space-y-3">
-          {/* 메타 */}
+          {/* 메타 (1단계 시트) */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-1.5 pt-2 text-xs">
             {g.number && <Field label="과제번호" mono>{g.number}</Field>}
             {g.funder && <Field label="발주처">{g.funder}</Field>}
@@ -269,9 +295,25 @@ function GrantRow({ g, expanded, onToggle, onMutated }: GrantRowProps) {
             {g.pm && <Field label="PM">{g.pm}</Field>}
             {g.responsibility && <Field label="책임">{g.responsibility}</Field>}
             {g.businessName && <Field label="사업명">{g.businessName}</Field>}
+            {/* 1단계 시트의 추가 컬럼 (PI가 시트에 추가한 모든 임의 컬럼 자동 표시) */}
+            {Object.entries(g.metadata.sheetExtras ?? {}).map(([k, v]) => (
+              <Field key={`extra:${k}`} label={k}>{v as string}</Field>
+            ))}
           </div>
 
-          {/* PI 입력 — 목표 / 담당 학생 / 메모 */}
+          {/* 과제 시트의 모든 세부 정보 (각 과제별 시트의 key-value, 사사문구 외) */}
+          {g.metadata.detailFields && Object.keys(g.metadata.detailFields).length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-text-muted uppercase tracking-wider">📋 시트 세부 정보 — {g.shortName || '과제 시트'}</p>
+              <div className="space-y-1">
+                {Object.entries(g.metadata.detailFields).map(([k, v]) => (
+                  <DetailRow key={`detail:${k}`} k={k} v={v as string} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* PI 입력 — 시트에 없는 추가 정보 (선택) */}
           <PIFieldsEditor g={g} onSaved={onMutated} />
 
           {/* 마일스톤 체크리스트 */}
@@ -309,7 +351,29 @@ function Field({ label, children, mono = false }: { label: string; children: Rea
   return (
     <div>
       <p className="text-[10px] text-text-muted uppercase tracking-wider">{label}</p>
-      <p className={`text-text-heading ${mono ? 'font-mono text-[11px]' : ''}`}>{children}</p>
+      <p className={`text-text-heading break-words ${mono ? 'font-mono text-[11px]' : ''}`}>{children}</p>
+    </div>
+  );
+}
+
+/** 과제 시트 key-value 한 줄 — 긴 값은 펼침 토글 */
+function DetailRow({ k, v }: { k: string; v: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const long = v.length > 120 || v.includes('\n');
+  return (
+    <div className="bg-bg-input/40 rounded px-2 py-1.5 text-xs">
+      <div className="flex items-start gap-2">
+        <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider flex-shrink-0 mt-0.5 min-w-[80px] max-w-[140px] break-words">{k}</p>
+        <p className={`flex-1 text-text-main whitespace-pre-line break-words ${!expanded && long ? 'line-clamp-3' : ''}`}>{v}</p>
+        {long && (
+          <button
+            onClick={() => setExpanded(e => !e)}
+            className="text-[10px] text-primary hover:underline flex-shrink-0"
+          >
+            {expanded ? '접기' : '펼치기'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

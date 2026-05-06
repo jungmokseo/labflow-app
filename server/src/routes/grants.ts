@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import { syncAllGdriveData } from '../services/gdrive-sync.js';
 
 interface Milestone {
   id: string;
@@ -210,6 +211,19 @@ export async function grantRoutes(app: FastifyInstance) {
       return reply.send({ ok: true, milestone: milestones[idx] });
     } catch (err) {
       return failWith(reply, 500, '마일스톤 수정 실패', err);
+    }
+  });
+
+  // ── POST 수동 GDrive sync 트리거 ────────────
+  app.post('/api/grants/sync', async (request, reply) => {
+    try {
+      const labId = labIdOrThrow(request);
+      if (!labId) return reply.code(400).send({ error: 'LAB_ID 미설정' });
+      const results = await syncAllGdriveData(labId);
+      const projectResult = results.find(r => r.file === '과제 정보');
+      return reply.send({ ok: true, results, projectRows: projectResult?.rows ?? 0 });
+    } catch (err) {
+      return failWith(reply, 500, 'GDrive sync 실패', err);
     }
   });
 

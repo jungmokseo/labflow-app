@@ -708,10 +708,14 @@ export interface GrantMilestone {
 }
 
 export interface GrantMetadata {
+  // PI가 ResearchFlow에서 직접 입력 (시트 외 추가 정보)
   goal?: string;
   studentLeads?: string;
   milestones?: GrantMilestone[];
   notes?: string;
+  // GDrive sync — 시트의 모든 추가 컬럼/필드 자동 추출 (PI가 시트에서 편집)
+  sheetExtras?: Record<string, string>;     // 1단계 '과제 정보' 시트의 알려지지 않은 컬럼
+  detailFields?: Record<string, string>;    // 각 과제 시트의 모든 key-value (사사문구 외)
   [k: string]: unknown;
 }
 
@@ -773,6 +777,15 @@ export async function patchGrantMilestone(id: string, mid: string, payload: Part
 
 export async function deleteGrantMilestone(id: string, mid: string) {
   return apiFetch<{ ok: boolean }>(`/api/grants/${id}/milestones/${mid}`, { method: 'DELETE' });
+}
+
+// 수동 GDrive sync trigger — 사용자가 시트 편집 후 즉시 반영용
+export async function syncGrants() {
+  return apiFetch<{
+    ok: boolean;
+    projectRows: number;
+    results: Array<{ file: string; rows: number; status: string; error?: string }>;
+  }>('/api/grants/sync', { method: 'POST' });
 }
 
 export async function checkWorksheetAcks() {

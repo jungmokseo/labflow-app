@@ -107,7 +107,7 @@ async function readXlsxFile(fileId: string): Promise<SheetData[]> {
 
 // ── 파일 타입 판별 후 읽기 ──────────────────────────────────────
 
-async function readAllSheets(fileId: string): Promise<SheetData[]> {
+export async function readAllSheets(fileId: string): Promise<SheetData[]> {
   const auth = await getAuth();
   const drive = google.drive({ version: 'v3', auth });
 
@@ -184,6 +184,9 @@ async function syncProjectInfo(labId: string): Promise<number> {
   const allSheets = await readAllSheets(env.GDRIVE_FILE_PROJECT_INFO);
   let synced = 0;
 
+  // 알려진 컬럼 키워드 — 매핑 후 나머지는 metadata.sheetExtras에 자동 보존
+  const HANDLED_KEYWORDS = ['과제명', '사업명', '과제수행부처', '전문기관명', '과제기간', '기간', '담당자', '담당', '3책'];
+
   // 1단계: "과제 정보" 탭 → 과제 목록 upsert
   const mainSheet = allSheets.find(s => s.sheetName === '과제 정보');
   if (mainSheet && mainSheet.rows.length >= 2) {
@@ -191,12 +194,18 @@ async function syncProjectInfo(labId: string): Promise<number> {
     const col = (keyword: string) =>
       headers.findIndex(h => h.includes(keyword));
 
+    // 알려지지 않은 컬럼 인덱스 (metadata.sheetExtras로 자동 추출)
+    const handledIndexes = new Set<number>();
+    headers.forEach((h, i) => {
+      if (HANDLED_KEYWORDS.some(kw => h.includes(kw))) handledIndexes.add(i);
+    });
+
     for (let i = 1; i < mainSheet.rows.length; i++) {
       const row = mainSheet.rows[i];
       const name = row[col('과제명')]?.trim();
       if (!name) continue;
 
-      const data = {
+      const knownData = {
         businessName:   row[col('사업명')]?.trim() || undefined,
         ministry:       row[col('과제수행부처')]?.trim() || undefined,
         funder:         row[col('전문기관명')]?.trim() || undefined,
@@ -207,23 +216,37 @@ async function syncProjectInfo(labId: string): Promise<number> {
         syncedAt: new Date(),
       };
 
+      // 알려지지 않은 컬럼 모두 extras에 (PI가 시트에 추가한 임의 컬럼 자동 보존)
+      const extras: Record<string, string> = {};
+      headers.forEach((h, idx) => {
+        if (handledIndexes.has(idx)) return;
+        const v = row[idx]?.trim();
+        if (h && v) extras[h] = v;
+      });
+
+      // 기존 metadata 보존 + sheetExtras만 갱신 (PI 입력 namespace는 별개)
+      const existing = await prisma.project.findFirst({ where: { labId, name }, select: { metadata: true } });
+      const md = (existing?.metadata as Record<string, unknown> | null) || {};
+      const newMd = { ...md, sheetExtras: extras };
+
       await prisma.project.upsert({
         where: { labId_name: { labId, name } },
-        update: data,
-        create: { labId, name, ...data },
+        update: { ...knownData, metadata: newMd as any },
+        create: { labId, name, ...knownData, metadata: newMd as any },
       });
       synced++;
     }
   }
 
-  // 2단계: 나머지 탭들 → 사사문구 추출 후 Project에 업데이트
+  // 2단계: 나머지 탭들 → 사사문구 + 모든 key-value 자동 추출 (목표/마일스톤/담당 등 PI가 시트에 적은 모든 정보)
   const SKIP_TABS = new Set(['과제 정보', '참여율', '초격차산업', '미답변 질문']);
+  const ACK_KEYS = ['사사문구(국문)', '사사문구(영문)'];
 
   for (const { sheetName, rows } of allSheets) {
     if (SKIP_TABS.has(sheetName)) continue;
     if (rows.length < 1) continue;
 
-    // 세로 key-value 맵 구성 (A열=항목명, B열=값)
+    // 세로 key-value 맵 구성 (A열=항목명, B열=값). 빈 키-값은 무시.
     const kv: Record<string, string> = {};
     for (const row of rows) {
       const key   = row[0]?.trim();
@@ -231,9 +254,17 @@ async function syncProjectInfo(labId: string): Promise<number> {
       if (key && value) kv[key] = value;
     }
 
+    if (Object.keys(kv).length === 0) continue;
+
     const acknowledgmentKo = kv['사사문구(국문)'] || undefined;
     const acknowledgmentEn = kv['사사문구(영문)'] || undefined;
-    if (!acknowledgmentKo && !acknowledgmentEn) continue;
+
+    // 사사문구 외 모든 key-value → metadata.detailFields (목표/마일스톤/담당/노트 등 자동 보존)
+    const detailFields: Record<string, string> = {};
+    for (const [k, v] of Object.entries(kv)) {
+      if (ACK_KEYS.includes(k)) continue;
+      detailFields[k] = v;
+    }
 
     // 기존 Project 찾기: shortName 또는 businessName이 탭명과 일치하는 것 우선
     let project = await prisma.project.findFirst({
@@ -245,17 +276,20 @@ async function syncProjectInfo(labId: string): Promise<number> {
       });
     }
 
+    const md = (project?.metadata as Record<string, unknown> | null) || {};
+    const newMd = { ...md, detailFields };
+
     if (project) {
       await prisma.project.update({
         where: { id: project.id },
-        data: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, syncedAt: new Date() },
+        data: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
       });
     } else {
       // 과제 정보 탭에 없는 경우 단축명으로 신규 생성
       await prisma.project.upsert({
         where: { labId_name: { labId, name: sheetName } },
-        update: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, syncedAt: new Date() },
-        create: { labId, name: sheetName, shortName: sheetName, acknowledgmentKo, acknowledgmentEn, syncedAt: new Date() },
+        update: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
+        create: { labId, name: sheetName, shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
       });
     }
     synced++;
