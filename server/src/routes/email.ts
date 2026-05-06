@@ -748,6 +748,7 @@ export async function emailRoutes(app: FastifyInstance) {
           'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose',
           'https://www.googleapis.com/auth/calendar.events',
+          'https://www.googleapis.com/auth/calendar.readonly',  // 'BLISS Lab' 캘린더 자동 lookup
           'https://www.googleapis.com/auth/drive.file',  // Google Docs 생성용
           // NOTE: Google Cloud Console에서 Calendar API + Drive API 활성화 필요
         ],

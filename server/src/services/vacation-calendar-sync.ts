@@ -57,6 +57,48 @@ export async function ensureVacationCalendarTable(): Promise<void> {
   );
 }
 
+/** 사용자 캘린더 list에서 'BLISS Lab' 매칭 — env BLISS_LAB_CALENDAR_ID 미설정 시 fallback. */
+let cachedBlissCalendarId: string | null = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;  // 24h
+
+async function findBlissLabCalendar(calendar: any): Promise<string | null> {
+  try {
+    const res = await calendar.calendarList.list({ maxResults: 250, showHidden: true });
+    const items = res.data.items || [];
+    // 'BLISS' / 'BLISS Lab' / 'bliss-lab' / '비스 랩' 등 케이스
+    const match = items.find((c: any) => {
+      const name = (c.summaryOverride || c.summary || '').toLowerCase();
+      return /\bbliss\b/.test(name) && (name.includes('lab') || name.includes('연구실') || items.length === 1);
+    }) || items.find((c: any) => /\bbliss\b/i.test((c.summaryOverride || c.summary || '')));
+    return match?.id || null;
+  } catch (err: any) {
+    // calendar.readonly scope 없으면 403/insufficient_scope. 재인증 필요.
+    if (/insufficient|scope|403|unauthorized/i.test(err.message || '')) {
+      console.warn('[vacation-calendar] calendarList scope 없음 — Gmail 재연동 필요 (calendar.readonly 추가됨)');
+    } else {
+      console.warn(`[vacation-calendar] calendarList 조회 실패: ${err.message?.slice(0, 80)}`);
+    }
+    return null;
+  }
+}
+
+/** 캘린더 ID 결정: env > 자동 매칭 (24h cache) > 'primary' fallback */
+async function resolveCalendarId(calendar: any): Promise<{ id: string; source: 'env' | 'auto' | 'primary' }> {
+  if (env.BLISS_LAB_CALENDAR_ID) return { id: env.BLISS_LAB_CALENDAR_ID, source: 'env' };
+  if (cachedBlissCalendarId && Date.now() - cachedAt < CACHE_TTL_MS) {
+    return { id: cachedBlissCalendarId, source: 'auto' };
+  }
+  const matched = await findBlissLabCalendar(calendar);
+  if (matched) {
+    cachedBlissCalendarId = matched;
+    cachedAt = Date.now();
+    console.log(`[vacation-calendar] BLISS Lab 캘린더 자동 매칭: ${matched}`);
+    return { id: matched, source: 'auto' };
+  }
+  return { id: 'primary', source: 'primary' };
+}
+
 /** labflow-member에서 휴가 목록 fetch */
 async function fetchVacationsFromMember(limit = 100): Promise<VacationItem[]> {
   const base = env.LABFLOW_MEMBER_URL.replace(/\/$/, '');
@@ -191,7 +233,11 @@ export async function syncVacationsToCalendar(opts: { userId?: string } = {}): P
     return { total: 0, created: 0, cancelled: 0, errors: 1 };
   }
 
-  const calendarId = env.BLISS_LAB_CALENDAR_ID || 'primary';
+  const { id: calendarId, source: calSource } = await resolveCalendarId(calendar);
+  if (calSource === 'primary' && !env.BLISS_LAB_CALENDAR_ID) {
+    console.warn('[vacation-calendar] ⚠️ BLISS Lab 캘린더 매칭 실패 → primary 사용. ' +
+      'Gmail 재연동(calendar.readonly scope) 또는 BLISS_LAB_CALENDAR_ID 설정 권장.');
+  }
 
   // 3. labflow-member에서 휴가 목록
   let vacations: VacationItem[];
