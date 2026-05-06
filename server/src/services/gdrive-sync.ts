@@ -31,6 +31,8 @@ let _authSource: 'env' | 'gmail-token' | null = null;
 interface AuthDiagnosis {
   source: 'env' | 'gmail-token' | 'none';
   ownerEmail?: string;
+  scopes?: string[];           // 실제 부여된 scope (drive/sheets 권한 확인용)
+  scopeIssue?: string;         // scope 부족 시 안내 메시지
   errors: string[];
 }
 
@@ -40,13 +42,43 @@ export function getLastAuthDiagnosis(): AuthDiagnosis | null {
   return _lastDiagnosis;
 }
 
-async function tryAuthWithRefreshToken(refreshToken: string, label: string): Promise<any> {
+function summarizeScopes(scopes: string[]): string | undefined {
+  // 빈 배열은 진단 실패(getTokenInfo 응답 못 받음)로 간주. False positive 방지 — 일단 토큰을 신뢰하고
+  // 실제 sync 호출 시 권한 문제가 있으면 readAllSheets의 catch에서 명확한 메시지로 잡힌다.
+  if (scopes.length === 0) return undefined;
+
+  // env.GDRIVE_FILE_* 시트 sync는 PI가 직접 만든 파일을 읽는다.
+  // → drive.file scope(앱이 만든/연 파일만)으로는 부족. drive.readonly 또는 full drive 권한 필요.
+  const hasDriveReadOrFull = scopes.some(s => /\/auth\/drive(\.readonly)?$/.test(s));
+  const hasDriveFile = scopes.some(s => s.includes('/auth/drive.file'));
+  if (!hasDriveReadOrFull) {
+    if (hasDriveFile) {
+      return 'drive.file만 부여됨 — 사용자가 직접 만든 시트는 못 읽음. /settings에서 Gmail 재연결 시 동의 화면에서 "Drive 보기"(drive.readonly) 체크 필수';
+    }
+    return 'Drive scope 없음 — /settings에서 Gmail 재연결 + 동의 화면에서 "Drive 보기"(drive.readonly) 체크';
+  }
+  return undefined;
+}
+
+async function tryAuthWithRefreshToken(refreshToken: string, label: string): Promise<{ client: any; scopes: string[] }> {
   const oauth2 = new google.auth.OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
   oauth2.setCredentials({ refresh_token: refreshToken });
   const { credentials } = await oauth2.refreshAccessToken();
   oauth2.setCredentials(credentials);
-  console.log(`[gdrive] OAuth 인증 성공 (${label})`);
-  return oauth2;
+
+  // 실제 부여된 scope 확인 (재연결 시 사용자가 동의 화면에서 일부 scope을 거절했을 수 있음)
+  let scopes: string[] = [];
+  try {
+    if (credentials.access_token) {
+      const info = await oauth2.getTokenInfo(credentials.access_token);
+      scopes = info.scopes || [];
+    }
+  } catch (e: any) {
+    console.warn(`[gdrive] tokenInfo 조회 실패 (${label}): ${e?.message || e}`);
+  }
+
+  console.log(`[gdrive] OAuth 인증 성공 (${label}), scopes=[${scopes.map(s => s.split('/').pop()).join(', ')}]`);
+  return { client: oauth2, scopes };
 }
 
 async function findOwnerGmailToken() {
@@ -115,14 +147,24 @@ async function getAuth() {
 
   const diag: AuthDiagnosis = { source: 'none', errors: [] };
 
-  // 1순위: env.GOOGLE_REFRESH_TOKEN
+  // 1순위: env.GOOGLE_REFRESH_TOKEN — 단, scope이 부족하면 GmailToken으로 fallback.
+  // (env 토큰이 옛 scope으로 발급되어 drive.readonly가 없는 경우 — 사용자가 /settings에서
+  //  새 scope으로 재연결한 GmailToken을 쓰는 게 정답. 이전엔 underscored env 토큰을 그대로
+  //  쓰고 fallback을 안 해서 사용자가 재연결해도 영원히 File not found 받음.)
   if (env.GOOGLE_REFRESH_TOKEN) {
     try {
-      _auth = await tryAuthWithRefreshToken(env.GOOGLE_REFRESH_TOKEN, 'env.GOOGLE_REFRESH_TOKEN');
-      _authSource = 'env';
-      diag.source = 'env';
-      _lastDiagnosis = diag;
-      return _auth;
+      const r = await tryAuthWithRefreshToken(env.GOOGLE_REFRESH_TOKEN, 'env.GOOGLE_REFRESH_TOKEN');
+      const issue = summarizeScopes(r.scopes);
+      if (!issue) {
+        _auth = r.client;
+        _authSource = 'env';
+        diag.source = 'env';
+        diag.scopes = r.scopes;
+        _lastDiagnosis = diag;
+        return _auth;
+      }
+      console.warn(`[gdrive] env.GOOGLE_REFRESH_TOKEN scope 부족: ${issue} → GmailToken fallback 시도`);
+      diag.errors.push(`env_token: under-scoped — ${issue}`);
     } catch (e: any) {
       const msg = e?.response?.data?.error_description || e?.response?.data?.error || e?.message || 'unknown';
       console.error(`[gdrive] env.GOOGLE_REFRESH_TOKEN 실패: ${msg} → GmailToken fallback 시도`);
@@ -132,16 +174,28 @@ async function getAuth() {
     diag.errors.push('env_token: not_set');
   }
 
-  // 2순위: OWNER GmailToken (DB) — LAB_OWNER_* env 또는 LAB_ID+LabMember(OWNER)로만 식별
-  // findOwnerGmailToken이 cross-user contamination을 방지하므로, 안전하게 호출 가능.
+  // 2순위: OWNER GmailToken (DB) — LAB_OWNER_* env 또는 Lab.ownerId / LabMember(OWNER)로 식별
+  // findOwnerGmailToken이 cross-user contamination을 방지하므로 안전.
   try {
     const token = await findOwnerGmailToken();
     if (token?.refreshToken) {
       const refresh = isEncrypted(token.refreshToken) ? decryptToken(token.refreshToken) : token.refreshToken;
-      _auth = await tryAuthWithRefreshToken(refresh, `GmailToken:${token.email}`);
+      const r = await tryAuthWithRefreshToken(refresh, `GmailToken:${token.email}`);
+      const issue = summarizeScopes(r.scopes);
+      diag.ownerEmail = token.email;
+      diag.scopes = r.scopes;
+      // scope 부족이면 client를 캐시하지 않고 명확한 에러로 throw
+      // (env 토큰이 옛 scope, GmailToken도 옛 scope일 때 — 사용자가 새 scope으로 재연결 필요).
+      if (issue) {
+        diag.scopeIssue = issue;
+        throw new Error(
+          `GmailToken (${token.email}) scope 부족: ${issue}. ` +
+          `/settings에서 Gmail 연결을 끊고 다시 연결할 때 "Drive 보기" 체크 필수.`,
+        );
+      }
+      _auth = r.client;
       _authSource = 'gmail-token';
       diag.source = 'gmail-token';
-      diag.ownerEmail = token.email;
       _lastDiagnosis = diag;
       return _auth;
     }
@@ -242,9 +296,28 @@ export async function readAllSheets(fileId: string): Promise<SheetData[]> {
   const auth = await getAuth();
   const drive = google.drive({ version: 'v3', auth });
 
-  const fileMeta = await drive.files.get({ fileId, fields: 'mimeType,name' });
+  let fileMeta;
+  try {
+    fileMeta = await drive.files.get({ fileId, fields: 'mimeType,name,owners(emailAddress)' });
+  } catch (e: any) {
+    const status = e?.response?.status || e?.code;
+    const apiMsg = e?.response?.data?.error?.message || e?.message || 'unknown';
+    // "File not found"은 Google이 권한 없는 파일에도 동일 에러를 반환 (정보 누출 방지).
+    // 진단 정보 + 사용자가 시도할 수 있는 step을 에러 메시지에 포함.
+    const diag = _lastDiagnosis;
+    const tokenAccount = diag?.ownerEmail ? `현재 사용 중 토큰: ${diag.ownerEmail}` : '';
+    const scopeIssue = diag?.scopeIssue ? `scope 문제: ${diag.scopeIssue}` : '';
+    throw new Error(
+      `${apiMsg} (file ${fileId}, status ${status}). ` +
+      `원인 가능성: (1) 토큰 scope에 drive.readonly 없음 — /settings에서 Gmail 재연결 + Google 동의 화면에서 'Drive 보기' 체크 ` +
+      `(2) 시트 owner != 토큰 계정 — 시트를 토큰 계정에 편집/뷰어로 공유. ` +
+      `${tokenAccount} ${scopeIssue}`,
+    );
+  }
+
   const mimeType = fileMeta.data.mimeType || '';
-  console.log(`  파일: "${fileMeta.data.name}" (${mimeType.split('.').pop()})`);
+  const owner = fileMeta.data.owners?.[0]?.emailAddress;
+  console.log(`  파일: "${fileMeta.data.name}" (${mimeType.split('.').pop()}) owner=${owner || '?'}`);
 
   if (mimeType.includes('google-apps.spreadsheet')) {
     return readGoogleSheets(fileId);

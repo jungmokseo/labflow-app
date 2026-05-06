@@ -82,11 +82,21 @@ export default function GrantsPage() {
     setSyncing(true);
     try {
       const r = await syncGrants();
-      // 결과별 에러가 있으면 첫 에러를 표시 (OAuth 만료 등 진단)
+      // 결과별 에러가 있으면 첫 에러 + 진단 정보 표시
       const errored = r.results.find(x => x.status === 'error');
       if (errored) {
+        // File not found / scope 부족 / invalid_grant 등에서 자세한 진단 호출
+        let extra = '';
+        try {
+          const diag = await getGrantsOAuthStatus();
+          if (diag.lastDiagnosis?.scopeIssue) {
+            extra = ` · ${diag.lastDiagnosis.scopeIssue}`;
+          } else if (diag.lastDiagnosis?.ownerEmail) {
+            extra = ` · 사용 토큰: ${diag.lastDiagnosis.ownerEmail}`;
+          }
+        } catch { /* 진단 실패 시 무시 */ }
         toast(
-          `${errored.file} 실패: ${errored.error?.slice(0, 100) ?? 'unknown'}` +
+          `${errored.file} 실패: ${errored.error?.slice(0, 200) ?? 'unknown'}${extra}` +
             ` · ${r.detailMatched}/${r.totalProjects} 과제에 세부 정보 매칭됨`,
           'error',
         );
@@ -99,21 +109,15 @@ export default function GrantsPage() {
       }
       mutate();
     } catch (e: any) {
-      // OAuth 만료 케이스 — 진단 endpoint 호출해서 실제 원인 추정
       const baseMsg = e?.message?.slice(0, 200) ?? 'unknown';
-      if (/invalid_grant|unauthorized|GDrive OAuth/i.test(baseMsg)) {
-        try {
-          const diag = await getGrantsOAuthStatus();
-          toast(
-            `OAuth 토큰 만료 — /settings에서 Gmail 재연결 (drive.readonly scope 필요). ` +
-              `현재 source=${diag.currentAuthSource ?? 'none'}, ` +
-              `primary 토큰=${diag.primaryGmailTokens}개`,
-            'error',
-          );
-        } catch {
-          toast(`Sync 실패 (OAuth 만료 가능성): ${baseMsg}`, 'error');
-        }
-      } else {
+      // 모든 에러에 대해 OAuth 진단 시도 — 실제 원인이 토큰 만료/scope/계정 불일치 모두 가능
+      try {
+        const diag = await getGrantsOAuthStatus();
+        const issue = diag.lastDiagnosis?.scopeIssue
+          ? `scope: ${diag.lastDiagnosis.scopeIssue}`
+          : `토큰: ${diag.lastDiagnosis?.ownerEmail || diag.currentAuthSource || 'unknown'}`;
+        toast(`Sync 실패 — ${baseMsg.slice(0, 150)} (${issue})`, 'error');
+      } catch {
         toast(`Sync 실패: ${baseMsg}`, 'error');
       }
     } finally {

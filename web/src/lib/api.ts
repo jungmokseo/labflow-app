@@ -797,7 +797,7 @@ export async function syncGrants() {
   }>('/api/grants/sync', { method: 'POST' });
 }
 
-// OAuth 토큰 진단 (어느 토큰 소스 사용 중인지, 만료 시 명확한 에러 메시지)
+// OAuth 토큰 진단 (어느 토큰 소스 사용 중인지, scope 부족 시 안내)
 export async function getGrantsOAuthStatus() {
   return apiFetch<{
     ok: boolean;
@@ -805,7 +805,13 @@ export async function getGrantsOAuthStatus() {
     currentAuthSource: 'env' | 'gmail-token' | null;
     primaryGmailTokens: number;
     ownerToken: { email: string; updatedAt: string; primary: boolean } | null;
-    lastDiagnosis: { source: string; ownerEmail?: string; errors: string[] } | null;
+    lastDiagnosis: {
+      source: string;
+      ownerEmail?: string;
+      scopes?: string[];
+      scopeIssue?: string;
+      errors: string[];
+    } | null;
   }>('/api/grants/oauth-status');
 }
 
