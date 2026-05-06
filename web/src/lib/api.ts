@@ -697,6 +697,84 @@ export async function deleteManuscript(id: string) {
   );
 }
 
+// ── 연구 과제 (Grants) ─────────────────────────────────────
+export interface GrantMilestone {
+  id: string;
+  title: string;
+  due?: string | null;
+  done?: boolean;
+  owner?: string | null;
+  note?: string | null;
+}
+
+export interface GrantMetadata {
+  goal?: string;
+  studentLeads?: string;
+  milestones?: GrantMilestone[];
+  notes?: string;
+  [k: string]: unknown;
+}
+
+export interface Grant {
+  id: string;
+  name: string;
+  shortName: string | null;
+  number: string | null;
+  funder: string | null;
+  ministry: string | null;
+  businessName: string | null;
+  period: string | null;
+  pi: string | null;
+  pm: string | null;
+  responsibility: string | null;
+  acknowledgmentKo: string | null;
+  acknowledgmentEn: string | null;
+  status: string;
+  metadata: GrantMetadata;
+  endDate: string | null;
+  daysToEnd: number | null;
+  milestoneStats: { total: number; done: number; dueSoon: number };
+  syncedAt: string | null;
+}
+
+export interface GrantCounts {
+  active: number;
+  endingSoon: number;
+  submitted: number;
+  completed: number;
+  total: number;
+  milestonesDueSoon: number;
+}
+
+export async function getGrants() {
+  return apiFetch<{ items: Grant[]; counts: GrantCounts }>('/api/grants');
+}
+
+export async function updateGrant(id: string, payload: { goal?: string | null; studentLeads?: string | null; notes?: string | null }) {
+  return apiFetch<{ ok: boolean }>(`/api/grants/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function addGrantMilestone(id: string, payload: { title: string; due?: string | null; owner?: string | null; note?: string | null }) {
+  return apiFetch<{ ok: boolean; milestone: GrantMilestone }>(`/api/grants/${id}/milestones`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchGrantMilestone(id: string, mid: string, payload: Partial<Omit<GrantMilestone, 'id'>>) {
+  return apiFetch<{ ok: boolean; milestone: GrantMilestone }>(`/api/grants/${id}/milestones/${mid}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteGrantMilestone(id: string, mid: string) {
+  return apiFetch<{ ok: boolean }>(`/api/grants/${id}/milestones/${mid}`, { method: 'DELETE' });
+}
+
 export async function checkWorksheetAcks() {
   return apiFetch<{ checked: number; acked: number; errors: number }>(
     `/api/worksheet-projects/check-acks`,

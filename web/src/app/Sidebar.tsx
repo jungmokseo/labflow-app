@@ -10,14 +10,14 @@ import { useApiData } from '@/lib/use-api';
 import {
   getCaptures, getBrainChannels, getMeetings, getPaperAlertResults,
   deleteBrainChannel, searchBrainMemory, getFollowUpList, getWorksheetProjects,
-  getManuscripts,
+  getManuscripts, getGrants,
 } from '@/lib/api';
 import {
   LayoutDashboard, Brain, ClipboardList, BookOpen, Mic,
   FlaskConical, Settings, Loader2, Sun, Moon,
   Plus, Search, X, MessageSquare, Trash2,
   PanelLeftClose, PanelLeft, LogOut, Network, BookMarked, Inbox, HelpCircle,
-  Calendar, FileText,
+  Calendar, FileText, Award,
 } from 'lucide-react';
 import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
@@ -36,6 +36,7 @@ const PREFETCH_MAP: Record<string, () => void> = {
   '/papers': () => mutate('paper-results-v2', () => getPaperAlertResults().catch(() => null), { revalidate: false }),
   '/projects': () => mutate('worksheet-projects', () => getWorksheetProjects().catch(() => null), { revalidate: false }),
   '/manuscripts': () => mutate('manuscripts', () => getManuscripts().catch(() => null), { revalidate: false }),
+  '/grants': () => mutate('grants', () => getGrants().catch(() => null), { revalidate: false }),
 };
 
 // Sidebar 우측 뱃지 카운트 — SWR 기반으로 전환.
@@ -80,6 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/brain', icon: Brain, label: 'Brain' },
   { href: '/projects', icon: FlaskConical, label: '프로젝트 관리' },
   { href: '/manuscripts', icon: FileText, label: '논문 파이프라인' },
+  { href: '/grants', icon: Award, label: '연구 과제' },
   { href: '/tasks', icon: ClipboardList, label: 'Tasks & Ideas' },
   { href: '/tasks/review', icon: Inbox, label: '검토 대기' },
   { href: '/follow-up', icon: HelpCircle, label: 'FAQ 답변 대기', badgeKey: 'followUpPending', urgent: false },

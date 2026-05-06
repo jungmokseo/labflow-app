@@ -39,6 +39,7 @@ import { manuscriptRoutes } from './routes/manuscripts.js';
 import { syncManuscripts } from './services/manuscript-sync.js';
 import { monitorManuscriptMail } from './services/manuscript-mail-monitor.js';
 import { syncVacationsToCalendar } from './services/vacation-calendar-sync.js';
+import { grantRoutes } from './routes/grants.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -116,6 +117,7 @@ async function buildApp() {
     await app.register(inboxSummaryRoutes);
     await app.register(worksheetProjectRoutes);
     await app.register(manuscriptRoutes);
+    await app.register(grantRoutes);
 
   return app;
 }
