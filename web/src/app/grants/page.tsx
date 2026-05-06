@@ -69,6 +69,8 @@ export default function GrantsPage() {
   const [tab, setTab] = useState<TabKey>('active');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [oauthDiag, setOauthDiag] = useState<Awaited<ReturnType<typeof getGrantsOAuthStatus>> | null>(null);
+  const [diagOpen, setDiagOpen] = useState(false);
 
   const { data, error, isLoading, mutate } = useApiData<{ items: Grant[]; counts: GrantCounts; caller: GrantCaller }>(
     'grants',
@@ -248,6 +250,65 @@ export default function GrantsPage() {
           <a href={SHEETS_URL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google Sheets</a>
           에서 편집 (매시간 sync) · 목표/담당 학생/마일스톤은 카드 [편집] 또는 [+] 버튼으로
         </p>
+
+        {/* OAuth 진단 패널 — OWNER 전용. sync 실패 원인 추적용. */}
+        {caller.canSync && (
+          <details
+            open={diagOpen}
+            onToggle={async (e) => {
+              const open = (e.target as HTMLDetailsElement).open;
+              setDiagOpen(open);
+              if (open && !oauthDiag) {
+                try { setOauthDiag(await getGrantsOAuthStatus()); }
+                catch (err: any) { toast(`진단 실패: ${err.message?.slice(0, 100)}`, 'error'); }
+              }
+            }}
+            className="mt-4 bg-bg-card border border-border rounded-lg text-xs"
+          >
+            <summary className="px-3 py-2 cursor-pointer text-text-muted hover:text-text-heading select-none">
+              🔧 OAuth 진단 (sync 실패 시 펼치기)
+            </summary>
+            {oauthDiag ? (
+              <div className="px-3 pb-3 space-y-1.5 font-mono text-[11px]">
+                <div>현재 토큰 source: <span className="text-text-heading">{oauthDiag.currentAuthSource ?? '없음'}</span></div>
+                <div>env GOOGLE_REFRESH_TOKEN: <span className="text-text-heading">{oauthDiag.envTokenSet ? '설정됨' : '없음'}</span></div>
+                <div>DB 내 PI Gmail 토큰: <span className="text-text-heading">{oauthDiag.primaryGmailTokens}개</span></div>
+                {oauthDiag.ownerToken && (
+                  <div>OWNER 토큰 계정: <span className="text-text-heading">{oauthDiag.ownerToken.email}</span> (갱신 {fmtDate(oauthDiag.ownerToken.updatedAt)})</div>
+                )}
+                {oauthDiag.lastDiagnosis && (
+                  <>
+                    <div className="pt-1 border-t border-border/50">마지막 인증 결과:</div>
+                    <div>  source: <span className="text-text-heading">{oauthDiag.lastDiagnosis.source}</span></div>
+                    {oauthDiag.lastDiagnosis.ownerEmail && (
+                      <div>  계정: <span className="text-text-heading">{oauthDiag.lastDiagnosis.ownerEmail}</span></div>
+                    )}
+                    {oauthDiag.lastDiagnosis.scopes && oauthDiag.lastDiagnosis.scopes.length > 0 && (
+                      <div className="break-all">  scopes: <span className="text-text-heading">{oauthDiag.lastDiagnosis.scopes.map(s => s.split('/').pop()).join(', ')}</span></div>
+                    )}
+                    {oauthDiag.lastDiagnosis.scopeIssue && (
+                      <div className="text-amber-600 dark:text-amber-400 break-words">  ⚠ scope 문제: {oauthDiag.lastDiagnosis.scopeIssue}</div>
+                    )}
+                    {oauthDiag.lastDiagnosis.errors.length > 0 && (
+                      <div className="break-words">  errors: <span className="text-red-500">{oauthDiag.lastDiagnosis.errors.join(' | ')}</span></div>
+                    )}
+                  </>
+                )}
+                <button
+                  onClick={async () => {
+                    try { setOauthDiag(await getGrantsOAuthStatus()); toast('진단 갱신', 'success'); }
+                    catch (err: any) { toast(`진단 실패: ${err.message?.slice(0, 100)}`, 'error'); }
+                  }}
+                  className="mt-2 px-2 py-1 bg-bg-input rounded hover:bg-bg-hover"
+                >
+                  새로고침
+                </button>
+              </div>
+            ) : (
+              <div className="px-3 pb-3 text-text-muted">로딩…</div>
+            )}
+          </details>
+        )}
       </div>
     </div>
   );
