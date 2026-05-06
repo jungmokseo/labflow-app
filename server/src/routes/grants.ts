@@ -13,6 +13,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import {
@@ -76,12 +77,28 @@ function daysUntil(d: Date): number {
 export async function grantRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware);
 
+  // env.LAB_ID 단일 lab 배포에서도 권한 미들웨어가 작동하도록 request.labId 채워준다.
+  // (resolveLabPermission이 request.labId 기반으로 LabMember/Lab.ownerId 조회.)
+  app.addHook('preHandler', async (request) => {
+    if (!request.labId && env.LAB_ID) request.labId = env.LAB_ID;
+  });
+
   const labIdOrThrow = (request: FastifyRequest): string | null => {
-    return env.LAB_ID || (request as any).labId || null;
+    return env.LAB_ID || request.labId || null;
   };
 
+  // 같은 분류 규칙을 서버 KPI와 프론트 탭에서 공유 (한 row가 여러 탭에 중복 카운트되지 않도록).
+  // 종료됨 → 신청 중 → 종료 임박 → 진행 중 — 프론트 classifyTab()과 1:1 일치.
+  function classifyGrantTab(g: { status: string; daysToEnd: number | null }): 'active' | 'endingSoon' | 'submitted' | 'completed' {
+    if (g.daysToEnd !== null && g.daysToEnd < 0) return 'completed';
+    if (g.status === 'completed') return 'completed';
+    if (g.status === 'submitted' || g.status === 'preparing') return 'submitted';
+    if ((g.daysToEnd !== null && g.daysToEnd >= 0 && g.daysToEnd <= 90) || g.status === 'ending_soon') return 'endingSoon';
+    return 'active';
+  }
+
   // ── GET 목록 + KPI ──────────────────────────
-  app.get('/api/grants', async (request, reply) => {
+  app.get('/api/grants', { preHandler: requirePermission('VIEWER') }, async (request, reply) => {
     try {
       const labId = labIdOrThrow(request);
       if (!labId) return reply.code(400).send({ error: 'LAB_ID 미설정' });
@@ -112,17 +129,29 @@ export async function grantRoutes(app: FastifyInstance) {
         };
       });
 
-      // KPI
-      const counts = {
-        active: enriched.filter(g => g.status === 'active').length,
-        endingSoon: enriched.filter(g => g.daysToEnd !== null && g.daysToEnd >= 0 && g.daysToEnd <= 90).length,
-        submitted: enriched.filter(g => g.status === 'submitted' || g.status === 'preparing').length,
-        completed: enriched.filter(g => g.status === 'completed' || (g.daysToEnd !== null && g.daysToEnd < 0)).length,
-        total: enriched.length,
-        milestonesDueSoon: enriched.reduce((sum, g) => sum + g.milestoneStats.dueSoon, 0),
+      // KPI — classifyGrantTab으로 한 row가 정확히 한 탭에만 카운트되도록 정렬 (UI와 일치)
+      const counts = enriched.reduce(
+        (acc, g) => {
+          const tab = classifyGrantTab(g);
+          acc[tab]++;
+          acc.milestonesDueSoon += g.milestoneStats.dueSoon;
+          return acc;
+        },
+        { active: 0, endingSoon: 0, submitted: 0, completed: 0, total: enriched.length, milestonesDueSoon: 0 } as {
+          active: number; endingSoon: number; submitted: number; completed: number;
+          total: number; milestonesDueSoon: number;
+        },
+      );
+
+      // Caller capabilities — UI에서 학생(VIEWER)에게 sync/편집 컨트롤 숨기기
+      const callerPermission = request.labPermission ?? 'VIEWER';
+      const caller = {
+        permission: callerPermission,
+        canEdit: ['EDITOR', 'ADMIN', 'OWNER'].includes(callerPermission),
+        canSync: callerPermission === 'OWNER',
       };
 
-      return reply.send({ items: enriched, counts });
+      return reply.send({ items: enriched, counts, caller });
     } catch (err) {
       return failWith(reply, 500, '과제 목록 조회 실패', err);
     }
@@ -134,13 +163,15 @@ export async function grantRoutes(app: FastifyInstance) {
     studentLeads: z.string().max(300).nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
   });
-  app.patch('/api/grants/:id', async (request, reply) => {
+  app.patch('/api/grants/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = updateSchema.parse(request.body || {});
 
+      const labId = labIdOrThrow(request);
       const existing = await prisma.project.findUnique({ where: { id } });
       if (!existing) return reply.code(404).send({ error: '과제 없음' });
+      if (labId && existing.labId !== labId) return reply.code(403).send({ error: '다른 연구실의 과제입니다' });
 
       const md = ((existing.metadata as GrantMetadata) || {});
       if (body.goal !== undefined) md.goal = body.goal || undefined;
@@ -164,12 +195,14 @@ export async function grantRoutes(app: FastifyInstance) {
     owner: z.string().max(100).nullable().optional(),
     note: z.string().max(500).nullable().optional(),
   });
-  app.post('/api/grants/:id/milestones', async (request, reply) => {
+  app.post('/api/grants/:id/milestones', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = addMilestoneSchema.parse(request.body || {});
+      const labId = labIdOrThrow(request);
       const existing = await prisma.project.findUnique({ where: { id } });
       if (!existing) return reply.code(404).send({ error: '과제 없음' });
+      if (labId && existing.labId !== labId) return reply.code(403).send({ error: '다른 연구실의 과제입니다' });
 
       const md = ((existing.metadata as GrantMetadata) || {});
       const milestones = Array.isArray(md.milestones) ? md.milestones : [];
@@ -198,12 +231,14 @@ export async function grantRoutes(app: FastifyInstance) {
     note: z.string().max(500).nullable().optional(),
     done: z.boolean().optional(),
   });
-  app.patch('/api/grants/:id/milestones/:mid', async (request, reply) => {
+  app.patch('/api/grants/:id/milestones/:mid', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id, mid } = request.params as { id: string; mid: string };
       const body = patchMsSchema.parse(request.body || {});
+      const labId = labIdOrThrow(request);
       const existing = await prisma.project.findUnique({ where: { id } });
       if (!existing) return reply.code(404).send({ error: '과제 없음' });
+      if (labId && existing.labId !== labId) return reply.code(403).send({ error: '다른 연구실의 과제입니다' });
 
       const md = ((existing.metadata as GrantMetadata) || {});
       const milestones = Array.isArray(md.milestones) ? md.milestones : [];
@@ -220,7 +255,7 @@ export async function grantRoutes(app: FastifyInstance) {
   });
 
   // ── POST 수동 GDrive sync 트리거 ────────────
-  app.post('/api/grants/sync', async (request, reply) => {
+  app.post('/api/grants/sync', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
     try {
       const labId = labIdOrThrow(request);
       if (!labId) return reply.code(400).send({ error: 'LAB_ID 미설정' });
@@ -256,7 +291,7 @@ export async function grantRoutes(app: FastifyInstance) {
 
   // ── GET /api/grants/oauth-status — 진단용 ─────
   // OAuth가 어떤 토큰 소스를 사용하고 있는지, 마지막 인증 시 발생한 에러는 무엇인지 확인.
-  app.get('/api/grants/oauth-status', async (request, reply) => {
+  app.get('/api/grants/oauth-status', { preHandler: requirePermission('ADMIN') }, async (request, reply) => {
     try {
       const diag = getLastAuthDiagnosis();
       const tokenCount = await prisma.gmailToken.count({
@@ -282,11 +317,13 @@ export async function grantRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE 마일스톤 ──────────────────────────
-  app.delete('/api/grants/:id/milestones/:mid', async (request, reply) => {
+  app.delete('/api/grants/:id/milestones/:mid', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id, mid } = request.params as { id: string; mid: string };
+      const labId = labIdOrThrow(request);
       const existing = await prisma.project.findUnique({ where: { id } });
       if (!existing) return reply.code(404).send({ error: '과제 없음' });
+      if (labId && existing.labId !== labId) return reply.code(403).send({ error: '다른 연구실의 과제입니다' });
       const md = ((existing.metadata as GrantMetadata) || {});
       const milestones = Array.isArray(md.milestones) ? md.milestones : [];
       md.milestones = milestones.filter(m => m.id !== mid);

@@ -15,7 +15,7 @@ import { useToast } from '@/components/Toast';
 import {
   getGrants, updateGrant, addGrantMilestone, patchGrantMilestone, deleteGrantMilestone,
   syncGrants, getGrantsOAuthStatus,
-  type Grant, type GrantCounts, type GrantMilestone,
+  type Grant, type GrantCounts, type GrantCaller, type GrantMilestone,
 } from '@/lib/api';
 import {
   FlaskConical, RefreshCw, ChevronRight, ChevronDown, Inbox, AlertCircle,
@@ -70,10 +70,13 @@ export default function GrantsPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
 
-  const { data, error, isLoading, mutate } = useApiData<{ items: Grant[]; counts: GrantCounts }>(
+  const { data, error, isLoading, mutate } = useApiData<{ items: Grant[]; counts: GrantCounts; caller: GrantCaller }>(
     'grants',
     () => getGrants(),
   );
+
+  // VIEWER (학생)에게는 sync/편집 컨트롤을 모두 숨긴다 (서버가 403 반환하므로 UX 보호).
+  const caller = data?.caller ?? { permission: 'VIEWER', canEdit: false, canSync: false };
 
   const handleSync = async () => {
     setSyncing(true);
@@ -152,15 +155,17 @@ export default function GrantsPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 self-start sm:self-auto">
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 whitespace-nowrap"
-              title="GDrive Sheets에서 즉시 sync (시트 편집 후 즉시 반영용)"
-            >
-              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? '동기화 중…' : '동기화'}
-            </button>
+            {caller.canSync && (
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 whitespace-nowrap"
+                title="GDrive Sheets에서 즉시 sync (시트 편집 후 즉시 반영용)"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? '동기화 중…' : '동기화'}
+              </button>
+            )}
             <a
               href={SHEETS_URL}
               target="_blank"
@@ -225,6 +230,7 @@ export default function GrantsPage() {
               <GrantRow
                 key={g.id}
                 g={g}
+                canEdit={caller.canEdit}
                 expanded={expandedIds.has(g.id)}
                 onToggle={() => toggleExpanded(g.id)}
                 onMutated={() => mutate()}
@@ -254,12 +260,13 @@ function Kpi({ label, value, color }: { label: string; value: number; color: str
 
 interface GrantRowProps {
   g: Grant;
+  canEdit: boolean;
   expanded: boolean;
   onToggle: () => void;
   onMutated: () => void;
 }
 
-function GrantRow({ g, expanded, onToggle, onMutated }: GrantRowProps) {
+function GrantRow({ g, canEdit, expanded, onToggle, onMutated }: GrantRowProps) {
   const tab = classifyTab(g);
   const ms = g.metadata.milestones ?? [];
   const msStats = g.milestoneStats;
@@ -343,11 +350,11 @@ function GrantRow({ g, expanded, onToggle, onMutated }: GrantRowProps) {
             </div>
           )}
 
-          {/* PI 입력 — 시트에 없는 추가 정보 (선택) */}
-          <PIFieldsEditor g={g} onSaved={onMutated} />
+          {/* PI 입력 — 시트에 없는 추가 정보 (선택) — VIEWER는 read-only */}
+          <PIFieldsEditor g={g} canEdit={canEdit} onSaved={onMutated} />
 
-          {/* 마일스톤 체크리스트 */}
-          <MilestonesEditor g={g} milestones={ms} onMutated={onMutated} />
+          {/* 마일스톤 체크리스트 — VIEWER는 read-only */}
+          <MilestonesEditor g={g} canEdit={canEdit} milestones={ms} onMutated={onMutated} />
 
           {/* 사사 문구 */}
           {(g.acknowledgmentKo || g.acknowledgmentEn) && (
@@ -440,10 +447,11 @@ function AcknowledgeBlock({ label, text }: { label: string; text: string }) {
 
 interface PIFieldsEditorProps {
   g: Grant;
+  canEdit: boolean;
   onSaved: () => void;
 }
 
-function PIFieldsEditor({ g, onSaved }: PIFieldsEditorProps) {
+function PIFieldsEditor({ g, canEdit, onSaved }: PIFieldsEditorProps) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [goal, setGoal] = useState(g.metadata.goal || '');
@@ -471,15 +479,19 @@ function PIFieldsEditor({ g, onSaved }: PIFieldsEditorProps) {
 
   if (!editing) {
     const hasContent = g.metadata.goal || g.metadata.studentLeads || g.metadata.notes;
+    // VIEWER에게 컨텐츠가 없는 경우 섹션 자체를 숨긴다 (불필요한 노이즈 제거)
+    if (!canEdit && !hasContent) return null;
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-[10px] text-text-muted uppercase tracking-wider">과제 목표 / 담당</p>
-          <button onClick={() => setEditing(true)} className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline">
-            <Pencil className="w-3 h-3" /> {hasContent ? '편집' : '+ 추가'}
-          </button>
+          {canEdit && (
+            <button onClick={() => setEditing(true)} className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline">
+              <Pencil className="w-3 h-3" /> {hasContent ? '편집' : '+ 추가'}
+            </button>
+          )}
         </div>
-        {!hasContent && (
+        {canEdit && !hasContent && (
           <p className="text-xs text-text-muted/70 italic px-1">아직 목표/담당 학생 입력 안됨</p>
         )}
         {g.metadata.goal && (
@@ -560,11 +572,12 @@ function PIFieldsEditor({ g, onSaved }: PIFieldsEditorProps) {
 
 interface MilestonesEditorProps {
   g: Grant;
+  canEdit: boolean;
   milestones: GrantMilestone[];
   onMutated: () => void;
 }
 
-function MilestonesEditor({ g, milestones, onMutated }: MilestonesEditorProps) {
+function MilestonesEditor({ g, canEdit, milestones, onMutated }: MilestonesEditorProps) {
   const { toast } = useToast();
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
@@ -627,20 +640,23 @@ function MilestonesEditor({ g, milestones, onMutated }: MilestonesEditorProps) {
     return 0;
   });
 
+  // VIEWER이고 마일스톤 0개면 섹션 숨김 (노이즈 제거)
+  if (!canEdit && milestones.length === 0) return null;
+
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-text-muted uppercase tracking-wider">
           마일스톤 ({milestones.filter(m => m.done).length}/{milestones.length})
         </p>
-        {!adding && (
+        {canEdit && !adding && (
           <button onClick={() => setAdding(true)} className="text-[11px] inline-flex items-center gap-1 text-primary hover:underline">
             <Plus className="w-3 h-3" /> 추가
           </button>
         )}
       </div>
 
-      {sorted.length === 0 && !adding && (
+      {canEdit && sorted.length === 0 && !adding && (
         <p className="text-xs text-text-muted/70 italic px-1">마일스톤 없음 — 위 [+ 추가]로 등록</p>
       )}
 
@@ -652,11 +668,11 @@ function MilestonesEditor({ g, milestones, onMutated }: MilestonesEditorProps) {
             className={`flex items-start gap-2 px-2 py-1.5 bg-bg-input/30 rounded text-xs ${m.done ? 'opacity-60' : ''}`}
           >
             <button
-              onClick={() => handleToggle(m.id, !m.done)}
-              disabled={busy === m.id}
+              onClick={() => canEdit && handleToggle(m.id, !m.done)}
+              disabled={busy === m.id || !canEdit}
               className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded border ${
                 m.done ? 'bg-primary border-primary text-white' : 'border-text-muted/40'
-              } inline-flex items-center justify-center disabled:opacity-50`}
+              } inline-flex items-center justify-center disabled:opacity-50 ${!canEdit ? 'cursor-default' : ''}`}
               aria-label={m.done ? '미완료로' : '완료로'}
             >
               {m.done && <Check className="w-3 h-3" />}
@@ -669,19 +685,21 @@ function MilestonesEditor({ g, milestones, onMutated }: MilestonesEditorProps) {
                 {m.note && <span className="text-[10px] text-text-muted/70 italic truncate">— {m.note}</span>}
               </div>
             </div>
-            <button
-              onClick={() => handleDelete(m.id)}
-              disabled={busy === m.id}
-              className="flex-shrink-0 p-1 text-text-muted/70 hover:text-red-500 disabled:opacity-50"
-              aria-label="삭제"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
+            {canEdit && (
+              <button
+                onClick={() => handleDelete(m.id)}
+                disabled={busy === m.id}
+                className="flex-shrink-0 p-1 text-text-muted/70 hover:text-red-500 disabled:opacity-50"
+                aria-label="삭제"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
           </div>
         );
       })}
 
-      {adding && (
+      {canEdit && adding && (
         <div className="flex flex-wrap gap-1.5 px-2 py-1.5 bg-bg-input/40 border border-border rounded">
           <input
             value={newTitle}

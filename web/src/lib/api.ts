@@ -750,8 +750,14 @@ export interface GrantCounts {
   milestonesDueSoon: number;
 }
 
+export interface GrantCaller {
+  permission: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
+  canEdit: boolean;     // PI 입력·마일스톤·메모 편집 가능 여부 (EDITOR 이상)
+  canSync: boolean;     // GDrive 수동 sync 가능 여부 (OWNER만)
+}
+
 export async function getGrants() {
-  return apiFetch<{ items: Grant[]; counts: GrantCounts }>('/api/grants');
+  return apiFetch<{ items: Grant[]; counts: GrantCounts; caller: GrantCaller }>('/api/grants');
 }
 
 export async function updateGrant(id: string, payload: { goal?: string | null; studentLeads?: string | null; notes?: string | null }) {

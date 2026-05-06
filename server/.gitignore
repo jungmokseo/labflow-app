@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+# PII / lab-specific 진단 스크립트 (사용자 ID·이메일·clerkId 출력)는 commit 금지.
+# check-grant-metadata.mjs처럼 메타데이터만 출력하는 도구는 유지 가능.
+scripts/local/
+scripts/*-private.mjs

@@ -51,7 +51,11 @@ async function tryAuthWithRefreshToken(refreshToken: string, label: string): Pro
 
 async function findOwnerGmailToken() {
   // PI(OWNER) 식별 — 학생 등 임의 사용자 토큰 사용 방지 (cross-user contamination guard).
-  // 우선순위: LAB_OWNER_EMAIL → LAB_OWNER_CLERK_ID → LAB_ID + LabMember(permission='OWNER').
+  // 우선순위:
+  //   1) LAB_OWNER_EMAIL          (env)
+  //   2) LAB_OWNER_CLERK_ID       (env)
+  //   3) LAB_ID + Lab.ownerId     (Lab 모델의 명시적 PI 필드 — 가장 신뢰)
+  //   4) LAB_ID + LabMember(OWNER) (옵션 — Lab.ownerId 없을 때)
   if (env.LAB_OWNER_EMAIL) {
     const t = await prisma.gmailToken.findFirst({
       where: {
@@ -72,15 +76,27 @@ async function findOwnerGmailToken() {
     });
     if (t) return t;
   }
-  // LAB_ID 기반 자동 OWNER 식별 — LabMember.permission='OWNER' 인 사용자
   if (env.LAB_ID) {
-    const owner = await prisma.labMember.findFirst({
-      where: { labId: env.LAB_ID, permission: 'OWNER', userId: { not: null }, active: true },
-      select: { userId: true, email: true },
+    // Lab.ownerId — 가장 권위 있는 PI 식별 경로 (Lab 모델이 직접 owner를 가리킴)
+    const lab = await prisma.lab.findUnique({
+      where: { id: env.LAB_ID },
+      select: { ownerId: true },
     });
-    if (owner?.userId) {
+    if (lab?.ownerId) {
       const t = await prisma.gmailToken.findFirst({
-        where: { userId: owner.userId, refreshToken: { not: null } },
+        where: { userId: lab.ownerId, refreshToken: { not: null } },
+        orderBy: [{ primary: 'desc' }, { updatedAt: 'desc' }],
+      });
+      if (t) return t;
+    }
+    // 마지막 안전망: LabMember.permission='OWNER' (Lab.ownerId 없을 때만)
+    const ownerMember = await prisma.labMember.findFirst({
+      where: { labId: env.LAB_ID, permission: 'OWNER', userId: { not: null }, active: true },
+      select: { userId: true },
+    });
+    if (ownerMember?.userId) {
+      const t = await prisma.gmailToken.findFirst({
+        where: { userId: ownerMember.userId, refreshToken: { not: null } },
         orderBy: [{ primary: 'desc' }, { updatedAt: 'desc' }],
       });
       if (t) return t;
