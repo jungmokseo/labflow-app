@@ -14,6 +14,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { syncVacationsToCalendar } from '../services/vacation-calendar-sync.js';
 
 function memberUrl(path: string, query?: Record<string, string | undefined>) {
   const base = env.LABFLOW_MEMBER_URL.replace(/\/$/, '');
@@ -63,5 +64,16 @@ export async function labDataRoutes(app: FastifyInstance) {
   app.get('/api/lab-data/lab-accounts/:id/password', { preHandler: authMiddleware }, async (request, reply) => {
     const { id } = request.params as { id: string };
     await callMember(reply, { method: 'GET', path: `/api/lab-data/lab-accounts/${encodeURIComponent(id)}/password` });
+  });
+
+  // 휴가 → BLISS Lab Google Calendar 수동 sync (즉시 등록 + 결과 확인용)
+  app.post('/api/lab-data/vacations/sync-calendar', { preHandler: authMiddleware }, async (request, reply) => {
+    try {
+      const userId = (request as any).user?.id as string | undefined;
+      const r = await syncVacationsToCalendar({ userId });
+      return reply.send({ ok: true, ...r });
+    } catch (err: any) {
+      return reply.code(500).send({ error: '캘린더 sync 실패', message: err?.message?.slice(0, 200) });
+    }
   });
 }

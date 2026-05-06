@@ -212,6 +212,9 @@ export async function syncVacationsToCalendar(opts: { userId?: string } = {}): P
   created: number;
   cancelled: number;
   errors: number;
+  calendarId: string;
+  calendarSource: 'env' | 'auto' | 'primary';
+  calendarName?: string;
 }> {
   const t0 = Date.now();
   console.log('[vacation-calendar] 시작');
@@ -223,17 +226,24 @@ export async function syncVacationsToCalendar(opts: { userId?: string } = {}): P
     || (await prisma.user.findFirst({ where: { email: 'jungmok.seo@gmail.com' } }))?.id;
   if (!userId) {
     console.warn('[vacation-calendar] PI userId 없음');
-    return { total: 0, created: 0, cancelled: 0, errors: 1 };
+    return { total: 0, created: 0, cancelled: 0, errors: 1, calendarId: 'primary', calendarSource: 'primary' };
   }
 
   // 2. Google Calendar client
   const calendar = await getCalendarClient(userId);
   if (!calendar) {
     console.warn('[vacation-calendar] Calendar client 없음 (Gmail 토큰 미연동)');
-    return { total: 0, created: 0, cancelled: 0, errors: 1 };
+    return { total: 0, created: 0, cancelled: 0, errors: 1, calendarId: 'primary', calendarSource: 'primary' };
   }
 
   const { id: calendarId, source: calSource } = await resolveCalendarId(calendar);
+  let calendarName: string | undefined;
+  if (calSource === 'auto' || (calSource === 'env' && env.BLISS_LAB_CALENDAR_ID)) {
+    try {
+      const meta = await calendar.calendarList.get({ calendarId });
+      calendarName = meta.data.summaryOverride || meta.data.summary || undefined;
+    } catch { /* scope 없으면 silent */ }
+  }
   if (calSource === 'primary' && !env.BLISS_LAB_CALENDAR_ID) {
     console.warn('[vacation-calendar] ⚠️ BLISS Lab 캘린더 매칭 실패 → primary 사용. ' +
       'Gmail 재연동(calendar.readonly scope) 또는 BLISS_LAB_CALENDAR_ID 설정 권장.');
@@ -245,7 +255,7 @@ export async function syncVacationsToCalendar(opts: { userId?: string } = {}): P
     vacations = await fetchVacationsFromMember(100);
   } catch (e: any) {
     console.error(`[vacation-calendar] fetch 실패: ${e.message?.slice(0, 100)}`);
-    return { total: 0, created: 0, cancelled: 0, errors: 1 };
+    return { total: 0, created: 0, cancelled: 0, errors: 1, calendarId, calendarSource: calSource, calendarName };
   }
   console.log(`[vacation-calendar] 휴가 ${vacations.length}건 검토`);
 
@@ -294,6 +304,6 @@ export async function syncVacationsToCalendar(opts: { userId?: string } = {}): P
   }
 
   const elapsed = Math.round((Date.now() - t0) / 1000);
-  console.log(`[vacation-calendar] 완료: 신규 ${created}, 취소 ${cancelled}, errors ${errors}, ${elapsed}s`);
-  return { total: vacations.length, created, cancelled, errors };
+  console.log(`[vacation-calendar] 완료: 캘린더 '${calendarName || calendarId}' (${calSource}) · 신규 ${created} / 취소 ${cancelled} / errors ${errors} / ${elapsed}s`);
+  return { total: vacations.length, created, cancelled, errors, calendarId, calendarSource: calSource, calendarName };
 }

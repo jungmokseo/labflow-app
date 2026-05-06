@@ -8,9 +8,10 @@
  */
 
 import { useMemo, useState } from 'react';
-import { getRecentVacations, getVacationBalances, type VacationRecentItem, type VacationBalanceItem } from '@/lib/api';
+import { getRecentVacations, getVacationBalances, syncVacationsToCalendar, type VacationRecentItem, type VacationBalanceItem } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
-import { Calendar, Clock, Loader2, User, AlertCircle } from 'lucide-react';
+import { useToast } from '@/components/Toast';
+import { Calendar, Clock, Loader2, User, AlertCircle, RefreshCw, Check } from 'lucide-react';
 
 const TYPE_LABEL: Record<string, string> = {
   ANNUAL: '연차',
@@ -48,7 +49,40 @@ function timeAgo(iso: string): string {
 }
 
 export default function VacationsPage() {
+  const { toast } = useToast();
   const [tab, setTab] = useState<'recent' | 'balance'>('recent');
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<{
+    calendarName?: string;
+    calendarSource: string;
+    created: number;
+    cancelled: number;
+  } | null>(null);
+
+  const handleCalendarSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const r = await syncVacationsToCalendar();
+      const calLabel = r.calendarName || r.calendarId || 'primary';
+      setLastSync({ calendarName: r.calendarName, calendarSource: r.calendarSource, created: r.created, cancelled: r.cancelled });
+      if (r.calendarSource === 'primary' && !r.calendarName) {
+        toast(
+          `⚠️ 'BLISS LAB' 캘린더 매칭 실패 → primary에 등록. Gmail 재연동 필요 (calendar.readonly scope)`,
+          'error',
+        );
+      } else {
+        toast(
+          `'${calLabel}'에 등록: 신규 ${r.created}건${r.cancelled > 0 ? ` · 취소 ${r.cancelled}건` : ''}`,
+          'success',
+        );
+      }
+    } catch (e: any) {
+      toast(`동기화 실패: ${e.message?.slice(0, 100)}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const recent = useApiData<{ items: VacationRecentItem[] }>(
     'vacations:recent',
@@ -69,17 +103,38 @@ export default function VacationsPage() {
   return (
     <div className="min-h-full pb-20 md:pb-12">
       <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
-              <Calendar className="w-6 h-6 text-primary flex-shrink-0" /> 휴가 관리
-            </h1>
-            <p className="text-sm md:text-base text-text-muted mt-1">
-              학생이 BLISS Slack /휴가로 등록한 신청 내역과 잔여 휴가 현황.
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <span className="w-1 h-9 md:h-11 bg-primary rounded-full flex-shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-2xl md:text-3xl font-bold text-text-heading tracking-tight flex items-center gap-2 leading-tight">
+                <Calendar className="w-6 h-6 text-primary flex-shrink-0" /> 휴가 관리
+              </h1>
+              <p className="text-sm md:text-base text-text-muted mt-1">
+                학생이 BLISS Slack /휴가로 등록한 신청 내역과 잔여 휴가 현황.
+              </p>
+            </div>
           </div>
+          <button
+            onClick={handleCalendarSync}
+            disabled={syncing}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-bg-card border border-border rounded-lg text-sm hover:text-text-heading disabled:opacity-50 self-start sm:self-auto whitespace-nowrap"
+            title="휴가 → BLISS Lab Google Calendar 즉시 등록"
+          >
+            <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? '동기화 중…' : '캘린더 동기화'}
+          </button>
         </div>
+        {lastSync && (
+          <div className="mt-3 px-3 py-2 bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 rounded-lg text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+            <Check className="w-3.5 h-3.5" />
+            <span>
+              <strong>{lastSync.calendarName || '(이름 미상)'}</strong>에 매칭됨
+              ({lastSync.calendarSource === 'auto' ? '자동' : lastSync.calendarSource === 'env' ? 'env' : 'primary'})
+              {' · '}이번 동기화: 신규 {lastSync.created}건{lastSync.cancelled > 0 ? ` / 취소 ${lastSync.cancelled}건` : ''}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="px-4 md:px-8 pt-1 pb-2 flex gap-2 overflow-x-auto">

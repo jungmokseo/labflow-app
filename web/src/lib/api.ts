@@ -432,6 +432,20 @@ export async function getVacationBalances() {
   return apiFetch<{ year: number; items: VacationBalanceItem[] }>(`/api/lab-data/vacations/balance`);
 }
 
+// 휴가 → BLISS Lab 캘린더 수동 동기화 (즉시 결과 확인)
+export async function syncVacationsToCalendar() {
+  return apiFetch<{
+    ok: boolean;
+    total: number;
+    created: number;
+    cancelled: number;
+    errors: number;
+    calendarId: string;
+    calendarSource: 'env' | 'auto' | 'primary';
+    calendarName?: string;
+  }>(`/api/lab-data/vacations/sync-calendar`, { method: 'POST' });
+}
+
 // 참고: Lab 계정 정보는 Slack BLISS-bot의 search_faq로 이전됨 (학생들이 같이 검색).
 // server의 /api/lab-data/lab-accounts 엔드포인트와 데이터(labflow-member)는 보존.
 
