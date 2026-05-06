@@ -38,6 +38,7 @@ import { checkPendingReminders } from './services/worksheet-reminder.js';
 import { manuscriptRoutes } from './routes/manuscripts.js';
 import { syncManuscripts } from './services/manuscript-sync.js';
 import { monitorManuscriptMail } from './services/manuscript-mail-monitor.js';
+import { syncVacationsToCalendar } from './services/vacation-calendar-sync.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -166,6 +167,21 @@ async function start() {
         setTimeout(runManuscriptMail, 120000);  // 시작 2분 후 1회
         setInterval(runManuscriptMail, 24 * 60 * 60 * 1000);  // 하루 1회 Gmail 감지
         console.log('[manuscript-cron] 노션 sync 1h + Gmail 감지 24h (incremental) 예약됨');
+
+        // 휴가 → BLISS Lab Google Calendar 자동 등록 (매시간)
+        const runVacationCalendarSync = async () => {
+          try {
+            const r = await syncVacationsToCalendar();
+            if (r.created > 0 || r.cancelled > 0) {
+              console.log(`[vacation-cron] 캘린더 등록: 신규 ${r.created} / 취소 ${r.cancelled}`);
+            }
+          } catch (e: any) {
+            console.error('[vacation-cron] FAILED:', e.message);
+          }
+        };
+        setTimeout(runVacationCalendarSync, 150000);  // 시작 2.5분 후 1회
+        setInterval(runVacationCalendarSync, 60 * 60 * 1000);  // 매시간
+        console.log('[vacation-cron] 휴가 → 캘린더 자동 등록 예약됨 (1시간 주기)');
       }
 
       // GDrive 자동 동기화 (LAB_ID + GOOGLE_REFRESH_TOKEN + 파일 ID 중 1개 이상 설정된 경우)
