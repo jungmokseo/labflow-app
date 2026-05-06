@@ -10,6 +10,7 @@
  * PATCH  /api/manuscripts/:id                → 종합 편집 (DB + 노션)
  * PATCH  /api/manuscripts/:id/turn           → whoseTurn 토글 (web 호환)
  * PATCH  /api/manuscripts/:id/stage          → 단계 변경 (web 호환)
+ * DELETE /api/manuscripts/:id                → 노션 trash + DB archived=true
  */
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -19,6 +20,7 @@ import {
   getManuscripts,
   getPublishedKpi,
   patchManuscriptProperty,
+  archiveNotionPage,
 } from '../services/manuscript-sync.js';
 import {
   monitorManuscriptMail,
@@ -245,6 +247,28 @@ export async function manuscriptRoutes(app: FastifyInstance) {
       return reply.send({ ok: true, stage: body.stage });
     } catch (err) {
       return failWith(reply, 500, '단계 변경 실패', err);
+    }
+  });
+
+  // DELETE /:id — 노션 page를 trash로 + DB archived=true (실수 시 노션 trash에서 복구 가능)
+  app.delete('/api/manuscripts/:id', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const exists = await prisma.manuscript.findUnique({ where: { id }, select: { id: true } });
+      if (!exists) return reply.code(404).send({ error: 'manuscript 없음' });
+
+      // 1. 노션 page archive (trash로 보냄)
+      const notionOk = await archiveNotionPage(id);
+
+      // 2. DB row archived=true (UI 즉시 반영)
+      await prisma.manuscript.update({
+        where: { id },
+        data: { archived: true },
+      });
+
+      return reply.send({ ok: true, notionArchived: notionOk });
+    } catch (err) {
+      return failWith(reply, 500, '삭제 실패', err);
     }
   });
 }

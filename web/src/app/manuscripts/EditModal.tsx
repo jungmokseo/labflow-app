@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useToast } from '@/components/Toast';
-import { updateManuscript, type Manuscript, type ManuscriptUpdatePayload } from '@/lib/api';
-import { Loader2, Pencil, X } from 'lucide-react';
+import { updateManuscript, deleteManuscript, type Manuscript, type ManuscriptUpdatePayload } from '@/lib/api';
+import { Loader2, Pencil, X, Trash2 } from 'lucide-react';
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -16,12 +16,43 @@ interface EditModalProps {
   m: Manuscript;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;  // 삭제 후 호출 (목록에서 제거 + KPI 갱신)
 }
 
-/** 편집 modal — 모든 필드 in-place 수정 (DB + 노션 동시 갱신) */
-export function EditModal({ m, onClose, onSaved }: EditModalProps) {
+/** 편집 modal — 모든 필드 in-place 수정 (DB + 노션 동시 갱신). 삭제 버튼 포함. */
+export function EditModal({ m, onClose, onSaved, onDeleted }: EditModalProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) {
+      // 1차 클릭 — 빨간 확인 상태로 전환
+      setConfirmDelete(true);
+      // 5초 후 자동 취소
+      setTimeout(() => setConfirmDelete(false), 5000);
+      return;
+    }
+    // 2차 클릭 — 실제 삭제
+    setDeleting(true);
+    try {
+      const r = await deleteManuscript(m.id);
+      toast(
+        r.notionArchived
+          ? `'${m.title}' 삭제됨 · 노션 trash로 이동 (30일 내 복구 가능)`
+          : `'${m.title}' DB에서 삭제됨 (노션 archive 실패 — 노션에서 직접 trash 권장)`,
+        'success',
+      );
+      onDeleted?.();
+      onClose();
+    } catch (e: any) {
+      toast(`삭제 실패: ${e.message?.slice(0, 100)}`, 'error');
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
   // 폼 state — 빈 문자열은 null로 변환해서 저장
   const [form, setForm] = useState({
     title: m.title || '',
@@ -240,17 +271,34 @@ export function EditModal({ m, onClose, onSaved }: EditModalProps) {
             />
           </FormField>
         </div>
-        <div className="flex gap-2 p-4 border-t border-border sticky bottom-0 bg-bg-card">
+        <div className="flex flex-wrap gap-2 p-4 border-t border-border sticky bottom-0 bg-bg-card">
+          <button
+            onClick={handleDelete}
+            disabled={deleting || saving}
+            title={confirmDelete ? '한 번 더 클릭하면 삭제됩니다' : '카드 삭제'}
+            className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border disabled:opacity-50 transition-colors ${
+              confirmDelete
+                ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                : 'bg-bg-card text-red-600 dark:text-red-400 border-red-300 dark:border-red-500/50 hover:bg-red-500/10'
+            }`}
+          >
+            {deleting
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Trash2 className="w-4 h-4" />}
+            {deleting ? '삭제 중…' : (confirmDelete ? '한 번 더 클릭 (확정)' : '삭제')}
+          </button>
+          <div className="flex-1" />
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 rounded-lg border border-border text-sm hover:bg-bg-hover"
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-bg-hover disabled:opacity-50"
           >
             취소
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
+            disabled={saving || deleting}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {saving ? '저장 중…' : '저장'}

@@ -689,6 +689,14 @@ export async function updateManuscript(id: string, payload: ManuscriptUpdatePayl
   );
 }
 
+// 카드 삭제 — 노션 page를 trash로 + DB archived=true (실수 시 노션 trash에서 30일 내 복구 가능)
+export async function deleteManuscript(id: string) {
+  return apiFetch<{ ok: boolean; notionArchived: boolean }>(
+    `/api/manuscripts/${id}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function checkWorksheetAcks() {
   return apiFetch<{ checked: number; acked: number; errors: number }>(
     `/api/worksheet-projects/check-acks`,

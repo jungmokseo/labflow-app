@@ -264,7 +264,14 @@ export default function ManuscriptsPage() {
         </p>
       </div>
 
-      {editTarget && <EditModal m={editTarget} onClose={() => setEditTarget(null)} onSaved={() => { mutate(); kpi.mutate(); }} />}
+      {editTarget && (
+        <EditModal
+          m={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { mutate(); kpi.mutate(); }}
+          onDeleted={() => { mutate(); kpi.mutate(); unmatched.mutate(); }}
+        />
+      )}
     </div>
   );
 }

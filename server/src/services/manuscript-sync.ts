@@ -233,6 +233,21 @@ export async function patchManuscriptProperty(
   }
 }
 
+/** 노션 페이지를 trash로 보냄 (archived=true). 사용자 [삭제] 버튼에서 호출. */
+export async function archiveNotionPage(pageId: string): Promise<boolean> {
+  try {
+    await notionFetch(`/pages/${pageId}`, {
+      method: 'PATCH',
+      body: { archived: true },
+    });
+    return true;
+  } catch (e) {
+    const msg = (e as Error).message?.slice(0, 100) || 'unknown';
+    console.warn(`[manuscript-sync] archive FAILED ${pageId}: ${msg}`);
+    return false;
+  }
+}
+
 export async function getManuscripts(opts: { archived?: boolean } = {}) {
   return prisma.manuscript.findMany({
     where: { archived: opts.archived ?? false },
