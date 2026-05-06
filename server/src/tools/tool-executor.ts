@@ -17,6 +17,102 @@ import { consolidateInstructions, consolidateImportanceRules, deduplicateKeyword
 import type { ToolName } from './tool-definitions.js';
 import { logError } from '../services/error-logger.js';
 import { logApiCost } from '../services/cost-logger.js';
+import { getPublishedKpi, patchManuscriptProperty } from '../services/manuscript-sync.js';
+
+// ── Phase 1+2 (manuscript tools) 공용 상수/헬퍼 ───────────────────
+const MANUSCRIPT_DB_DATA_SOURCE_ID = 'b9cba7ee-f2f1-4d48-bc56-d438c946f561';
+const NOTION_API_BASE = 'https://api.notion.com/v1';
+const NOTION_API_TIMEOUT_MS = 10_000;
+
+interface AuditArgs {
+  userId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  targetType?: string;
+  targetId?: string;
+  resultSummary: string;
+}
+
+let auditTableEnsured = false;
+async function ensureBrainAuditTable(): Promise<void> {
+  if (auditTableEnsured) return;
+  await basePrismaClient.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS brain_audit_log (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT,
+      tool_name TEXT NOT NULL,
+      input JSONB,
+      target_type TEXT,
+      target_id TEXT,
+      result_summary TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await basePrismaClient.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS brain_audit_log_user_created_idx ON brain_audit_log(user_id, created_at DESC)`,
+  );
+  auditTableEnsured = true;
+}
+
+async function logAudit(args: AuditArgs): Promise<void> {
+  try {
+    await ensureBrainAuditTable();
+    await basePrismaClient.$executeRawUnsafe(
+      `INSERT INTO brain_audit_log (user_id, tool_name, input, target_type, target_id, result_summary)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6)`,
+      args.userId,
+      args.toolName,
+      JSON.stringify(args.input),
+      args.targetType || null,
+      args.targetId || null,
+      args.resultSummary.slice(0, 500),
+    );
+  } catch { /* audit 실패해도 tool 결과는 그대로 반환 */ }
+}
+
+/** Notion API helper — timeout + 명확한 에러 */
+async function notionApi(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
+  if (!env.NOTION_API_KEY) throw new Error('NOTION_API_KEY 미설정');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), NOTION_API_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${NOTION_API_BASE}${path}`, {
+      method: opts.method || 'GET',
+      headers: {
+        Authorization: `Bearer ${env.NOTION_API_KEY}`,
+        'Notion-Version': '2022-06-28',
+        'Content-Type': 'application/json',
+      },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Notion ${path}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** prefix → 정확한 manuscript ID 또는 에러 메시지 반환 */
+async function resolveManuscriptId(input: string): Promise<{ id: string } | { error: string }> {
+  const trimmed = input.trim();
+  if (!trimmed) return { error: 'manuscriptId가 비어있습니다.' };
+  if (trimmed.length >= 32) return { id: trimmed };  // 전체 ID
+
+  const matches = await basePrismaClient.manuscript.findMany({
+    where: { id: { startsWith: trimmed } },
+    select: { id: true, title: true },
+    take: 2,
+  });
+  if (matches.length === 0) return { error: `manuscriptId '${trimmed}' 매칭 없음. search_manuscripts로 정확한 ID 확인 권장.` };
+  if (matches.length > 1) {
+    const list = matches.map(m => `${m.id.slice(0, 12)} (${m.title})`).join(', ');
+    return { error: `prefix '${trimmed}' 모호 — ${matches.length}개 매칭: ${list}` };
+  }
+  return { id: matches[0].id };
+}
 
 export interface PendingAction {
   type: 'send_draft' | 'send_email';
@@ -85,6 +181,24 @@ export async function executeToolCall(
       return executeUpdateBrainSettings(input, ctx);
     case 'update_email_profile':
       return executeUpdateEmailProfile(input, ctx);
+    // ── Phase 1 (read) ──
+    case 'search_manuscripts':
+      return executeSearchManuscripts(input, ctx);
+    case 'get_manuscripts_kpi':
+      return executeGetManuscriptsKpi(ctx);
+    case 'search_worksheets':
+      return executeSearchWorksheets(input, ctx);
+    case 'get_pending_followup':
+      return executeGetPendingFollowup(input, ctx);
+    case 'get_pending_summary':
+      return executeGetPendingSummary(ctx);
+    // ── Phase 2 (append-only) ──
+    case 'add_manuscript':
+      return executeAddManuscript(input, ctx);
+    case 'append_manuscript_memo':
+      return executeAppendManuscriptMemo(input, ctx);
+    case 'add_manuscript_attempt':
+      return executeAddManuscriptAttempt(input, ctx);
     default:
       return `알 수 없는 도구: ${toolName}`;
   }
@@ -1831,5 +1945,393 @@ async function executeSearchWiki(
   } catch (err: any) {
     logError('brain', 'search_wiki 실패', { userId: ctx.userId, labId: ctx.labId })(err);
     return `위키 검색에 실패했습니다: ${err.message}`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Phase 1+2 — Manuscripts / Worksheets / Follow-up tools
+// (공용 상수·헬퍼는 파일 상단에 정의됨: notionApi, logAudit, resolveManuscriptId, MANUSCRIPT_DB_DATA_SOURCE_ID)
+// ─────────────────────────────────────────────────────────────────
+
+// ── search_manuscripts ──────────────────────────────────────────
+async function executeSearchManuscripts(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const query = (input.query || '').trim().toLowerCase();
+  const stage = input.stage as string | undefined;
+  const firstAuthor = (input.firstAuthor || '').trim();
+  const piRole = input.piRole as string | undefined;
+  const limit = Math.min(50, input.limit || 20);
+
+  ctx.sendProgress(`논문 검색: ${query || '(전체)'} ${stage || ''} ${firstAuthor || ''}`.trim());
+
+  try {
+    const where: any = { archived: false };
+    if (stage) where.stage = stage;
+    if (piRole) where.piRole = piRole;
+    if (firstAuthor) where.firstAuthors = { contains: firstAuthor, mode: 'insensitive' };
+
+    const items = await basePrismaClient.manuscript.findMany({
+      where,
+      orderBy: [{ stage: 'asc' }, { lastActivityAt: 'desc' }],
+      take: limit * 2,  // query filter 후 다시 잘라낼 buffer
+    });
+
+    let filtered = items;
+    if (query) {
+      filtered = items.filter(m =>
+        (m.title || '').toLowerCase().includes(query) ||
+        (m.memo || '').toLowerCase().includes(query) ||
+        (m.currentJournal || '').toLowerCase().includes(query) ||
+        (m.firstAuthors || '').toLowerCase().includes(query),
+      );
+    }
+    filtered = filtered.slice(0, limit);
+
+    if (filtered.length === 0) return '검색 조건에 맞는 논문이 없습니다.';
+
+    const lines = filtered.map(m =>
+      `[${m.id.slice(0, 8)}] [${m.stage}${m.piRole ? '·' + m.piRole : ''}] ${m.title}` +
+      `${m.firstAuthors ? ` — ${m.firstAuthors}` : ''}` +
+      `${m.currentJournal ? ` (${m.currentJournal}${m.impactFactor ? ' IF ' + m.impactFactor : ''})` : ''}` +
+      `${m.attempts && m.attempts > 1 ? ` [시도 #${m.attempts}]` : ''}` +
+      `${m.revisionDueAt ? ` 리비전 마감 ${m.revisionDueAt.toISOString().slice(0, 10)}` : ''}`,
+    );
+
+    return `[논문 검색 결과 ${filtered.length}건]\n` + lines.join('\n') +
+      `\n\n💡 노션에서 보기: https://www.notion.so/06e9070b661d4d7d829f3aed16dda560\n` +
+      `💡 ID는 append_manuscript_memo / add_manuscript_attempt 호출 시 사용`;
+  } catch (err: any) {
+    logError('brain', 'search_manuscripts 실패', { userId: ctx.userId })(err);
+    return `논문 검색 실패: ${err.message}`;
+  }
+}
+
+// ── get_manuscripts_kpi ────────────────────────────────────────
+async function executeGetManuscriptsKpi(ctx: ExecutorContext): Promise<string> {
+  ctx.sendProgress('게재 완료 KPI 집계 중...');
+  try {
+    const kpi = await getPublishedKpi();
+    return [
+      `[게재 완료 KPI]`,
+      `- 교신 누적: ${kpi.correspondingTotal}편`,
+      `- 올해 교신: ${kpi.correspondingThisYear}편`,
+      `- 공저: ${kpi.coAuthorTotal}편`,
+      `- 평균 IF (교신만): ${kpi.avgImpactFactor}`,
+      `- 1저자 학생 unique 수: ${kpi.uniqueFirstAuthors}명`,
+      `- 시드 전체: ${kpi.total}편 (2023+ 시드)`,
+    ].join('\n');
+  } catch (err: any) {
+    return `KPI 조회 실패: ${err.message}`;
+  }
+}
+
+// ── search_worksheets ──────────────────────────────────────────
+async function executeSearchWorksheets(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const query = (input.query || '').trim().toLowerCase();
+  const whoseTurn = input.whoseTurn as string | undefined;
+  const staleDays = input.staleDays as number | undefined;
+  const limit = Math.min(50, input.limit || 20);
+
+  ctx.sendProgress(`워크시트 검색: ${query || whoseTurn || ''}`);
+
+  try {
+    const where: any = { archived: false };
+    if (whoseTurn) where.whoseTurn = whoseTurn;
+    if (staleDays) where.daysSinceTurn = { gte: staleDays };
+
+    const items = await basePrismaClient.worksheetProject.findMany({
+      where,
+      orderBy: [{ whoseTurn: 'asc' }, { lastActivityAt: 'desc' }],
+      take: limit * 2,
+    });
+
+    let filtered = items;
+    if (query) {
+      filtered = items.filter(p =>
+        (p.title || '').toLowerCase().includes(query) ||
+        (p.team || '').toLowerCase().includes(query) ||
+        (p.assignees || []).some((a: string) => a.toLowerCase().includes(query)),
+      );
+    }
+    filtered = filtered.slice(0, limit);
+
+    if (filtered.length === 0) return '검색 조건에 맞는 워크시트가 없습니다.';
+
+    const lines = filtered.map(p => {
+      const turnEmoji = p.whoseTurn === 'PI' ? '🔴 내 차례' : p.whoseTurn === 'STUDENT' ? '🟡 학생' : '⚪ 미분류';
+      return `[${turnEmoji} ${p.daysSinceTurn}일째] ${p.title}` +
+        `${p.team ? ` (${p.team})` : ''}` +
+        `${p.assignees && p.assignees.length > 0 ? ` — ${p.assignees.join(', ')}` : ''}` +
+        `${p.lastActivitySnippet ? `\n  ↳ "${p.lastActivitySnippet.slice(0, 80)}"` : ''}`;
+    });
+
+    return `[워크시트 검색 결과 ${filtered.length}건]\n` + lines.join('\n');
+  } catch (err: any) {
+    return `워크시트 검색 실패: ${err.message}`;
+  }
+}
+
+// ── get_pending_followup ──────────────────────────────────────
+async function executeGetPendingFollowup(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const limit = Math.min(20, input.limit || 10);
+  ctx.sendProgress('FAQ 답변 대기 조회...');
+  try {
+    // labflow-member proxy 통해 fetch
+    if (!env.LABFLOW_SYNC_TOKEN) return '답변 대기 조회 실패: LABFLOW_SYNC_TOKEN 미설정';
+    const base = env.LABFLOW_MEMBER_URL.replace(/\/$/, '');
+    const r = await fetch(`${base}/api/follow-up/list?status=pending&limit=${limit}`, {
+      headers: { 'X-Sync-Token': env.LABFLOW_SYNC_TOKEN },
+    });
+    if (!r.ok) return `답변 대기 조회 실패: ${r.status}`;
+    const data = (await r.json()) as { items: any[]; counts: { pending: number; answered: number } };
+    const items = data.items || [];
+    if (items.length === 0) return '답변 대기 중인 질문이 없습니다 🎉';
+    const lines = items.slice(0, limit).map((q: any, i: number) =>
+      `${i + 1}. ${q.studentName || '학생'}: ${(q.question || '').slice(0, 100)}` +
+      `${q.askedAt ? ` (${new Date(q.askedAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })})` : ''}`,
+    );
+    return `[답변 대기 ${data.counts.pending}건]\n` + lines.join('\n');
+  } catch (err: any) {
+    return `답변 대기 조회 실패: ${err.message}`;
+  }
+}
+
+// ── get_pending_summary ────────────────────────────────────────
+async function executeGetPendingSummary(ctx: ExecutorContext): Promise<string> {
+  ctx.sendProgress('PI 액션 필요 종합 집계...');
+  try {
+    const [manuscripts, worksheets, captures] = await Promise.all([
+      basePrismaClient.manuscript.findMany({
+        where: { archived: false },
+        select: { id: true, title: true, stage: true, whoseTurn: true, revisionDueAt: true, firstAuthors: true },
+      }),
+      basePrismaClient.worksheetProject.findMany({
+        where: { archived: false, whoseTurn: 'PI' },
+        select: { title: true, daysSinceTurn: true, assignees: true },
+        take: 20,
+      }),
+      basePrismaClient.capture.count({ where: { reviewed: false, status: 'active' } }),
+    ]);
+
+    const msPiTurn = manuscripts.filter(m => m.whoseTurn === 'PI' && m.stage !== '게재 완료');
+    const msRevisionDueSoon = manuscripts.filter(m =>
+      m.revisionDueAt && m.revisionDueAt.getTime() - Date.now() < 7 * 86400000 && m.revisionDueAt.getTime() > Date.now() - 86400000,
+    );
+
+    const lines = [
+      `[PI 액션 필요 종합]`,
+      ``,
+      `📝 논문 (${msPiTurn.length}편 PI 차례 + ${msRevisionDueSoon.length}편 리비전 D-7)`,
+      ...msPiTurn.slice(0, 5).map(m => `  - [${m.stage}] ${m.title}${m.firstAuthors ? ' — ' + m.firstAuthors : ''}`),
+      ...msRevisionDueSoon.slice(0, 3).map(m => `  - [리비전 D-${Math.ceil((m.revisionDueAt!.getTime() - Date.now()) / 86400000)}] ${m.title}`),
+      ``,
+      `🧪 워크시트 (${worksheets.length}편 PI 차례)`,
+      ...worksheets.slice(0, 5).map(p => `  - [${p.daysSinceTurn}일째] ${p.title}${p.assignees && p.assignees.length > 0 ? ' — ' + p.assignees.join(', ') : ''}`),
+      ``,
+      `📥 검토 대기 BlissTask: ${captures}건`,
+    ];
+    return lines.join('\n');
+  } catch (err: any) {
+    return `종합 집계 실패: ${err.message}`;
+  }
+}
+
+// ─── Phase 2 (append-only) ─────────────────────────────────────
+
+// ── add_manuscript ────────────────────────────────────────────
+async function executeAddManuscript(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const title = (input.title || '').trim();
+  if (!title) return '제목이 필요합니다.';
+  const firstAuthors = (input.firstAuthors || '').trim();
+  const stage = (input.stage as string) || '작성';
+  const piRole = (input.piRole as string) || '교신';
+  const currentJournal = (input.currentJournal || '').trim();
+  const memo = (input.memo || '').trim();
+
+  ctx.sendProgress(`논문 추가: ${title}`);
+
+  try {
+    // Notion: data-source에 새 page 생성
+    const props: Record<string, any> = {
+      '제목': { title: [{ text: { content: title } }] },
+      '단계': { select: { name: stage } },
+      'PI 역할': { select: { name: piRole } },
+      '시도 횟수': { number: 1 },
+      '마지막 활동': { date: { start: new Date().toISOString().slice(0, 10) } },
+      '마지막 활동 종류': { rich_text: [{ text: { content: 'Brain에서 추가' } }] },
+    };
+    if (firstAuthors) props['1저자 학생'] = { rich_text: [{ text: { content: firstAuthors } }] };
+    if (currentJournal) props['현재/타겟 저널'] = { rich_text: [{ text: { content: currentJournal } }] };
+    if (memo) props['메모'] = { rich_text: [{ text: { content: memo } }] };
+
+    const created = await notionApi(`/pages`, {
+      method: 'POST',
+      body: {
+        parent: { type: 'data_source_id', data_source_id: MANUSCRIPT_DB_DATA_SOURCE_ID },
+        properties: props,
+      },
+    });
+
+    const newId = created.id;
+    const newUrl = created.url;
+
+    // DB 즉시 upsert (다음 sync 안 기다림)
+    await basePrismaClient.manuscript.upsert({
+      where: { id: newId },
+      create: {
+        id: newId,
+        notionUrl: newUrl,
+        title,
+        stage,
+        piRole,
+        firstAuthors: firstAuthors || null,
+        currentJournal: currentJournal || null,
+        memo: memo || null,
+        attempts: 1,
+        notionLastEditedAt: new Date(),
+        lastActivityAt: new Date(),
+        archived: false,
+      },
+      update: {
+        title, stage, piRole,
+        firstAuthors: firstAuthors || null,
+        currentJournal: currentJournal || null,
+        memo: memo || null,
+      },
+    });
+
+    await logAudit({
+      userId: ctx.userId,
+      toolName: 'add_manuscript',
+      input,
+      targetType: 'manuscript',
+      targetId: newId,
+      resultSummary: `created: ${title}`,
+    });
+
+    return `✅ 논문 추가됨: '${title}'\n- 단계: ${stage}\n- PI 역할: ${piRole}` +
+      `${firstAuthors ? `\n- 1저자: ${firstAuthors}` : ''}` +
+      `${currentJournal ? `\n- 저널: ${currentJournal}` : ''}` +
+      `\n- 노션: ${newUrl}\n\n💡 ID: \`${newId.slice(0, 8)}\` (추가 메모는 append_manuscript_memo 사용)`;
+  } catch (err: any) {
+    logError('brain', 'add_manuscript 실패', { userId: ctx.userId, title })(err);
+    return `논문 추가 실패: ${err.message}`;
+  }
+}
+
+// ── append_manuscript_memo ────────────────────────────────────
+async function executeAppendManuscriptMemo(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const rawId = (input.manuscriptId || '').trim();
+  const text = (input.text || '').trim();
+  if (!rawId || !text) return 'manuscriptId와 text가 필요합니다.';
+
+  const resolved = await resolveManuscriptId(rawId);
+  if ('error' in resolved) return resolved.error;
+  const manuscriptId = resolved.id;
+
+  ctx.sendProgress(`메모 추가: ${text.slice(0, 30)}`);
+
+  try {
+    const m = await basePrismaClient.manuscript.findUnique({ where: { id: manuscriptId }, select: { memo: true, title: true } });
+    if (!m) return `manuscript ${manuscriptId} 없음`;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const newLine = `[${today}] ${text}`;
+    const newMemo = m.memo ? `${m.memo}\n${newLine}` : newLine;
+
+    // 노션 + DB 동시 갱신
+    await patchManuscriptProperty(manuscriptId, {
+      '메모': { rich_text: [{ text: { content: newMemo.slice(0, 1900) } }] },
+    });
+    await basePrismaClient.manuscript.update({ where: { id: manuscriptId }, data: { memo: newMemo } });
+
+    await logAudit({
+      userId: ctx.userId, toolName: 'append_manuscript_memo', input,
+      targetType: 'manuscript', targetId: manuscriptId,
+      resultSummary: `appended to ${m.title}: ${text.slice(0, 60)}`,
+    });
+
+    return `✅ '${m.title}' 메모에 추가됨:\n  ${newLine}`;
+  } catch (err: any) {
+    return `메모 추가 실패: ${err.message}`;
+  }
+}
+
+// ── add_manuscript_attempt ────────────────────────────────────
+async function executeAddManuscriptAttempt(
+  input: Record<string, any>,
+  ctx: ExecutorContext,
+): Promise<string> {
+  const rawId = (input.manuscriptId || '').trim();
+  const previousJournal = (input.previousJournal || '').trim();
+  const previousResult = (input.previousResult as string) || 'reject';
+  const newJournal = (input.newJournal || '').trim();
+  if (!rawId || !previousJournal) return 'manuscriptId와 previousJournal이 필요합니다.';
+
+  const resolved = await resolveManuscriptId(rawId);
+  if ('error' in resolved) return resolved.error;
+  const manuscriptId = resolved.id;
+
+  ctx.sendProgress(`시도 추가: ${previousJournal} → ${newJournal || '(미정)'}`);
+
+  try {
+    const m = await basePrismaClient.manuscript.findUnique({
+      where: { id: manuscriptId },
+      select: { title: true, attempts: true, rejectHistory: true },
+    });
+    if (!m) return `manuscript ${manuscriptId} 없음`;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const trail = `${previousJournal} (${today} ${previousResult})`;
+    const newRejectHistory = m.rejectHistory ? `${m.rejectHistory}; ${trail}` : trail;
+    const newAttempts = (m.attempts || 1) + 1;
+
+    const props: Record<string, any> = {
+      '시도 횟수': { number: newAttempts },
+      '리젝 이력': { rich_text: [{ text: { content: newRejectHistory.slice(0, 500) } }] },
+      '단계': { select: { name: '대응 중' } },  // 다음 저널 결정 단계
+      '차례': { select: { name: 'PI' } },
+    };
+    if (newJournal) props['현재/타겟 저널'] = { rich_text: [{ text: { content: newJournal } }] };
+
+    await patchManuscriptProperty(manuscriptId, props);
+    await basePrismaClient.manuscript.update({
+      where: { id: manuscriptId },
+      data: {
+        attempts: newAttempts,
+        rejectHistory: newRejectHistory,
+        stage: '대응 중',
+        whoseTurn: 'PI',
+        ...(newJournal ? { currentJournal: newJournal } : {}),
+      },
+    });
+
+    await logAudit({
+      userId: ctx.userId, toolName: 'add_manuscript_attempt', input,
+      targetType: 'manuscript', targetId: manuscriptId,
+      resultSummary: `${previousJournal} ${previousResult} → ${newJournal || 'TBD'}`,
+    });
+
+    return `✅ '${m.title}' 새 시도 추가됨\n` +
+      `- 시도 #${newAttempts}\n` +
+      `- 리젝 이력: ${newRejectHistory}\n` +
+      `- 단계: 대응 중 / 차례: PI` +
+      `${newJournal ? `\n- 새 저널: ${newJournal}` : '\n- 새 저널 미정 → PI 결정 필요'}`;
+  } catch (err: any) {
+    return `시도 추가 실패: ${err.message}`;
   }
 }

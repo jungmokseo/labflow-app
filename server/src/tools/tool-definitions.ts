@@ -27,7 +27,17 @@ export type ToolName =
   | 'reindex_papers'
   | 'save_briefing_preference'
   | 'update_brain_settings'
-  | 'update_email_profile';
+  | 'update_email_profile'
+  // ── Phase 1 (read) — manuscripts/worksheets/followup ─
+  | 'search_manuscripts'
+  | 'get_manuscripts_kpi'
+  | 'search_worksheets'
+  | 'get_pending_followup'
+  | 'get_pending_summary'
+  // ── Phase 2 (append-only) — 새 row / 메모 추가만 ──
+  | 'add_manuscript'
+  | 'append_manuscript_memo'
+  | 'add_manuscript_attempt';
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -441,6 +451,110 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
         },
       },
       required: [],
+    },
+  },
+
+  // ── Phase 1 (read) — manuscripts / worksheets / follow-up ─────────
+  {
+    name: 'search_manuscripts',
+    description: '논문 파이프라인(작성/심사/대응/억셉/게재) 검색. 단계·1저자 학생·저널 필터 가능. "비뇨기 스텐트 논문 어디까지 갔어?", "조예진 1저자 논문들", "심사 중인 논문 다 보여줘", "올해 게재된 교신 논문" 등.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: '제목·메모·저널 키워드 (선택)' },
+        stage: { type: 'string', enum: ['작성', '심사 중', '대응 중', '억셉', '게재 완료'], description: '단계 필터 (선택)' },
+        firstAuthor: { type: 'string', description: '1저자 학생 이름 부분 매칭 (선택)' },
+        piRole: { type: 'string', enum: ['교신', '공저'], description: 'PI 역할 (선택)' },
+        limit: { type: 'number', description: '최대 개수 (default 20, max 50)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_manuscripts_kpi',
+    description: '게재 완료 KPI — 교신 누적·올해 교신·공저·평균 IF·1저자 학생 수. 승진 자료 / 통계 질문 ("올해 교신 몇 편이야?", "평균 IF는?", "1저자 한 학생 수는?") 답할 때.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'search_worksheets',
+    description: '워크시트 프로젝트(/projects)에서 PI ↔ 학생 캐치볼 진행 중인 항목 검색. "내 차례인 워크시트", "응답 7일 넘은 학생 누구", "LM Paste 진행 상태", "유림 워크시트 다 보여줘" 등.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: '제목·팀·담당자 키워드 (선택)' },
+        whoseTurn: { type: 'string', enum: ['PI', 'STUDENT'], description: '차례 필터 (선택)' },
+        staleDays: { type: 'number', description: '학생 차례 + N일 이상 응답 없음 (선택)' },
+        limit: { type: 'number', description: '최대 개수 (default 20)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_pending_followup',
+    description: 'BLISS-bot이 답하지 못해 PI 답변 대기 중인 FAQ 질문 목록. "답변 기다리는 질문 뭐 있어?", "팔로업 큐" 같은 질문에.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        limit: { type: 'number', description: '최대 개수 (default 10)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_pending_summary',
+    description: 'PI 액션 필요 종합 — 논문(PI 차례 + 리비전 D-7) / 워크시트(PI 차례) / FAQ 답변 대기 / 검토 대기 BlissTask 카운트와 핵심 항목. "오늘 내가 봐야 할 것?", "처리 대기 다 알려줘" 같은 질문에.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+
+  // ── Phase 2 (append-only) — 기존 데이터 보존, 새 row / 메모 추가만 ─────────
+  {
+    name: 'add_manuscript',
+    description: '새 논문을 노션 DB에 추가. **신규 row만 생성**, 기존 데이터 안 건드림. 사용자가 "새 논문 등록", "X 논문 추가해줘" 같이 명시적 요청 시. 1저자/단계/저널은 알면 채우고, 모르면 빈 값으로 (사용자가 노션이나 [편집]에서 채울 수 있음).',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: '논문 제목 또는 키워드 (예: "근영 - LM Paste 서픠스")' },
+        firstAuthors: { type: 'string', description: '1저자 학생 콤마 구분 (예: "김수아, 윤민")' },
+        stage: { type: 'string', enum: ['작성', '심사 중', '대응 중', '억셉', '게재 완료'], description: '기본 "작성"' },
+        piRole: { type: 'string', enum: ['교신', '공저'], description: '기본 "교신"' },
+        currentJournal: { type: 'string', description: '타겟/현재 저널 (선택)' },
+        memo: { type: 'string', description: '초기 메모 (선택)' },
+      },
+      required: ['title'],
+    },
+  },
+  {
+    name: 'append_manuscript_memo',
+    description: '기존 논문 메모에 한 줄 추가. **기존 메모 보존, append-only**. 예: "그 논문 메모에 XRD 결과 추가됨 적어둬", "리뷰어 코멘트 요약 추가" 등. manuscriptId 모르면 search_manuscripts로 먼저 찾기.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        manuscriptId: { type: 'string', description: '논문 row ID (search_manuscripts 결과에서)' },
+        text: { type: 'string', description: '추가할 메모 한 줄' },
+      },
+      required: ['manuscriptId', 'text'],
+    },
+  },
+  {
+    name: 'add_manuscript_attempt',
+    description: '논문에 새 저널 시도 추가. 시도 횟수 +1, 리젝 이력에 이전 저널 append. "비뇨기 스텐트가 Adv Mater에 reject 됐어. ACS Nano로 재제출" 같은 흐름. **기존 row update이지만 destructive 아님 — 시도/이력만 누적**.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        manuscriptId: { type: 'string' },
+        previousJournal: { type: 'string', description: '직전 시도 저널 (reject된 곳)' },
+        previousResult: { type: 'string', enum: ['reject', 'transfer', 'withdraw'], description: '기본 reject' },
+        newJournal: { type: 'string', description: '새 시도 저널 (선택)' },
+      },
+      required: ['manuscriptId', 'previousJournal'],
     },
   },
 ];
