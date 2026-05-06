@@ -14,32 +14,147 @@ import { google } from 'googleapis';
 import * as XLSX from 'xlsx';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import { decryptToken, isEncrypted } from '../utils/crypto.js';
 
 // ── Google Auth ─────────────────────────────────────────────────
+//
+// 인증 우선순위:
+//   1) env.GOOGLE_REFRESH_TOKEN  — Railway에 박힌 고정 토큰 (PI 계정)
+//   2) DB GmailToken (primary)    — 사용자가 /settings에서 재발급한 토큰 (자동 fallback)
+// 둘 다 실패 시 invalid_grant 등 명확한 에러 메시지로 throw.
+//
+// 토큰 캐시는 _auth에 저장. 인증 실패 또는 401 응답 시 resetAuthCache()로 재시도 가능.
 
 let _auth: any = null;
+let _authSource: 'env' | 'gmail-token' | null = null;
+
+interface AuthDiagnosis {
+  source: 'env' | 'gmail-token' | 'none';
+  ownerEmail?: string;
+  errors: string[];
+}
+
+let _lastDiagnosis: AuthDiagnosis | null = null;
+
+export function getLastAuthDiagnosis(): AuthDiagnosis | null {
+  return _lastDiagnosis;
+}
+
+async function tryAuthWithRefreshToken(refreshToken: string, label: string): Promise<any> {
+  const oauth2 = new google.auth.OAuth2(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
+  oauth2.setCredentials({ refresh_token: refreshToken });
+  const { credentials } = await oauth2.refreshAccessToken();
+  oauth2.setCredentials(credentials);
+  console.log(`[gdrive] OAuth 인증 성공 (${label})`);
+  return oauth2;
+}
+
+async function findOwnerGmailToken() {
+  // PI(OWNER) 식별 — 학생 등 임의 사용자 토큰 사용 방지 (cross-user contamination guard).
+  // 우선순위: LAB_OWNER_EMAIL → LAB_OWNER_CLERK_ID → LAB_ID + LabMember(permission='OWNER').
+  if (env.LAB_OWNER_EMAIL) {
+    const t = await prisma.gmailToken.findFirst({
+      where: {
+        OR: [
+          { email: env.LAB_OWNER_EMAIL },
+          { user: { is: { email: env.LAB_OWNER_EMAIL } } },
+        ],
+        refreshToken: { not: null },
+      },
+      orderBy: [{ primary: 'desc' }, { updatedAt: 'desc' }],
+    });
+    if (t) return t;
+  }
+  if (env.LAB_OWNER_CLERK_ID) {
+    const t = await prisma.gmailToken.findFirst({
+      where: { user: { is: { clerkId: env.LAB_OWNER_CLERK_ID } }, refreshToken: { not: null } },
+      orderBy: [{ primary: 'desc' }, { updatedAt: 'desc' }],
+    });
+    if (t) return t;
+  }
+  // LAB_ID 기반 자동 OWNER 식별 — LabMember.permission='OWNER' 인 사용자
+  if (env.LAB_ID) {
+    const owner = await prisma.labMember.findFirst({
+      where: { labId: env.LAB_ID, permission: 'OWNER', userId: { not: null }, active: true },
+      select: { userId: true, email: true },
+    });
+    if (owner?.userId) {
+      const t = await prisma.gmailToken.findFirst({
+        where: { userId: owner.userId, refreshToken: { not: null } },
+        orderBy: [{ primary: 'desc' }, { updatedAt: 'desc' }],
+      });
+      if (t) return t;
+    }
+  }
+  // Fail closed — OWNER를 식별할 수 없으면 fallback 거부
+  return null;
+}
 
 async function getAuth() {
   if (_auth) return _auth;
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REFRESH_TOKEN) {
-    throw new Error('Google 인증 정보가 설정되지 않았습니다. (GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN 확인)');
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw new Error('Google OAuth 클라이언트 정보 미설정 (GOOGLE_CLIENT_ID/SECRET).');
   }
-  const oauth2 = new google.auth.OAuth2(
-    env.GOOGLE_CLIENT_ID,
-    env.GOOGLE_CLIENT_SECRET,
-  );
-  oauth2.setCredentials({ refresh_token: env.GOOGLE_REFRESH_TOKEN });
-  const { credentials } = await oauth2.refreshAccessToken();
-  oauth2.setCredentials(credentials);
-  console.log('[gdrive] OAuth 토큰 갱신 완료');
   google.options({ timeout: 30000 });
-  _auth = oauth2;
-  return _auth;
+
+  const diag: AuthDiagnosis = { source: 'none', errors: [] };
+
+  // 1순위: env.GOOGLE_REFRESH_TOKEN
+  if (env.GOOGLE_REFRESH_TOKEN) {
+    try {
+      _auth = await tryAuthWithRefreshToken(env.GOOGLE_REFRESH_TOKEN, 'env.GOOGLE_REFRESH_TOKEN');
+      _authSource = 'env';
+      diag.source = 'env';
+      _lastDiagnosis = diag;
+      return _auth;
+    } catch (e: any) {
+      const msg = e?.response?.data?.error_description || e?.response?.data?.error || e?.message || 'unknown';
+      console.error(`[gdrive] env.GOOGLE_REFRESH_TOKEN 실패: ${msg} → GmailToken fallback 시도`);
+      diag.errors.push(`env_token: ${msg}`);
+    }
+  } else {
+    diag.errors.push('env_token: not_set');
+  }
+
+  // 2순위: OWNER GmailToken (DB) — LAB_OWNER_* env 또는 LAB_ID+LabMember(OWNER)로만 식별
+  // findOwnerGmailToken이 cross-user contamination을 방지하므로, 안전하게 호출 가능.
+  try {
+    const token = await findOwnerGmailToken();
+    if (token?.refreshToken) {
+      const refresh = isEncrypted(token.refreshToken) ? decryptToken(token.refreshToken) : token.refreshToken;
+      _auth = await tryAuthWithRefreshToken(refresh, `GmailToken:${token.email}`);
+      _authSource = 'gmail-token';
+      diag.source = 'gmail-token';
+      diag.ownerEmail = token.email;
+      _lastDiagnosis = diag;
+      return _auth;
+    }
+    diag.errors.push(
+      env.LAB_OWNER_EMAIL || env.LAB_OWNER_CLERK_ID || env.LAB_ID
+        ? 'gmail_token: not_found (OWNER가 /settings에서 Gmail 미연결 또는 refresh token 없음)'
+        : 'gmail_token: skipped (LAB_OWNER_EMAIL / LAB_OWNER_CLERK_ID / LAB_ID 모두 미설정)',
+    );
+  } catch (e: any) {
+    const msg = e?.response?.data?.error_description || e?.response?.data?.error || e?.message || 'unknown';
+    console.error(`[gdrive] GmailToken fallback 실패: ${msg}`);
+    diag.errors.push(`gmail_token: ${msg}`);
+  }
+
+  _lastDiagnosis = diag;
+  throw new Error(
+    `GDrive OAuth 인증 실패. 해결: (1) /settings에서 Gmail 재연결 (drive.readonly + spreadsheets.readonly scope 포함됨) ` +
+    `또는 (2) Railway env GOOGLE_REFRESH_TOKEN 갱신. [${diag.errors.join(' | ')}]`,
+  );
 }
 
 // 토큰 캐시 리셋 (재인증 필요 시)
 export function resetAuthCache() {
   _auth = null;
+  _authSource = null;
+}
+
+export function getAuthSource(): 'env' | 'gmail-token' | null {
+  return _authSource;
 }
 
 // ── 시트 데이터 타입 ─────────────────────────────────────────────
@@ -266,36 +381,88 @@ async function syncProjectInfo(labId: string): Promise<number> {
       detailFields[k] = v;
     }
 
-    // 기존 Project 찾기: shortName 또는 businessName이 탭명과 일치하는 것 우선
-    let project = await prisma.project.findFirst({
-      where: { labId, shortName: sheetName },
-    });
-    if (!project) {
-      project = await prisma.project.findFirst({
-        where: { labId, businessName: sheetName },
-      });
-    }
+    // 1단계가 만든 Project와 매칭 — 정확 일치 → 정규화 일치 → 부분 일치
+    const project = await findMatchingProjectForSheet(labId, sheetName);
 
     const md = (project?.metadata as Record<string, unknown> | null) || {};
     const newMd = { ...md, detailFields };
 
     if (project) {
+      // 매칭 성공: 1단계 row에 detailFields/사사문구 추가. shortName은 비어있을 때만 sheetName으로 채움.
       await prisma.project.update({
         where: { id: project.id },
-        data: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
+        data: {
+          shortName: project.shortName || sheetName,
+          acknowledgmentKo,
+          acknowledgmentEn,
+          metadata: newMd as any,
+          syncedAt: new Date(),
+        },
       });
+      synced++;
     } else {
-      // 과제 정보 탭에 없는 경우 단축명으로 신규 생성
-      await prisma.project.upsert({
-        where: { labId_name: { labId, name: sheetName } },
-        update: { shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
-        create: { labId, name: sheetName, shortName: sheetName, acknowledgmentKo, acknowledgmentEn, metadata: newMd as any, syncedAt: new Date() },
-      });
+      // 매칭 실패 — 신규 생성하지 않고 orphan으로 로그만 남긴다 (1단계 row 분산 방지).
+      // 사용자가 시트 탭명을 1단계 과제명/사업명/단축명과 맞추면 다음 sync에서 자동 매칭.
+      console.warn(`[gdrive] 시트 탭 "${sheetName}" — 1단계 Project 매칭 실패 (orphan, 신규 생성 안 함)`);
     }
-    synced++;
   }
 
   return synced;
+}
+
+// ── 시트 탭명 ↔ Project 매칭 ────────────────────────────────────
+//
+// 매칭 우선순위:
+//  1) shortName 정확 일치
+//  2) businessName 정확 일치
+//  3) name 정확 일치
+//  4) 정규화(공백/괄호/특수문자 제거 + 소문자) 후 일치
+//  5) 정규화 후 startsWith / contains (시트 탭명이 짧아서 1단계의 긴 name 안에 포함되는 케이스)
+
+function normalizeProjectName(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.toLowerCase().replace(/\s+/g, '').replace(/[\(\)\[\]\.\,\-_]/g, '');
+}
+
+async function findMatchingProjectForSheet(labId: string, sheetName: string) {
+  // 1~3순위: 정확 일치
+  const exact = await prisma.project.findFirst({
+    where: {
+      labId,
+      OR: [
+        { shortName: sheetName },
+        { businessName: sheetName },
+        { name: sheetName },
+      ],
+    },
+  });
+  if (exact) return exact;
+
+  // 4~5순위: 정규화 후 메모리 검색
+  const norm = normalizeProjectName(sheetName);
+  if (!norm) return null;
+
+  const all = await prisma.project.findMany({
+    where: { labId },
+    select: { id: true, name: true, shortName: true, businessName: true },
+  });
+
+  for (const p of all) {
+    const ns = normalizeProjectName(p.shortName);
+    const nb = normalizeProjectName(p.businessName);
+    const nn = normalizeProjectName(p.name);
+    if (
+      (ns && ns === norm) ||
+      (nb && nb === norm) ||
+      (nn && nn === norm) ||
+      (nn && norm.length >= 4 && nn.startsWith(norm)) ||
+      (nn && norm.length >= 4 && nn.includes(norm)) ||
+      (nb && norm.length >= 4 && nb.includes(norm))
+    ) {
+      return prisma.project.findUnique({ where: { id: p.id } });
+    }
+  }
+  return null;
 }
 
 // ── 과제 사사 동기화 ──────────────────────────────────────────

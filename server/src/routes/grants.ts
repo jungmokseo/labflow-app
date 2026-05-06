@@ -15,7 +15,12 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
-import { syncAllGdriveData } from '../services/gdrive-sync.js';
+import {
+  syncAllGdriveData,
+  resetAuthCache,
+  getAuthSource,
+  getLastAuthDiagnosis,
+} from '../services/gdrive-sync.js';
 
 interface Milestone {
   id: string;
@@ -219,11 +224,60 @@ export async function grantRoutes(app: FastifyInstance) {
     try {
       const labId = labIdOrThrow(request);
       if (!labId) return reply.code(400).send({ error: 'LAB_ID 미설정' });
+
+      // OAuth 토큰 캐시 리셋 — 사용자가 /settings에서 재발급한 토큰 즉시 반영
+      resetAuthCache();
+
       const results = await syncAllGdriveData(labId);
       const projectResult = results.find(r => r.file === '과제 정보');
-      return reply.send({ ok: true, results, projectRows: projectResult?.rows ?? 0 });
+
+      // detailFields 매칭 통계 — 사용자가 sync 후 결과를 정확히 알 수 있도록
+      const allProjects = await prisma.project.findMany({
+        where: { labId },
+        select: { metadata: true },
+      });
+      const detailMatched = allProjects.filter(p => {
+        const md = (p.metadata as any) || {};
+        return md.detailFields && Object.keys(md.detailFields).length > 0;
+      }).length;
+
+      return reply.send({
+        ok: true,
+        results,
+        projectRows: projectResult?.rows ?? 0,
+        totalProjects: allProjects.length,
+        detailMatched,
+        authSource: getAuthSource(),
+      });
     } catch (err) {
       return failWith(reply, 500, 'GDrive sync 실패', err);
+    }
+  });
+
+  // ── GET /api/grants/oauth-status — 진단용 ─────
+  // OAuth가 어떤 토큰 소스를 사용하고 있는지, 마지막 인증 시 발생한 에러는 무엇인지 확인.
+  app.get('/api/grants/oauth-status', async (request, reply) => {
+    try {
+      const diag = getLastAuthDiagnosis();
+      const tokenCount = await prisma.gmailToken.count({
+        where: { primary: true, refreshToken: { not: null } },
+      });
+      const ownerToken = env.LAB_OWNER_EMAIL
+        ? await prisma.gmailToken.findFirst({
+            where: { email: env.LAB_OWNER_EMAIL, refreshToken: { not: null } },
+            select: { email: true, updatedAt: true, primary: true },
+          })
+        : null;
+      return reply.send({
+        ok: true,
+        envTokenSet: !!env.GOOGLE_REFRESH_TOKEN,
+        currentAuthSource: getAuthSource(),
+        primaryGmailTokens: tokenCount,
+        ownerToken,
+        lastDiagnosis: diag,
+      });
+    } catch (err) {
+      return failWith(reply, 500, 'OAuth 진단 실패', err);
     }
   });
 

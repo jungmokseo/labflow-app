@@ -14,7 +14,7 @@ import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import {
   getGrants, updateGrant, addGrantMilestone, patchGrantMilestone, deleteGrantMilestone,
-  syncGrants,
+  syncGrants, getGrantsOAuthStatus,
   type Grant, type GrantCounts, type GrantMilestone,
 } from '@/lib/api';
 import {
@@ -79,10 +79,40 @@ export default function GrantsPage() {
     setSyncing(true);
     try {
       const r = await syncGrants();
-      toast(`Sheets sync: ${r.projectRows}개 과제 갱신`, 'success');
+      // 결과별 에러가 있으면 첫 에러를 표시 (OAuth 만료 등 진단)
+      const errored = r.results.find(x => x.status === 'error');
+      if (errored) {
+        toast(
+          `${errored.file} 실패: ${errored.error?.slice(0, 100) ?? 'unknown'}` +
+            ` · ${r.detailMatched}/${r.totalProjects} 과제에 세부 정보 매칭됨`,
+          'error',
+        );
+      } else {
+        toast(
+          `시트 sync 완료 · ${r.detailMatched}/${r.totalProjects} 과제에 세부 정보 매칭됨` +
+            (r.authSource === 'gmail-token' ? ' (Gmail 토큰 사용)' : ''),
+          'success',
+        );
+      }
       mutate();
     } catch (e: any) {
-      toast(`Sync 실패: ${e.message?.slice(0, 80)}`, 'error');
+      // OAuth 만료 케이스 — 진단 endpoint 호출해서 실제 원인 추정
+      const baseMsg = e?.message?.slice(0, 200) ?? 'unknown';
+      if (/invalid_grant|unauthorized|GDrive OAuth/i.test(baseMsg)) {
+        try {
+          const diag = await getGrantsOAuthStatus();
+          toast(
+            `OAuth 토큰 만료 — /settings에서 Gmail 재연결 (drive.readonly scope 필요). ` +
+              `현재 source=${diag.currentAuthSource ?? 'none'}, ` +
+              `primary 토큰=${diag.primaryGmailTokens}개`,
+            'error',
+          );
+        } catch {
+          toast(`Sync 실패 (OAuth 만료 가능성): ${baseMsg}`, 'error');
+        }
+      } else {
+        toast(`Sync 실패: ${baseMsg}`, 'error');
+      }
     } finally {
       setSyncing(false);
     }

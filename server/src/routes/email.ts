@@ -748,9 +748,11 @@ export async function emailRoutes(app: FastifyInstance) {
           'https://www.googleapis.com/auth/gmail.readonly',
           'https://www.googleapis.com/auth/gmail.compose',
           'https://www.googleapis.com/auth/calendar.events',
-          'https://www.googleapis.com/auth/calendar.readonly',  // 'BLISS Lab' 캘린더 자동 lookup
-          'https://www.googleapis.com/auth/drive.file',  // Google Docs 생성용
-          // NOTE: Google Cloud Console에서 Calendar API + Drive API 활성화 필요
+          'https://www.googleapis.com/auth/calendar.readonly',     // 'BLISS Lab' 캘린더 자동 lookup
+          'https://www.googleapis.com/auth/drive.file',            // Google Docs 생성용
+          'https://www.googleapis.com/auth/drive.readonly',        // GDrive 시트 읽기 (gdrive-sync fallback용 — 과제 정보·인적사항·계정)
+          'https://www.googleapis.com/auth/spreadsheets.readonly', // Sheets API (각 과제 탭 detailFields 추출)
+          // NOTE: Google Cloud Console에서 Calendar API + Drive API + Sheets API 활성화 필요
         ],
         state: signState(userId),
       });
