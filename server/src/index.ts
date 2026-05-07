@@ -40,6 +40,7 @@ import { syncManuscripts } from './services/manuscript-sync.js';
 import { monitorManuscriptMail } from './services/manuscript-mail-monitor.js';
 import { syncVacationsToCalendar } from './services/vacation-calendar-sync.js';
 import { grantRoutes } from './routes/grants.js';
+import { automationRoutes } from './routes/automations.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -118,6 +119,7 @@ async function buildApp() {
     await app.register(worksheetProjectRoutes);
     await app.register(manuscriptRoutes);
     await app.register(grantRoutes);
+    await app.register(automationRoutes);
 
   return app;
 }
@@ -250,6 +252,24 @@ async function start() {
         }, 7 * 24 * 60 * 60 * 1000);
 
         console.log('[wiki-cron] Wiki 자동 합성 예약됨 (24h ingest / 7d synthesis)');
+      }
+
+      // ── Cowork → server cron 마이그레이션 (2026-05-07) ────────────
+      // Cowork 데이터 손실로 routines 모두 사라짐. 자동화를 server-side로 이전 — Railway 인프라.
+      if (env.LAB_ID && env.NOTION_API_KEY && env.SLACK_BOT_TOKEN) {
+        const { scheduleDailyKst } = await import('./services/cron-utils.js');
+        const { runDeadlineReminders } = await import('./services/cron-deadline-reminders.js');
+
+        // 1. 마감일 리마인더 — 매일 KST 09:00
+        scheduleDailyKst(9, 0, async () => {
+          const r = await runDeadlineReminders();
+          console.log(
+            `[deadline-reminder-cron] sent=${r.sentCount} skip(already)=${r.skippedAlreadySent} ` +
+            `skip(notDue)=${r.skippedNotDue} failed=${r.failures.length}`,
+          );
+        }, 'deadline-reminder-cron');
+      } else {
+        console.log('[automation-cron] LAB_ID / NOTION_API_KEY / SLACK_BOT_TOKEN 미설정 — 자동화 스킵');
       }
 
       console.log(`

@@ -1,0 +1,310 @@
+/**
+ * 마감일 리마인더 cron — 매일 KST 09:00 실행.
+ *
+ * Notion DB '📝 연구실 할 일·요청'에서 상태='진행중' + 마감일 있는 항목을 추적.
+ * D-3, D-1, 당일, 지남 단계에 도달하면 담당자에게 Slack DM.
+ * 같은 페이지의 `리마인더_단계` 속성에 마지막 발송 단계를 기록하여 중복 방지.
+ *
+ * 환경:
+ *   NOTION_API_KEY (필수)
+ *   SLACK_BOT_TOKEN (필수)
+ *
+ * 정책:
+ *   D-3 → D-1 → 당일 → 지남. D-2는 skip (사용자 피로 방지).
+ *   상태가 '완료'·'보류'·'취소'면 절대 발송 X (status filter로 제외).
+ *   지남은 1번만 ('지남' 단계 마킹 후 재발송 X).
+ *
+ * 마이그레이션 출처: ~/.claude/skills/send-deadline-reminders/SKILL.md
+ *   (Cowork에서 매일 실행하던 것을 server-side cron으로 이전. Cowork 데이터 손실 영향 X)
+ */
+
+import { Client as NotionClient } from '@notionhq/client';
+import { env } from '../config/env.js';
+import { basePrismaClient as prisma } from '../config/prisma.js';
+
+const TASK_DB_ID = '70aa782f-245b-460c-93be-1f0920fc13e2';
+
+type Stage = 'D-3' | 'D-1' | '당일' | '지남';
+const STAGE_ORDER: Record<Stage, number> = { 'D-3': 1, 'D-1': 2, '당일': 3, '지남': 4 };
+
+interface TaskItem {
+  id: string;
+  title: string;
+  ownerName: string;
+  due: string;          // YYYY-MM-DD
+  currentStage: Stage | null;
+  type?: string;
+  source?: string;
+  slackPermalink?: string;
+  pageUrl: string;
+}
+
+export interface DeadlineReminderResult {
+  totalScanned: number;
+  sentCount: number;
+  skippedAlreadySent: number;
+  skippedNotDue: number;
+  failures: Array<{ owner: string; title: string; reason: string }>;
+  sentDetails: Array<{ stage: Stage; owner: string; title: string; due: string }>;
+  ranAt: string;
+}
+
+/** KST 자정 기준으로 due와 today의 일수 차이 계산 */
+function calcStage(due: string, now: Date = new Date()): Stage | null {
+  const todayKst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  todayKst.setUTCHours(0, 0, 0, 0);
+  const dueKst = new Date(`${due}T00:00:00Z`);
+  const diffDays = Math.round((dueKst.getTime() - todayKst.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays > 3) return null;
+  if (diffDays === 3) return 'D-3';
+  if (diffDays === 2) return null;     // D-2 skip
+  if (diffDays === 1) return 'D-1';
+  if (diffDays === 0) return '당일';
+  return '지남';
+}
+
+function shouldSend(currentStage: Stage | null, newStage: Stage): boolean {
+  if (!currentStage) return true;
+  // newStage가 currentStage보다 진행됐을 때만 발송 (같거나 이전이면 skip)
+  return STAGE_ORDER[newStage] > STAGE_ORDER[currentStage];
+}
+
+async function fetchActiveTasks(notion: NotionClient): Promise<TaskItem[]> {
+  const items: TaskItem[] = [];
+  let cursor: string | undefined;
+  do {
+    const resp = await notion.databases.query({
+      database_id: TASK_DB_ID,
+      filter: {
+        and: [
+          { property: '상태', status: { equals: '진행중' } },
+          { property: '마감일', date: { is_not_empty: true } },
+        ],
+      },
+      page_size: 50,
+      start_cursor: cursor,
+    });
+    for (const p of resp.results as any[]) {
+      const props = p.properties || {};
+      const title =
+        props['제목']?.title?.[0]?.plain_text ||
+        props['Name']?.title?.[0]?.plain_text ||
+        '(제목 없음)';
+      const due = props['마감일']?.date?.start as string | undefined;
+      const ownerName =
+        (props['담당자_한글이름']?.rich_text?.[0]?.plain_text as string | undefined) ||
+        (props['담당자_한글이름']?.select?.name as string | undefined) ||
+        '';
+      const stage = (props['리마인더_단계']?.select?.name as Stage | undefined) || null;
+      const type = props['종류']?.select?.name as string | undefined;
+      const source = props['원채널']?.rich_text?.[0]?.plain_text as string | undefined;
+      const slackPermalink =
+        (props['Slack 링크']?.url as string | undefined) ||
+        (props['slack_permalink']?.url as string | undefined) ||
+        undefined;
+      if (!due || !ownerName) continue;
+      items.push({
+        id: p.id,
+        title,
+        ownerName,
+        due,
+        currentStage: stage,
+        type,
+        source,
+        slackPermalink,
+        pageUrl: p.url,
+      });
+    }
+    cursor = resp.has_more ? resp.next_cursor || undefined : undefined;
+  } while (cursor);
+  return items;
+}
+
+async function findOwnerEmail(ownerName: string): Promise<string | null> {
+  const member = await prisma.labMember.findFirst({
+    where: { name: ownerName, active: true },
+    select: { email: true },
+  });
+  return member?.email || null;
+}
+
+async function lookupSlackUserByEmail(email: string): Promise<string | null> {
+  if (!env.SLACK_BOT_TOKEN) return null;
+  try {
+    const url = `https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+    });
+    const data = (await res.json()) as { ok: boolean; user?: { id?: string }; error?: string };
+    if (!data.ok) {
+      console.warn(`[deadline-reminder] users.lookupByEmail 실패 (${email}): ${data.error}`);
+      return null;
+    }
+    return data.user?.id || null;
+  } catch (e: any) {
+    console.warn(`[deadline-reminder] users.lookupByEmail 예외 (${email}): ${e?.message}`);
+    return null;
+  }
+}
+
+async function postSlackDm(userId: string, text: string): Promise<boolean> {
+  if (!env.SLACK_BOT_TOKEN) return false;
+  try {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({ channel: userId, text }),
+    });
+    const data = (await res.json()) as { ok: boolean; error?: string };
+    if (!data.ok) {
+      console.warn(`[deadline-reminder] chat.postMessage 실패: ${data.error}`);
+      return false;
+    }
+    return true;
+  } catch (e: any) {
+    console.warn(`[deadline-reminder] chat.postMessage 예외: ${e?.message}`);
+    return false;
+  }
+}
+
+function buildMessage(item: TaskItem, stage: Stage): string {
+  const headers: Record<Stage, string> = {
+    'D-3': '🔔 *마감 D-3 리마인더* (BLISS Lab)',
+    'D-1': '⏰ *마감 D-1 — 내일까지* (BLISS Lab)',
+    '당일': '🚨 *오늘 마감* (BLISS Lab)',
+    '지남': '❗ *마감일 경과* (BLISS Lab)',
+  };
+  const dueLabels: Record<Stage, string> = {
+    'D-3': '3일 남음',
+    'D-1': '내일',
+    '당일': '오늘!',
+    '지남': calcOverdueDays(item.due),
+  };
+  const lines = [
+    headers[stage],
+    '',
+    `*${item.title}*`,
+    `• 마감일: ${item.due} (${dueLabels[stage]})`,
+  ];
+  if (item.type) lines.push(`• 종류: ${item.type}`);
+  if (item.source) lines.push(`• 원채널: ${item.source}`);
+  if (item.slackPermalink) lines.push(`🔗 ${item.slackPermalink}`);
+  lines.push(`📋 Notion: ${item.pageUrl}`);
+  if (stage === '지남') {
+    lines.push('', '_완료/연장 여부를 교수님께 알려주세요._');
+  }
+  return lines.join('\n');
+}
+
+function calcOverdueDays(due: string): string {
+  const todayKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  todayKst.setUTCHours(0, 0, 0, 0);
+  const dueKst = new Date(`${due}T00:00:00Z`);
+  const diff = Math.round((todayKst.getTime() - dueKst.getTime()) / (24 * 60 * 60 * 1000));
+  return `${diff}일 지남`;
+}
+
+async function updateReminderStage(notion: NotionClient, pageId: string, stage: Stage): Promise<void> {
+  await notion.pages.update({
+    page_id: pageId,
+    properties: {
+      '리마인더_단계': { select: { name: stage } },
+    } as any,
+  });
+}
+
+/**
+ * 마감일 리마인더 발송 메인 함수.
+ * cron 또는 manual API endpoint에서 호출.
+ */
+export async function runDeadlineReminders(): Promise<DeadlineReminderResult> {
+  const result: DeadlineReminderResult = {
+    totalScanned: 0,
+    sentCount: 0,
+    skippedAlreadySent: 0,
+    skippedNotDue: 0,
+    failures: [],
+    sentDetails: [],
+    ranAt: new Date().toISOString(),
+  };
+
+  if (!env.NOTION_API_KEY) {
+    throw new Error('NOTION_API_KEY 미설정 — Notion 조회 불가');
+  }
+  if (!env.SLACK_BOT_TOKEN) {
+    throw new Error('SLACK_BOT_TOKEN 미설정 — Slack DM 불가');
+  }
+
+  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const tasks = await fetchActiveTasks(notion);
+  result.totalScanned = tasks.length;
+
+  for (const task of tasks) {
+    const newStage = calcStage(task.due);
+    if (!newStage) {
+      result.skippedNotDue++;
+      continue;
+    }
+    if (!shouldSend(task.currentStage, newStage)) {
+      result.skippedAlreadySent++;
+      continue;
+    }
+
+    try {
+      const email = await findOwnerEmail(task.ownerName);
+      if (!email) {
+        result.failures.push({
+          owner: task.ownerName,
+          title: task.title,
+          reason: '이메일 매핑 없음 (LabMember.email 비어있음)',
+        });
+        continue;
+      }
+      const slackUserId = await lookupSlackUserByEmail(email);
+      if (!slackUserId) {
+        result.failures.push({
+          owner: task.ownerName,
+          title: task.title,
+          reason: `Slack users.lookupByEmail 실패 (email=${email})`,
+        });
+        continue;
+      }
+      const text = buildMessage(task, newStage);
+      const sent = await postSlackDm(slackUserId, text);
+      if (!sent) {
+        result.failures.push({
+          owner: task.ownerName,
+          title: task.title,
+          reason: 'Slack chat.postMessage 실패',
+        });
+        continue;
+      }
+      await updateReminderStage(notion, task.id, newStage);
+      result.sentDetails.push({
+        stage: newStage,
+        owner: task.ownerName,
+        title: task.title,
+        due: task.due,
+      });
+      result.sentCount++;
+      // Notion + Slack rate limit 안전 페이스
+      await new Promise(resolve => setTimeout(resolve, 200));
+    } catch (e: any) {
+      result.failures.push({
+        owner: task.ownerName,
+        title: task.title,
+        reason: e?.message || 'unknown',
+      });
+    }
+  }
+
+  console.log(
+    `[deadline-reminder] scanned=${result.totalScanned} sent=${result.sentCount} ` +
+    `skip(already)=${result.skippedAlreadySent} skip(notDue)=${result.skippedNotDue} ` +
+    `failed=${result.failures.length}`,
+  );
+  return result;
+}
