@@ -39,6 +39,9 @@ const envSchema = z.object({
   // 미설정 시 PI primary calendar에 등록.
   // 별도 캘린더 사용 시 Google Calendar 설정에서 "캘린더 ID" 복사 (예: xxxxx@group.calendar.google.com)
   BLISS_LAB_CALENDAR_ID: z.string().optional(),
+  // PI Slack user ID — general-email-briefing 결과를 PI에게 DM 발송 + 기타 ADMIN 알림용.
+  // 메모리 bliss_slack_workspace.md: U0ASESNE1UP (서정목, 워크스페이스 owner).
+  ADMIN_USER_ID: z.string().optional(),
 });
 
 function loadEnv(): z.infer<typeof envSchema> {

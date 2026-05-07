@@ -255,21 +255,77 @@ async function start() {
       }
 
       // ── Cowork → server cron 마이그레이션 (2026-05-07) ────────────
-      // Cowork 데이터 손실로 routines 모두 사라짐. 자동화를 server-side로 이전 — Railway 인프라.
-      if (env.LAB_ID && env.NOTION_API_KEY && env.SLACK_BOT_TOKEN) {
-        const { scheduleDailyKst } = await import('./services/cron-utils.js');
+      // Cowork 데이터 손실로 routines 모두 사라짐. 6개 자동화를 server-side로 이전 — Railway 인프라.
+      // 모든 시간은 KST(Asia/Seoul) 기준. cron-utils가 UTC ↔ KST 변환 처리.
+      if (env.LAB_ID && env.NOTION_API_KEY) {
+        const { scheduleDailyKst, scheduleWeeklyKst } = await import('./services/cron-utils.js');
         const { runDeadlineReminders } = await import('./services/cron-deadline-reminders.js');
+        const { runPaperMonitoring } = await import('./services/cron-paper-monitoring.js');
+        const { runEmailBriefing } = await import('./services/cron-email-briefing.js');
+        const { runIrisMonitoring } = await import('./services/cron-iris-monitoring.js');
+        const { runGeneralEmailBriefing } = await import('./services/cron-general-email-briefing.js');
+        const { runProcessSlackInbox } = await import('./services/cron-process-slack-inbox.js');
 
-        // 1. 마감일 리마인더 — 매일 KST 09:00
-        scheduleDailyKst(9, 0, async () => {
-          const r = await runDeadlineReminders();
+        // 1. 마감일 리마인더 — 매일 KST 09:00 (Notion 진행중 task 추적 + Slack DM)
+        if (env.SLACK_BOT_TOKEN) {
+          scheduleDailyKst(9, 0, async () => {
+            const r = await runDeadlineReminders();
+            console.log(
+              `[deadline-reminder-cron] sent=${r.sentCount} skip(already)=${r.skippedAlreadySent} ` +
+              `skip(notDue)=${r.skippedNotDue} failed=${r.failures.length}`,
+            );
+          }, 'deadline-reminder-cron');
+        }
+
+        // 2. 논문 모니터링 — 매주 월 KST 09:00 (RSS + AI 요약 + Notion + Slack #연구동향)
+        scheduleWeeklyKst(1, 9, 0, async () => {
+          const r = await runPaperMonitoring();
           console.log(
-            `[deadline-reminder-cron] sent=${r.sentCount} skip(already)=${r.skippedAlreadySent} ` +
-            `skip(notDue)=${r.skippedNotDue} failed=${r.failures.length}`,
+            `[paper-monitoring-cron] rss=${r.totalRssItems} filtered=${r.filteredCount} ` +
+            `new=${r.newPapersCount} notion=${r.notionPageUpdated} slack=${r.slackPosted} errors=${r.errors.length}`,
           );
-        }, 'deadline-reminder-cron');
+        }, 'paper-monitoring-cron');
+
+        // 3. 학생/회사 주간보고 — 매주 월 KST 11:00 (Gmail → 요약 → Notion 멤버 페이지)
+        scheduleWeeklyKst(1, 11, 0, async () => {
+          const r = await runEmailBriefing('both');
+          console.log(
+            `[email-briefing-cron] emails=${r.emailsFound} updated=${r.membersUpdated} errors=${r.errors.length}`,
+          );
+        }, 'email-briefing-cron');
+
+        // 4. IRIS R&D 공고 — 매주 월 KST 10:00 (크롤 + 신규만 Notion DB 추가)
+        scheduleWeeklyKst(1, 10, 0, async () => {
+          const r = await runIrisMonitoring();
+          console.log(
+            `[iris-monitoring-cron] crawled=${r.totalCrawled} new=${r.newProjectsAdded} ` +
+            `skip=${r.skippedExisting} errors=${r.errors.length}`,
+          );
+        }, 'iris-monitoring-cron');
+
+        // 5. 일반 이메일 브리핑 — 매일 KST 07:00 (Gmail 24h → 분류 → PI Slack DM)
+        if (env.SLACK_BOT_TOKEN && env.ADMIN_USER_ID) {
+          scheduleDailyKst(7, 0, async () => {
+            const r = await runGeneralEmailBriefing();
+            console.log(
+              `[general-email-briefing-cron] scanned=${r.emailsScanned} briefed=${r.emailsBriefed} ` +
+              `excluded=${r.excludedWeeklyReports} dm=${r.slackDmSent} errors=${r.errors.length}`,
+            );
+          }, 'general-email-briefing-cron');
+        }
+
+        // 6. Slack inbox 처리 — 매일 KST 08:30 (채널 polling → LLM 분류 → 검토 큐)
+        if (env.SLACK_BOT_TOKEN) {
+          scheduleDailyKst(8, 30, async () => {
+            const r = await runProcessSlackInbox();
+            console.log(
+              `[process-slack-inbox-cron] channels=${r.channelsScanned} msgs=${r.messagesScanned} ` +
+              `filtered=${r.messagesAfterFilter} new=${r.newCaptures} dup=${r.skippedDup} errors=${r.errors.length}`,
+            );
+          }, 'process-slack-inbox-cron');
+        }
       } else {
-        console.log('[automation-cron] LAB_ID / NOTION_API_KEY / SLACK_BOT_TOKEN 미설정 — 자동화 스킵');
+        console.log('[automation-cron] LAB_ID / NOTION_API_KEY 미설정 — 자동화 모두 스킵');
       }
 
       console.log(`

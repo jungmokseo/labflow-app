@@ -1,0 +1,557 @@
+/**
+ * BLISS Slack Inbox 처리 cron — 추적 채널의 메시지를 폴링하여 검토대기 큐(Capture)에 입력.
+ *
+ * 마이그레이션 출처: ~/.claude/skills/process-slack-inbox/SKILL.md
+ *   원래 흐름: poll.py → ~/.local/state/bliss-slack/inbox.json → 스킬이 LLM 분류 후 Notion 입력.
+ *   Railway는 사용자 로컬 fs에 접근 불가 → 폴링 + LLM 분류를 서버에 직접 통합.
+ *
+ * 흐름:
+ *   1. conversations.list로 BLISS-Bot이 멤버인 채널 발견 (잡담/FAQ 등 제외)
+ *   2. 채널별 last_polled_ts 이후 메시지 conversations.history
+ *   3. 룰 기반 1차 필터 (bot/이모지/🔒/thread reply/sensitive)
+ *   4. Anthropic Sonnet (또는 Gemini fallback) 으로 task/request/decision 분류 + 제목/마감일/담당자 추출
+ *   5. 살아남은 메시지를 prisma.capture.create — bliss-tasks/captures 와 동일한 metadata.blissSource 형식
+ *   6. last_polled_ts 갱신 (전용 Capture 행에 metadata.channelStates JSON으로 저장)
+ *
+ * 환경:
+ *   SLACK_BOT_TOKEN (필수) — BLISS Lab Slack
+ *   ANTHROPIC_API_KEY (권장) — 정밀 분류용 Sonnet
+ *   GEMINI_API_KEY (필수, env 로드 시점에 검증됨) — Sonnet 실패 시 fallback
+ *   LAB_OWNER_CLERK_ID (선택) — Capture 소유자, 기본 'dev-user-seo'
+ *
+ * 한계:
+ *   - 단일 replica 가정 (Railway 기본). 멀티 replica 시 channelStates에 advisory lock 필요.
+ *   - 첫 실행 시 last_polled_ts 없으면 24h 윈도우 폴링 (안전 기본값).
+ *   - cooldown hash 중복 체크는 metadata.blissSource.slackChannel+slackTs unique로 대체 (DB findFirst).
+ */
+
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Prisma } from '@prisma/client';
+import { env } from '../config/env.js';
+import { basePrismaClient as prisma } from '../config/prisma.js';
+
+// ── 정책 ────────────────────────────────────────────
+// poll.py와 동일 제외 목록 — 이름 소문자 비교 (Slack 채널명은 영소문자/한글 가능).
+const EXCLUDED_CHANNEL_NAMES = new Set(
+  [
+    '공지', 'general', 'random',
+    '잡담',
+    '연구동향', '연구실-챗봇_faq', '연구실-챗봇-faq',
+    'ai-알림', 'bliss-bot', 'bot',
+  ].map((n) => n.toLowerCase()),
+);
+
+const SYSTEM_MESSAGE_SUBTYPES = new Set([
+  'bot_message', 'channel_join', 'channel_leave',
+  'channel_purpose', 'channel_topic', 'channel_name',
+  'pinned_item', 'unpinned_item',
+  'channel_archive', 'channel_unarchive',
+]);
+
+const TASK_HEURISTIC_KEYWORDS = [
+  '해주세요', '부탁드립니다', '필요합니다', '요청드립니다',
+  '예약', '신청', '접수', '보내주세요', '확인해주세요',
+  '마감', '마감일', '기한',
+  '교수님', '허락', '승인', '결재',
+  '괜찮을까요', '가능할까요', '괜찮나요',
+  '여쭙고', '여쭤', '문의드립니다',
+  '결정합니다', '결정했습니다', '확정', '정리하면',
+];
+
+const SENSITIVE_KEYWORDS = [
+  '그만두', '퇴사', '휴학', '졸업 미뤄', '정신',
+  '우울', '힘들어', '괴롭', '관계 문제', '가족',
+];
+
+// 이모지/스티커만 있는지 (대략) — 한글/영문/숫자가 5자 이상 있어야 task 후보로 봄.
+const ALPHANUM_OR_HANGUL = /[\p{L}\p{N}]/u;
+
+// state 저장용 Capture 행 식별자 — sourceType + summary + tags로 유니크하게 잡음.
+const STATE_SOURCE_TYPE = 'slack-poll-state';
+const STATE_SUMMARY = 'BLISS Slack Poll State';
+const STATE_TAGS = ['internal', 'slack-poll-state'];
+
+const DEFAULT_LOOKBACK_HOURS = 24;
+
+// ── 타입 ────────────────────────────────────────────
+export interface ProcessSlackInboxResult {
+  channelsScanned: number;
+  messagesScanned: number;
+  messagesAfterFilter: number;
+  newCaptures: number;
+  skippedDup: number;
+  errors: string[];
+  ranAt: string;
+}
+
+interface SlackMessage {
+  type?: string;
+  subtype?: string;
+  ts?: string;
+  thread_ts?: string;
+  user?: string;
+  bot_id?: string;
+  text?: string;
+}
+
+interface ChannelInfo {
+  id: string;
+  name: string;
+}
+
+interface ClassifiedMessage {
+  kind: 'task' | 'request' | 'decision' | 'discussion' | 'sensitive';
+  title: string;        // 30자 이내
+  ownerKoreanName?: string;
+  dueDate?: string;     // YYYY-MM-DD
+  type?: string;        // 영수증/회의/보고서 등
+}
+
+// ── Slack helpers ───────────────────────────────────
+async function slackGet<T>(path: string): Promise<T> {
+  const res = await fetch(`https://slack.com/api/${path}`, {
+    headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+  });
+  if (!res.ok) throw new Error(`Slack HTTP ${res.status} for ${path}`);
+  return res.json() as Promise<T>;
+}
+
+async function discoverTrackedChannels(): Promise<ChannelInfo[]> {
+  const out: ChannelInfo[] = [];
+  let cursor: string | undefined;
+  do {
+    const params = new URLSearchParams({
+      types: 'public_channel,private_channel',
+      exclude_archived: 'true',
+      limit: '200',
+    });
+    if (cursor) params.set('cursor', cursor);
+    const data = await slackGet<{
+      ok: boolean;
+      error?: string;
+      channels?: Array<{ id: string; name?: string; is_member?: boolean }>;
+      response_metadata?: { next_cursor?: string };
+    }>(`conversations.list?${params.toString()}`);
+    if (!data.ok) {
+      throw new Error(`conversations.list 실패: ${data.error || 'unknown'}`);
+    }
+    for (const ch of data.channels || []) {
+      if (!ch.is_member) continue;
+      const name = (ch.name || '').toLowerCase();
+      if (!name) continue;
+      if (EXCLUDED_CHANNEL_NAMES.has(name)) continue;
+      out.push({ id: ch.id, name: `#${ch.name}` });
+    }
+    cursor = data.response_metadata?.next_cursor || undefined;
+  } while (cursor);
+  return out;
+}
+
+async function fetchHistory(channelId: string, oldestTs: number): Promise<SlackMessage[]> {
+  const messages: SlackMessage[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const params = new URLSearchParams({
+      channel: channelId,
+      limit: '200',
+      oldest: oldestTs.toString(),
+    });
+    if (cursor) params.set('cursor', cursor);
+    const data = await slackGet<{
+      ok: boolean;
+      error?: string;
+      messages?: SlackMessage[];
+      has_more?: boolean;
+      response_metadata?: { next_cursor?: string };
+    }>(`conversations.history?${params.toString()}`);
+    if (!data.ok) {
+      throw new Error(`conversations.history(${channelId}) 실패: ${data.error || 'unknown'}`);
+    }
+    if (data.messages) messages.push(...data.messages);
+    if (!data.has_more) break;
+    cursor = data.response_metadata?.next_cursor || undefined;
+    if (!cursor) break;
+  }
+  return messages;
+}
+
+async function getPermalink(channelId: string, ts: string): Promise<string> {
+  try {
+    const data = await slackGet<{ ok: boolean; permalink?: string }>(
+      `chat.getPermalink?channel=${channelId}&message_ts=${ts}`,
+    );
+    if (data.ok && data.permalink) return data.permalink;
+  } catch { /* ignore */ }
+  return `https://app.slack.com/client/${channelId}/p${ts.replace('.', '')}`;
+}
+
+async function getUserName(userId: string, cache: Map<string, string>): Promise<string> {
+  if (!userId) return '(unknown)';
+  const cached = cache.get(userId);
+  if (cached) return cached;
+  try {
+    const data = await slackGet<{
+      ok: boolean;
+      user?: { profile?: { display_name?: string; real_name?: string } };
+    }>(`users.info?user=${userId}`);
+    if (data.ok && data.user) {
+      const name = data.user.profile?.display_name || data.user.profile?.real_name || userId;
+      cache.set(userId, name);
+      return name;
+    }
+  } catch { /* ignore */ }
+  cache.set(userId, userId);
+  return userId;
+}
+
+async function getBotUserId(): Promise<string | null> {
+  try {
+    const data = await slackGet<{ ok: boolean; user_id?: string }>('auth.test');
+    return data.ok ? data.user_id || null : null;
+  } catch {
+    return null;
+  }
+}
+
+// ── 룰 기반 필터 ────────────────────────────────────
+function passesHeuristicFilter(text: string): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 5) return false;
+  if (!ALPHANUM_OR_HANGUL.test(trimmed)) return false;       // 이모지만
+  if (trimmed.startsWith('🔒')) return false;
+  for (const kw of SENSITIVE_KEYWORDS) if (trimmed.includes(kw)) return false;
+  // 질문/요청 단서 키워드 — 하나라도 매치하면 task 후보.
+  for (const kw of TASK_HEURISTIC_KEYWORDS) if (trimmed.includes(kw)) return true;
+  // 키워드 매치 없어도 질문/명령형 끝맺음이면 후보.
+  if (trimmed.endsWith('?') || trimmed.endsWith('?')) return true;
+  return false;
+}
+
+// ── LLM 분류 ────────────────────────────────────────
+function buildClassifyPrompt(text: string, channelName: string, today: string): string {
+  return `당신은 BLISS Lab(연세대 바이오센서/유연전자소자 연구실)의 Slack 메시지 분류기입니다.
+
+[메시지]
+채널: ${channelName}
+본문: """${text.slice(0, 1500)}"""
+
+[지시]
+다음 JSON 한 객체로만 응답 (다른 텍스트 없이):
+{
+  "kind": "task" | "request" | "decision" | "discussion" | "sensitive",
+  "title": "30자 이내 짧은 제목",
+  "owner_korean_name": "메시지에 명시된 담당자 한글 이름 (없으면 빈 문자열)",
+  "due_date": "YYYY-MM-DD (메시지에 마감일 있으면, 오늘 기준 ${today}로 계산. 없으면 빈 문자열)",
+  "type": "영수증 | 회의 | 보고서 | 신청 | 기타 (적절한 것 1개)"
+}
+
+[판단 기준]
+- task: 누군가 해야 할 명확한 작업 ("이 영수증 제출해주세요")
+- request: 교수에게 결정/승인/확인 요청 ("교수님, 이거 가도 될까요?")
+- decision: 의사결정 통지 ("다음 주에 재논의하기로")
+- discussion: 일반 잡담/정보 공유 → skip
+- sensitive: 개인사/평가/관계/정신건강 → skip
+- 확신 없으면 보수적으로 sensitive로 분류 (잘못 추출하느니 누락이 낫다).`;
+}
+
+function parseClassifyJson(raw: string): ClassifiedMessage | null {
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    const validKinds = ['task', 'request', 'decision', 'discussion', 'sensitive'];
+    const kind = validKinds.includes(parsed.kind) ? parsed.kind : 'discussion';
+    const title = String(parsed.title || '').slice(0, 60).trim() || '(제목 없음)';
+    const ownerKoreanName = String(parsed.owner_korean_name || '').trim() || undefined;
+    const due = String(parsed.due_date || '').trim();
+    const dueDate = /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : undefined;
+    const type = String(parsed.type || '').trim() || undefined;
+    return { kind, title, ownerKoreanName, dueDate, type } as ClassifiedMessage;
+  } catch {
+    return null;
+  }
+}
+
+async function classifyWithSonnet(text: string, channelName: string): Promise<ClassifiedMessage | null> {
+  if (!env.ANTHROPIC_API_KEY) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 512,
+      temperature: 0.1,
+      messages: [{ role: 'user', content: buildClassifyPrompt(text, channelName, today) }],
+    });
+    const block = resp.content.find((b) => b.type === 'text');
+    if (!block || block.type !== 'text') return null;
+    return parseClassifyJson(block.text);
+  } catch (e: any) {
+    console.warn(`[slack-inbox] Sonnet 분류 실패: ${e?.message || e}`);
+    return null;
+  }
+}
+
+async function classifyWithGemini(text: string, channelName: string): Promise<ClassifiedMessage | null> {
+  if (!env.GEMINI_API_KEY) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent({
+      contents: [
+        { role: 'user', parts: [{ text: buildClassifyPrompt(text, channelName, today) }] },
+      ],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
+    });
+    return parseClassifyJson(result.response.text());
+  } catch (e: any) {
+    console.warn(`[slack-inbox] Gemini 분류 실패: ${e?.message || e}`);
+    return null;
+  }
+}
+
+async function classifyMessage(text: string, channelName: string): Promise<ClassifiedMessage | null> {
+  const sonnet = await classifyWithSonnet(text, channelName);
+  if (sonnet) return sonnet;
+  return classifyWithGemini(text, channelName);
+}
+
+// ── State 저장/로드 (Capture metadata 활용) ──────────
+async function loadState(userId: string): Promise<{ row: { id: string } | null; channelTs: Record<string, number> }> {
+  const row = await prisma.capture.findFirst({
+    where: { userId, sourceType: STATE_SOURCE_TYPE, status: 'active' },
+    select: { id: true, metadata: true },
+  });
+  if (!row) return { row: null, channelTs: {} };
+  const md = (row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata))
+    ? (row.metadata as Prisma.JsonObject)
+    : {};
+  const states = md.channelStates;
+  const channelTs: Record<string, number> = {};
+  if (states && typeof states === 'object' && !Array.isArray(states)) {
+    for (const [k, v] of Object.entries(states as Record<string, unknown>)) {
+      const num = typeof v === 'number' ? v : Number(v);
+      if (Number.isFinite(num) && num > 0) channelTs[k] = num;
+    }
+  }
+  return { row: { id: row.id }, channelTs };
+}
+
+async function saveState(userId: string, existingRowId: string | null, channelTs: Record<string, number>): Promise<void> {
+  const metadata = {
+    channelStates: channelTs,
+    lastRunAt: new Date().toISOString(),
+  };
+  if (existingRowId) {
+    await prisma.capture.update({
+      where: { id: existingRowId },
+      data: { metadata },
+    });
+    return;
+  }
+  await prisma.capture.create({
+    data: {
+      userId,
+      content: 'BLISS Slack Poll 마지막 ts 저장용 — 자동 관리.',
+      summary: STATE_SUMMARY,
+      category: 'MEMO',
+      tags: STATE_TAGS,
+      sourceType: STATE_SOURCE_TYPE,
+      reviewed: true,
+      status: 'active',
+      metadata,
+    },
+  });
+}
+
+// ── Owner 결정 (bliss-tasks와 동일 패턴) ─────────────
+async function resolveOwner() {
+  const ownerClerkId = env.LAB_OWNER_CLERK_ID || 'dev-user-seo';
+  let user = await prisma.user.findFirst({ where: { clerkId: ownerClerkId } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        clerkId: ownerClerkId,
+        email: env.LAB_OWNER_EMAIL || `${ownerClerkId}@labflow.app`,
+        name: 'Jungmok Seo',
+      },
+    });
+  }
+  const lab = await prisma.lab.findFirst({ where: { ownerId: user.id }, select: { id: true } });
+  return { userId: user.id, labId: lab?.id ?? null };
+}
+
+// ── Capture 생성 (bliss-tasks/captures와 동일 schema) ─
+async function createCapture(input: {
+  userId: string;
+  labId: string | null;
+  classified: ClassifiedMessage;
+  text: string;
+  channelId: string;
+  channelName: string;
+  ts: string;
+  permalink: string;
+  userName: string;
+  slackUserId: string;
+}): Promise<{ created: boolean }> {
+  // dedup — 같은 channel+ts는 skip
+  const existing = await prisma.capture.findFirst({
+    where: {
+      labId: input.labId,
+      AND: [
+        { metadata: { path: ['blissSource', 'slackChannel'], equals: input.channelId } },
+        { metadata: { path: ['blissSource', 'slackTs'], equals: input.ts } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) return { created: false };
+
+  await prisma.capture.create({
+    data: {
+      userId: input.userId,
+      labId: input.labId,
+      content: input.text.slice(0, 5000),
+      summary: input.classified.title.slice(0, 200),
+      category: 'TASK',
+      tags: ['bliss-slack', 'review-queue'],
+      priority: 'MEDIUM',
+      confidence: 1.0,
+      modelUsed: 'cron-process-slack-inbox',
+      sourceType: 'slack',
+      reviewed: false,
+      status: 'active',
+      // due_date / owner 추정값은 metadata에만 — 교수가 review-queue에서 확정하는 단계에 사용.
+      metadata: {
+        blissSource: {
+          sourceChannel: input.channelName,
+          slackPermalink: input.permalink,
+          slackUserId: input.slackUserId,
+          requesterName: input.userName,
+          slackChannel: input.channelId,
+          slackTs: input.ts,
+        },
+        classification: {
+          kind: input.classified.kind,
+          ownerKoreanName: input.classified.ownerKoreanName,
+          dueDate: input.classified.dueDate,
+          type: input.classified.type,
+        },
+        capturedAt: new Date().toISOString(),
+      },
+    },
+  });
+  return { created: true };
+}
+
+// ── 메인 ────────────────────────────────────────────
+export async function runProcessSlackInbox(): Promise<ProcessSlackInboxResult> {
+  const result: ProcessSlackInboxResult = {
+    channelsScanned: 0,
+    messagesScanned: 0,
+    messagesAfterFilter: 0,
+    newCaptures: 0,
+    skippedDup: 0,
+    errors: [],
+    ranAt: new Date().toISOString(),
+  };
+
+  if (!env.SLACK_BOT_TOKEN) {
+    throw new Error('SLACK_BOT_TOKEN 미설정 — Slack 폴링 불가');
+  }
+
+  const { userId, labId } = await resolveOwner();
+  const { row, channelTs } = await loadState(userId);
+  const botUserId = await getBotUserId();
+  const userNameCache = new Map<string, string>();
+  const newChannelTs: Record<string, number> = { ...channelTs };
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  let channels: ChannelInfo[] = [];
+  try {
+    channels = await discoverTrackedChannels();
+  } catch (e: any) {
+    result.errors.push(`discoverTrackedChannels 실패: ${e?.message || e}`);
+    return result;
+  }
+  result.channelsScanned = channels.length;
+
+  for (const ch of channels) {
+    const oldest = newChannelTs[ch.id] ?? (nowSec - DEFAULT_LOOKBACK_HOURS * 3600);
+    let messages: SlackMessage[] = [];
+    try {
+      messages = await fetchHistory(ch.id, oldest);
+    } catch (e: any) {
+      result.errors.push(`${ch.name} fetchHistory 실패: ${e?.message || e}`);
+      continue;
+    }
+
+    let maxTsSec = oldest;
+    for (const m of messages) {
+      result.messagesScanned++;
+      const ts = m.ts ? Number(m.ts) : 0;
+      if (ts > maxTsSec) maxTsSec = ts;
+
+      // 1차 룰 필터
+      if (!m.user) continue;                                // user 없는 메시지(시스템) skip
+      if (botUserId && m.user === botUserId) continue;      // 자기 봇 메시지 skip
+      if (m.bot_id) continue;                               // 다른 봇 메시지 skip
+      const subtype = m.subtype || '';
+      if (SYSTEM_MESSAGE_SUBTYPES.has(subtype)) continue;
+      if (subtype && subtype !== 'thread_broadcast') continue;
+      // thread reply (thread_ts ≠ ts) skip — 첫 메시지만 캡처
+      if (m.thread_ts && m.thread_ts !== m.ts) continue;
+      const text = m.text || '';
+      if (!passesHeuristicFilter(text)) continue;
+
+      result.messagesAfterFilter++;
+
+      // 2차 LLM 분류
+      let classified: ClassifiedMessage | null;
+      try {
+        classified = await classifyMessage(text, ch.name);
+      } catch (e: any) {
+        result.errors.push(`${ch.name} classify 실패: ${e?.message || e}`);
+        continue;
+      }
+      if (!classified) continue;
+      if (classified.kind === 'discussion' || classified.kind === 'sensitive') continue;
+
+      // 3차 Capture 생성 (dedup)
+      try {
+        const userName = await getUserName(m.user, userNameCache);
+        const permalink = await getPermalink(ch.id, m.ts!);
+        const { created } = await createCapture({
+          userId, labId,
+          classified, text,
+          channelId: ch.id, channelName: ch.name,
+          ts: m.ts!, permalink,
+          userName, slackUserId: m.user,
+        });
+        if (created) result.newCaptures++;
+        else result.skippedDup++;
+      } catch (e: any) {
+        result.errors.push(`${ch.name} capture 실패: ${e?.message || e}`);
+      }
+    }
+
+    newChannelTs[ch.id] = maxTsSec;
+  }
+
+  // state 저장 — 한 번에 모든 채널의 마지막 ts 갱신.
+  try {
+    await saveState(userId, row?.id ?? null, newChannelTs);
+  } catch (e: any) {
+    result.errors.push(`saveState 실패: ${e?.message || e}`);
+  }
+
+  console.log(
+    `[slack-inbox] channels=${result.channelsScanned} scanned=${result.messagesScanned} ` +
+    `filtered=${result.messagesAfterFilter} new=${result.newCaptures} dup=${result.skippedDup} ` +
+    `errors=${result.errors.length}`,
+  );
+  return result;
+}
