@@ -80,7 +80,7 @@ export async function inboxSummaryRoutes(app: FastifyInstance) {
         where: reviewWhere,
         select: { id: true, summary: true, metadata: true, createdAt: true },
         orderBy: { createdAt: 'desc' },
-        take: 3,
+        take: 8,  // App Home에 8건까지 표시 (더 많은 검토 항목 한눈에)
       }),
     ]);
 
@@ -114,6 +114,9 @@ export async function inboxSummaryRoutes(app: FastifyInstance) {
           id: c.id,
           title: c.summary,
           requesterName: (source.requesterName as string) || '학생',
+          slackPermalink: (source.slackPermalink as string | undefined) || null,
+          slackUserId: (source.slackUserId as string | undefined) || null,
+          sourceChannel: (source.sourceChannel as string | undefined) || null,
           createdAt: c.createdAt,
         };
       }),

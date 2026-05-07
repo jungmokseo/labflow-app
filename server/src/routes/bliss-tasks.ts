@@ -13,6 +13,9 @@ const captureSchema = z.object({
   sourceChannel: z.string().min(1).max(120),
   slackPermalink: z.string().url().optional(),
   slackUserId: z.string().min(1).max(80).optional(),
+  // Slack 메시지 dedup용 — reaction trigger가 짧게 두 번 들어와도 중복 capture 방지.
+  slackChannel: z.string().min(1).max(80).optional(),
+  slackTs: z.string().min(1).max(40).optional(),
   // metadata.fromPi=true 시 PI 본인 메시지에서 추출된 task → 검토 큐 거치지 않고 즉시 active.
   metadata: z.record(z.string(), z.any()).optional(),
 });
@@ -36,6 +39,11 @@ const directCreateSchema = z.object({
 const completeSchema = z.object({
   done: z.boolean().optional(),
 });
+
+// In-memory mutex per (slackChannel, slackTs) — 같은 메시지에 reaction 동시 두 번이면
+// 첫 요청이 끝날 때까지 두 번째는 같은 promise 결과 받음. Railway single-replica 환경에서
+// race-safe. multi-replica로 가면 DB unique constraint 또는 advisory lock 필요.
+const inFlightSlackCaptures = new Map<string, Promise<{ captureId: string; deduped: boolean }>>();
 
 type BlissSource = {
   sourceChannel?: string;
@@ -131,36 +139,96 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     // 학생 DM 발송 안 함 (PI 본인 할 일이라 알림 불필요).
     const fromPi = body.metadata?.fromPi === true;
 
-    const capture = await prisma.capture.create({
-      data: {
-        userId: user.id,
-        labId,
-        content: body.originalMessage,
-        summary: body.title.slice(0, 200),
-        category: 'TASK',
-        tags: fromPi
-          ? ['bliss-slack', 'pi-self-task']
-          : ['bliss-slack', 'review-queue'],
-        priority: 'MEDIUM',
-        confidence: 1.0,
-        modelUsed: 'bliss-task-capture',
-        sourceType: 'slack',
-        reviewed: fromPi,  // PI 본인 메시지면 자동 confirm
-        status: 'active',
-        metadata: {
-          blissSource: {
-            sourceChannel: body.sourceChannel,
-            slackPermalink: body.slackPermalink,
-            slackUserId: body.slackUserId,
-            requesterName: body.requesterName,
-          },
-          ...(fromPi ? { fromPi: true } : {}),
-          capturedAt: new Date().toISOString(),
-        },
-      },
-    });
+    // ── Idempotency — Slack reaction trigger 중복 등록 방지 ──
+    // reaction이 짧게 두 번 들어오거나(race) 사용자가 같은 메시지에 다른 trigger emoji 추가하면
+    // 중복 capture 가능. 같은 channel+ts는 하나의 capture만 유지.
+    // Mutex는 single-process 안에서 atomic 보장. multi-replica로 확장 시 DB unique constraint 추가.
+    //
+    // slackChannel/slackTs는 reaction 흐름(events.ts)에서만 채워짐.
+    // /검토요청 같은 슬래시 명령은 사용자 명시 입력이라 dedupe 대상이 아니다 — 같은 텍스트 두 번
+    // 입력하는 것은 사용자 의도이므로 매번 신규 생성.
+    const slackKey = body.slackChannel && body.slackTs
+      ? `${labId}:${body.slackChannel}:${body.slackTs}`
+      : null;
 
-    return reply.code(201).send({ success: true, captureId: capture.id, fromPi });
+    const doCreateOrDedupe = async (): Promise<{ captureId: string; deduped: boolean }> => {
+      // 1) DB에 이미 같은 channel+ts capture 있으면 reuse
+      if (body.slackChannel && body.slackTs) {
+        const existing = await prisma.capture.findFirst({
+          where: {
+            labId,
+            AND: [
+              { metadata: { path: ['blissSource', 'slackChannel'], equals: body.slackChannel } },
+              { metadata: { path: ['blissSource', 'slackTs'], equals: body.slackTs } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (existing) return { captureId: existing.id, deduped: true };
+      }
+      // 2) 신규 생성
+      const created = await prisma.capture.create({
+        data: {
+          userId: user.id,
+          labId,
+          content: body.originalMessage,
+          summary: body.title.slice(0, 200),
+          category: 'TASK',
+          tags: fromPi
+            ? ['bliss-slack', 'pi-self-task']
+            : ['bliss-slack', 'review-queue'],
+          priority: 'MEDIUM',
+          confidence: 1.0,
+          modelUsed: 'bliss-task-capture',
+          sourceType: 'slack',
+          reviewed: fromPi,  // PI 본인 메시지면 자동 confirm
+          status: 'active',
+          metadata: {
+            blissSource: {
+              sourceChannel: body.sourceChannel,
+              slackPermalink: body.slackPermalink,
+              slackUserId: body.slackUserId,
+              requesterName: body.requesterName,
+              // dedup key — reaction trigger의 같은 메시지 중복 방지용
+              slackChannel: body.slackChannel,
+              slackTs: body.slackTs,
+            },
+            ...(fromPi ? { fromPi: true } : {}),
+            capturedAt: new Date().toISOString(),
+          },
+        },
+      });
+      return { captureId: created.id, deduped: false };
+    };
+
+    let result: { captureId: string; deduped: boolean };
+    if (slackKey) {
+      // 같은 키 in-flight 요청이 있으면 그것을 기다림 (atomic dedupe).
+      // waiter는 새 capture를 만들지 않았으므로 항상 deduped:true로 표시.
+      const existing = inFlightSlackCaptures.get(slackKey);
+      if (existing) {
+        const { captureId } = await existing;
+        result = { captureId, deduped: true };
+      } else {
+        const promise = doCreateOrDedupe();
+        inFlightSlackCaptures.set(slackKey, promise);
+        try {
+          result = await promise;
+        } finally {
+          // 5초 후 mutex 해제 — 그 사이 같은 키 요청은 dedupe로 잡히고, 이후엔 DB findFirst로 잡힘
+          setTimeout(() => inFlightSlackCaptures.delete(slackKey), 5000);
+        }
+      }
+    } else {
+      result = await doCreateOrDedupe();
+    }
+
+    return reply.code(result.deduped ? 200 : 201).send({
+      success: true,
+      captureId: result.captureId,
+      deduped: result.deduped,
+      fromPi,
+    });
   });
 
   app.get('/api/bliss-tasks/review-queue', { preHandler: authMiddleware }, async (_request) => {
