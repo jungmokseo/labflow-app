@@ -38,7 +38,7 @@
 - **Sonnet 4.6** (`claude-sonnet-4-6`) — 기본 LLM, 1M context, temperature OK
 - **Opus 4.7** (`claude-opus-4-7`) — 1M context 기본, ⚠️ `temperature`/`top_p`/`top_k` 미지원 (400 에러)
 - **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — light task + fallback, stable
-- **OpenAI Realtime** (`gpt-4o-realtime-preview-2025-06-03`) — voice chatbot 전용
+- **OpenAI Realtime 2** (`gpt-realtime-2`) — voice chatbot 전용 (2026-05-07 이전 `gpt-4o-realtime-preview-2025-06-03` deprecated 후 교체)
 - **OpenAI Embedding** (`text-embedding-3-small`) — labflow-member RAG embedding 전용
 
 ### 영역별 모델 (코드 ↔ 규칙 일치)
