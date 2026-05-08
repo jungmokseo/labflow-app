@@ -84,13 +84,17 @@ export default function VacationsPage() {
     }
   };
 
+  // 자동 새로고침 — 학생이 BLISS Slack /휴가 명령으로 등록한 새 휴가를 PI가 즉시 볼 수 있도록.
+  // 5분 폴링 (vacations는 자주 바뀌지 않음).
   const recent = useApiData<{ items: VacationRecentItem[] }>(
     'vacations:recent',
     () => getRecentVacations(100),
+    { refreshInterval: 5 * 60_000 },
   );
   const balance = useApiData<{ year: number; items: VacationBalanceItem[] }>(
     'vacations:balance',
     () => getVacationBalances(),
+    { refreshInterval: 5 * 60_000 },
   );
 
   const recentItems = recent.data?.items ?? [];

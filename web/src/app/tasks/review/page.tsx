@@ -142,8 +142,10 @@ function defaultForm(): ReviewFormState {
 
 export default function BlissTaskReviewPage() {
   const { toast } = useToast();
-  const { data: queueData, isLoading, mutate } = useApiData('bliss-task-review-queue', getBlissTaskReviewQueue);
-  const { data: activeData, mutate: mutateActive } = useApiData('bliss-task-active', getBlissActiveTasks);
+  // 자동 새로고침 — Slack reaction(:bookmark:)/Slash command(/검토요청)/그룹DM에서 새로 들어온
+  // 검토 항목을 PI가 즉시 볼 수 있도록. 60초 폴링 (탭 활성 시만 SWR이 자동 처리).
+  const { data: queueData, isLoading, mutate } = useApiData('bliss-task-review-queue', getBlissTaskReviewQueue, { refreshInterval: 60_000 });
+  const { data: activeData, mutate: mutateActive } = useApiData('bliss-task-active', getBlissActiveTasks, { refreshInterval: 60_000 });
   const { data: membersData } = useApiData('lab-members-for-review', getLabMembers);
   const [tasks, setTasks] = useState<BlissTaskReviewItem[]>([]);
   const [forms, setForms] = useState<Record<string, ReviewFormState>>({});
