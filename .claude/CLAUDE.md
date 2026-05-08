@@ -32,13 +32,32 @@
 ### 5. saveShadowMessage userId
 - `saveShadowMessage()`: channel에서 userId를 조회하여 createMany에 포함. userId 누락 금지.
 
-## AI 모델 사용 규칙
-- 이메일 브리핑 (narrative-briefing): Sonnet → Gemini fallback
-- 주간 리뷰 (weeklyReview): Sonnet → Gemini fallback  
-- Brain 채팅 최종 응답: Gemini 2.5 Flash
-- 논문 토론: Opus → Gemini fallback
-- 회의 요약: Sonnet (summarizeWithSonnet)
-- 음성 전사: Gemini 2.5 Flash (STT)
+## AI 모델 사용 규칙 (2026-05-07 update)
+
+### 모델 ID (최신)
+- **Sonnet 4.6** (`claude-sonnet-4-6`) — 기본 LLM, 1M context, temperature OK
+- **Opus 4.7** (`claude-opus-4-7`) — 1M context 기본, ⚠️ `temperature`/`top_p`/`top_k` 미지원 (400 에러)
+- **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — light task + fallback, stable
+- **OpenAI Realtime** (`gpt-4o-realtime-preview-2025-06-03`) — voice chatbot 전용
+- **OpenAI Embedding** (`text-embedding-3-small`) — labflow-member RAG embedding 전용
+
+### 영역별 모델 (코드 ↔ 규칙 일치)
+- 이메일 분류 stage 1 (대량/빠른 필터): Gemini 3.1 Flash-Lite
+- 이메일 분류 stage 2 (LLM 정밀): Sonnet 4.6
+- 이메일 narrative briefing: Sonnet 4.6 → Gemini fallback (Sonnet 결과 직접 passthrough — 위 4번 규칙 참조)
+- 주간 리뷰 (weeklyReview, weekly-briefing.ts): Sonnet 4.6
+- **Brain 채팅: Sonnet 4.6** (tool-use 루프 + 최종 응답 스트리밍 모두) → Gemini 3.1 Flash-Lite fallback (Sonnet API 실패 시만)
+- 논문 토론 / 핵심 논문 비교 (papers tool, paper-alerts paper_summary): **Opus 4.7** → Sonnet 4.6 fallback → Gemini 3.1 Flash-Lite fallback
+- 논문 관련도 score / weekly insight: Sonnet 4.6 → Gemini fallback
+- 회의 요약 (meeting_summary): Sonnet 4.6 → Gemini 3.1 Flash-Lite fallback
+- 음성 전사 (meeting STT): Gemini 3.1 Flash-Lite (audio input)
+- Capture classifier / 메모 자동 태그 / Calendar 추출 / Email translate / action items 추출: Gemini 3.1 Flash-Lite
+- 자동화 cron AI (paper-monitoring 한글 요약, email-briefing 학생 보고 요약, general-email-briefing 분류, process-slack-inbox 분류): Sonnet 4.6 → Gemini 3.1 Flash-Lite fallback
+
+### 모델 변경 시 주의
+- Opus 4.7 호출 site에서 `temperature` 등 sampling 파라미터 추가 금지 (400 에러)
+- Gemini Flash-Lite는 lite variant — quality 민감 task에서 quality 저하 느끼면 `gemini-3-flash-preview` (frontier preview)로 switch 검토
+- 모델 ID 변경 시 `services/cron-*.ts` + `routes/*.ts` 일괄 sed 권장 (이전 사례: `claude-sonnet-4-20250514` 1년 deprecation 도래로 일괄 교체)
 
 ## 이메일 브리핑 포맷 규칙
 - 각 이메일은 빈 줄로 구분된 별도 항목
