@@ -327,7 +327,7 @@ export async function detectEventsFromText(
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const today = new Date().toISOString().split('T')[0];
     const result = await model.generateContent(
@@ -352,7 +352,7 @@ JSON 배열로만 응답. 일정이 없으면 빈 배열 [].
     );
 
     const calEventUsage = result.response.usageMetadata;
-    if (calEventUsage) logApiCost('system', 'gemini-2.5-flash', calEventUsage.promptTokenCount ?? 0, calEventUsage.candidatesTokenCount ?? 0, 'detect_events').catch(() => {});
+    if (calEventUsage) logApiCost('system', 'gemini-3.1-flash-lite', calEventUsage.promptTokenCount ?? 0, calEventUsage.candidatesTokenCount ?? 0, 'detect_events').catch(() => {});
     const match = result.response.text().trim().match(/\[[\s\S]*\]/);
     if (!match) return [];
 

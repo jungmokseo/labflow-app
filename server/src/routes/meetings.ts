@@ -97,7 +97,7 @@ async function syncActionItemCaptures(
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 const fileManager = new GoogleAIFileManager(env.GEMINI_API_KEY);
 
 const FILE_API_THRESHOLD = 15 * 1024 * 1024; // 15MB 이상이면 File API 사용
@@ -306,7 +306,7 @@ JSON: [{"wrong": "...", "correct": "..."}]`;
 
     trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
     const ttsUsage = result.response.usageMetadata;
-    if (ttsUsage) logApiCost(userId, 'gemini-2.5-flash', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'meeting_tts_learn').catch(() => {});
+    if (ttsUsage) logApiCost(userId, 'gemini-3.1-flash-lite', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'meeting_tts_learn').catch(() => {});
 
     let parsed: Array<{ wrong: string; correct: string }>;
     try { parsed = JSON.parse(result.response.text().trim()); } catch { return; }
@@ -520,7 +520,7 @@ ${correctionDict}
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 16384,
       temperature: 0.1,
       system: systemPrompt,
@@ -534,7 +534,7 @@ ${correctionDict}
 
     if (userId) {
       trackAICost(userId, 'claude-sonnet', calculateAnthropicCost('claude-sonnet', response.usage));
-      logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'meeting_summary').catch(() => {});
+      logApiCost(userId, 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'meeting_summary').catch(() => {});
     }
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in Sonnet response');
@@ -588,7 +588,7 @@ ${transcription}`;
       generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
     });
     const fallbackUsage = result.response.usageMetadata;
-    if (fallbackUsage) logApiCost('system', 'gemini-2.5-flash', fallbackUsage.promptTokenCount ?? 0, fallbackUsage.candidatesTokenCount ?? 0, 'meeting_summary_fallback').catch(() => {});
+    if (fallbackUsage) logApiCost('system', 'gemini-3.1-flash-lite', fallbackUsage.promptTokenCount ?? 0, fallbackUsage.candidatesTokenCount ?? 0, 'meeting_summary_fallback').catch(() => {});
 
     const response = result.response.text().trim();
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -647,7 +647,7 @@ async function processMeetingAudio(
   if (userId) {
     trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
     // Note: Gemini STT doesn't return usageMetadata for audio; log flat estimate
-    logApiCost(userId, 'gemini-2.5-flash', 0, 0, 'meeting_stt').catch(() => {});
+    logApiCost(userId, 'gemini-3.1-flash-lite', 0, 0, 'meeting_stt').catch(() => {});
   }
 
   if (!rawTranscription || rawTranscription.length < 10) {

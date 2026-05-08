@@ -205,7 +205,7 @@ export async function labProfileRoutes(app: FastifyInstance) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
         const prompt = `다음 연구실 홈페이지를 분석하여, 연구 테마를 구조화해주세요.
 URL: ${body.homepageUrl}
@@ -223,7 +223,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
 
         const result = await model.generateContent(prompt);
         const onboardingUsage = result.response.usageMetadata;
-        if (onboardingUsage) logApiCost(request.userId!, 'gemini-2.5-flash', onboardingUsage.promptTokenCount ?? 0, onboardingUsage.candidatesTokenCount ?? 0, 'lab_onboarding').catch(() => {});
+        if (onboardingUsage) logApiCost(request.userId!, 'gemini-3.1-flash-lite', onboardingUsage.promptTokenCount ?? 0, onboardingUsage.candidatesTokenCount ?? 0, 'lab_onboarding').catch(() => {});
         const text = result.response.text().trim();
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
@@ -562,7 +562,7 @@ themes는 3~5개, keywords는 테마별 3~6개. 한글+영문 혼용.`;
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const { env } = await import('../config/env.js');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const prompt = `아래 연구실 홈페이지 HTML에서 가능한 모든 정보를 구조화하여 추출하세요.
 
@@ -600,7 +600,7 @@ ${combinedText.slice(0, 50000)}
         generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
       });
       const homepageUsage = result.response.usageMetadata;
-      if (homepageUsage) logApiCost(request.userId!, 'gemini-2.5-flash', homepageUsage.promptTokenCount ?? 0, homepageUsage.candidatesTokenCount ?? 0, 'lab_homepage_extract').catch(() => {});
+      if (homepageUsage) logApiCost(request.userId!, 'gemini-3.1-flash-lite', homepageUsage.promptTokenCount ?? 0, homepageUsage.candidatesTokenCount ?? 0, 'lab_homepage_extract').catch(() => {});
       const text = result.response.text().trim();
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) return reply.code(500).send({ error: '정보 추출 실패' });

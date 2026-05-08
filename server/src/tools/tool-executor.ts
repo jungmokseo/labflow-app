@@ -829,7 +829,7 @@ async function executeDraftEmailReply(
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const draftModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const draftModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     ctx.sendProgress('답장 초안을 작성하고 있습니다...');
     const draftPrompt = `다음 이메일에 대한 답장 초안을 작성해주세요.
@@ -851,7 +851,7 @@ async function executeDraftEmailReply(
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
     });
     const draftUsage = draftResult.response.usageMetadata;
-    if (draftUsage) logApiCost(ctx.userId, 'gemini-2.5-flash', draftUsage.promptTokenCount ?? 0, draftUsage.candidatesTokenCount ?? 0, 'email_draft').catch(() => {});
+    if (draftUsage) logApiCost(ctx.userId, 'gemini-3.1-flash-lite', draftUsage.promptTokenCount ?? 0, draftUsage.candidatesTokenCount ?? 0, 'email_draft').catch(() => {});
 
     const draftText = draftResult.response.text().trim();
     const jsonMatch = draftText.match(/\{[\s\S]*\}/);
@@ -1524,7 +1524,7 @@ async function executeRegisterUploadedPapers(
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
   const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
   const { buildGraphFromText } = await import('../services/knowledge-graph.js');
 
@@ -1547,7 +1547,7 @@ async function executeRegisterUploadedPapers(
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
       });
       const metaUsage = metaResult.response.usageMetadata;
-      if (metaUsage) logApiCost(ctx.userId, 'gemini-2.5-flash', metaUsage.promptTokenCount ?? 0, metaUsage.candidatesTokenCount ?? 0, 'paper_meta_extract').catch(() => {});
+      if (metaUsage) logApiCost(ctx.userId, 'gemini-3.1-flash-lite', metaUsage.promptTokenCount ?? 0, metaUsage.candidatesTokenCount ?? 0, 'paper_meta_extract').catch(() => {});
       const metaText = metaResult.response.text().trim();
       const metaMatch = metaText.match(/\{[\s\S]*\}/);
       const meta = metaMatch ? JSON.parse(metaMatch[0]) : {};

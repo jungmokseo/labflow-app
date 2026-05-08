@@ -107,7 +107,7 @@ export async function autoTagWithAI(content: string): Promise<string[]> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const result = await model.generateContent(
       `다음 메모를 분류하세요. 해당하는 태그를 모두 선택하세요.
