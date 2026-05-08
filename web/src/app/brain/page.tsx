@@ -1180,7 +1180,7 @@ export default function BrainPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-2rem)] p-0 md:p-4">
+    <div className="flex h-[calc(100dvh-3.5rem)] md:h-dvh p-0 md:p-4">
       {/* Main area — full width (sidebar is in the main nav now) */}
       <div
         className="flex-1 bg-bg-card rounded-xl flex flex-col relative"

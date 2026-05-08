@@ -333,7 +333,7 @@ export default function BlissTaskReviewPage() {
   const firstLoad = isLoading && !queueData;
 
   return (
-    <div className="min-h-screen bg-bg pb-20 md:pb-12">
+    <div className="min-h-full pb-20 md:pb-12">
       {/* 표준 헤더 */}
       <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4">
         <div className="flex items-start gap-3 mb-1">
