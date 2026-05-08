@@ -116,7 +116,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'gpt-4o-realtime-preview-2025-06-03',
+            model: 'gpt-realtime-2',
             voice: selectedVoiceId,
             instructions: persona.systemPrompt + (whisperPrompt ? `\n\n${whisperPrompt}` : ''),
             tools: body.personaId === 'research-bot' ? [
@@ -187,7 +187,7 @@ export async function voiceChatbotRoutes(app: FastifyInstance) {
       },
       ephemeralToken,
       config: {
-        model: 'gpt-4o-realtime-preview-2025-06-03',
+        model: 'gpt-realtime-2',
         wsUrl: 'wss://api.openai.com/v1/realtime',
       },
     });
