@@ -455,7 +455,7 @@ export async function brainRoutes(app: FastifyInstance) {
       for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         // messages.stream()으로 토큰별 실시간 스트리밍
         const streamObj = anthropic.messages.stream({
-          model: 'claude-sonnet-4-6',
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 4096,
           system: systemPrompt,
           tools: TOOL_DEFINITIONS,
@@ -483,7 +483,7 @@ export async function brainRoutes(app: FastifyInstance) {
         // 매 라운드 실제 토큰 기반 비용 추적
         const roundCost = calculateAnthropicCost('claude-sonnet', finalMsg.usage);
         trackAICost(userId, 'claude-sonnet', roundCost, usedTools[usedTools.length - 1] || 'general_chat');
-        logApiCost(userId, 'claude-sonnet-4-6', finalMsg.usage.input_tokens, finalMsg.usage.output_tokens, usedTools[usedTools.length - 1] || 'general_chat').catch(() => {});
+        logApiCost(userId, 'claude-sonnet-4-20250514', finalMsg.usage.input_tokens, finalMsg.usage.output_tokens, usedTools[usedTools.length - 1] || 'general_chat').catch(() => {});
 
         if (roundText) responseText += roundText;
 
@@ -533,7 +533,7 @@ export async function brainRoutes(app: FastifyInstance) {
       // Gemini fallback (tool-use 없이 기본 대화)
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
       const chatHistory = sortedMessages.map(m => ({
         role: m.role === 'user' ? 'user' as const : 'model' as const,
@@ -736,7 +736,7 @@ export async function brainRoutes(app: FastifyInstance) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const m = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+        const m = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const r = await m.generateContent(
           `다음 메모에 적절한 태그를 3~5개 생성하세요. JSON 배열로만 응답: "${body.content}"`
         );

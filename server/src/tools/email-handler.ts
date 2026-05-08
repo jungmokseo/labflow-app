@@ -211,7 +211,7 @@ export async function handleEmailReplyDraft(
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const draftModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const draftModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     sendProgress('답장 초안을 작성하고 있습니다...');
     const draftPrompt = `다음 이메일에 대한 답장 초안을 작성해주세요.
@@ -233,7 +233,7 @@ export async function handleEmailReplyDraft(
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
     });
     const emailDraftUsage = draftResult.response.usageMetadata;
-    if (emailDraftUsage) logApiCost(userId, 'gemini-3.1-flash-lite', emailDraftUsage.promptTokenCount ?? 0, emailDraftUsage.candidatesTokenCount ?? 0, 'email_draft_reply').catch(() => {});
+    if (emailDraftUsage) logApiCost(userId, 'gemini-2.5-flash', emailDraftUsage.promptTokenCount ?? 0, emailDraftUsage.candidatesTokenCount ?? 0, 'email_draft_reply').catch(() => {});
 
     const draftText = draftResult.response.text().trim();
     const jsonMatch = draftText.match(/\{[\s\S]*\}/);
@@ -303,7 +303,7 @@ export async function handleEmailPreference(
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const currentRules = profile ? JSON.stringify({
       keywords: profile.keywords,
@@ -329,7 +329,7 @@ ${currentRules}
       generationConfig: { temperature: 0.1, maxOutputTokens: 512, responseMimeType: 'application/json' },
     });
     const prefUsage = result.response.usageMetadata;
-    if (prefUsage) logApiCost(userId, 'gemini-3.1-flash-lite', prefUsage.promptTokenCount ?? 0, prefUsage.candidatesTokenCount ?? 0, 'email_preference').catch(() => {});
+    if (prefUsage) logApiCost(userId, 'gemini-2.5-flash', prefUsage.promptTokenCount ?? 0, prefUsage.candidatesTokenCount ?? 0, 'email_preference').catch(() => {});
 
     const parsed = JSON.parse(result.response.text().trim());
 

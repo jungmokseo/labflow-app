@@ -33,7 +33,7 @@ export async function maybeGenerateSummary(channelId: string, minNewMessages: nu
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const conversationText = newMessages.map(m => `${m.role}: ${m.content}`).join('\n');
     const result = await model.generateContent(
@@ -42,7 +42,7 @@ export async function maybeGenerateSummary(channelId: string, minNewMessages: nu
 
     const channel = await prisma.channel.findUnique({ where: { id: channelId }, select: { userId: true } });
     const summaryUsage = result.response.usageMetadata;
-    if (summaryUsage && channel?.userId) logApiCost(channel.userId, 'gemini-3.1-flash-lite', summaryUsage.promptTokenCount ?? 0, summaryUsage.candidatesTokenCount ?? 0, 'session_summary').catch(() => {});
+    if (summaryUsage && channel?.userId) logApiCost(channel.userId, 'gemini-2.5-flash', summaryUsage.promptTokenCount ?? 0, summaryUsage.candidatesTokenCount ?? 0, 'session_summary').catch(() => {});
     const summaryText = result.response.text();
     const summaryUserId = channel?.userId || '';
     const summary = await prisma.channelSummary.create({
@@ -79,7 +79,7 @@ export async function autoExtractInfo(message: string, response: string, labId: 
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const prompt = `다음 대화에서 연구실 관련 새 정보가 있는지 확인하세요.
 추출: 과제-논문 연결, 새 용어, 새 인원, 새 과제 정보
@@ -92,7 +92,7 @@ JSON 배열: [{"type": "dict"|"memo", "data": {...}}]`;
 
     const result = await model.generateContent(prompt);
     const autoExtractUsage = result.response.usageMetadata;
-    if (autoExtractUsage) logApiCost('system', 'gemini-3.1-flash-lite', autoExtractUsage.promptTokenCount ?? 0, autoExtractUsage.candidatesTokenCount ?? 0, 'auto_extract_info').catch(() => {});
+    if (autoExtractUsage) logApiCost('system', 'gemini-2.5-flash', autoExtractUsage.promptTokenCount ?? 0, autoExtractUsage.candidatesTokenCount ?? 0, 'auto_extract_info').catch(() => {});
     const text = result.response.text().trim();
     const match = text.match(/\[.*\]/s);
     if (match) {
@@ -119,14 +119,14 @@ export async function generateSessionTitle(messages: Array<{ role: string; conte
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const context = messages.slice(-4).map(m => `${m.role}: ${m.content.slice(0, 100)}`).join('\n');
     const result = await model.generateContent(
       `다음 대화의 주제를 한국어 10자 이내로 요약하세요. 제목만 출력:\n\n${context}\nuser: ${latestMessage.slice(0, 100)}`
     );
     const titleUsage = result.response.usageMetadata;
-    if (titleUsage) logApiCost('system', 'gemini-3.1-flash-lite', titleUsage.promptTokenCount ?? 0, titleUsage.candidatesTokenCount ?? 0, 'session_title').catch(() => {});
+    if (titleUsage) logApiCost('system', 'gemini-2.5-flash', titleUsage.promptTokenCount ?? 0, titleUsage.candidatesTokenCount ?? 0, 'session_title').catch(() => {});
     const title = result.response.text().trim().replace(/["']/g, '').slice(0, 30);
     return title || null;
   } catch {

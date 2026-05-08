@@ -276,7 +276,7 @@ async function classifyWithGemini(text: string, channelName: string): Promise<Cl
   const today = new Date().toISOString().slice(0, 10);
   try {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent({
       contents: [
         { role: 'user', parts: [{ text: buildClassifyPrompt(text, channelName, today) }] },

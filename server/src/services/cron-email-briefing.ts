@@ -278,7 +278,7 @@ async function summarizeReport(memberName: string, body: string, scope: 'student
   if (env.GEMINI_API_KEY) {
     try {
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const r = await model.generateContent(`${systemPrompt}\n\n${userMessage}`);
       const text = r.response.text();
       if (text.trim()) return text.trim();

@@ -15,7 +15,7 @@ import { createHash } from 'crypto';
 import { logApiCost } from './cost-logger.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // ── 타입 정의 ──────────────────────────────────────────
 export interface ExtractedRelation {
@@ -222,7 +222,7 @@ export async function buildGraphFromText(
 ): Promise<void> {
   try {
     const relations = await extractRelationsFromText(text, source);
-    logApiCost(userId, 'gemini-3.1-flash-lite', 0, 0, 'knowledge_graph_extract').catch(() => {});
+    logApiCost(userId, 'gemini-2.5-flash', 0, 0, 'knowledge_graph_extract').catch(() => {});
     if (relations.length === 0) return;
 
     // entityId 자동 매칭을 위해 Lab 데이터 캐시 (1회 조회)
@@ -700,7 +700,7 @@ JSON 배열로만 응답:
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const insightUsage = result.response.usageMetadata;
-    if (insightUsage) logApiCost(userId, 'gemini-3.1-flash-lite', insightUsage.promptTokenCount ?? 0, insightUsage.candidatesTokenCount ?? 0, 'graph_insights').catch(() => {});
+    if (insightUsage) logApiCost(userId, 'gemini-2.5-flash', insightUsage.promptTokenCount ?? 0, insightUsage.candidatesTokenCount ?? 0, 'graph_insights').catch(() => {});
 
     const text = result.response.text().trim();
     const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -852,7 +852,7 @@ ${briefingData}` }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const dailyUsage = result.response.usageMetadata;
-    if (dailyUsage) logApiCost(userId, 'gemini-3.1-flash-lite', dailyUsage.promptTokenCount ?? 0, dailyUsage.candidatesTokenCount ?? 0, 'daily_brief').catch(() => {});
+    if (dailyUsage) logApiCost(userId, 'gemini-2.5-flash', dailyUsage.promptTokenCount ?? 0, dailyUsage.candidatesTokenCount ?? 0, 'daily_brief').catch(() => {});
     return sanitizeLlmOutput(result.response.text());
   } catch {
     // fallback: raw data 반환
@@ -967,7 +967,7 @@ ${analysisData}` }] }],
       generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
     });
     const emergeUsage = result.response.usageMetadata;
-    if (emergeUsage) logApiCost(userId, 'gemini-3.1-flash-lite', emergeUsage.promptTokenCount ?? 0, emergeUsage.candidatesTokenCount ?? 0, 'emerge_insights').catch(() => {});
+    if (emergeUsage) logApiCost(userId, 'gemini-2.5-flash', emergeUsage.promptTokenCount ?? 0, emergeUsage.candidatesTokenCount ?? 0, 'emerge_insights').catch(() => {});
     return `🔮 **Emerge — 숨겨진 연결 발견**\n\n${sanitizeLlmOutput(result.response.text())}`;
   } catch {
     if (weakTies.length === 0 && isolatedRecent.length === 0) {
@@ -1087,12 +1087,12 @@ ${weekData}`;
     if (env.ANTHROPIC_API_KEY) {
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 3000,
         temperature: 0.3,
         messages: [{ role: 'user', content: weeklyPrompt }],
       });
-      logApiCost(userId, 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'weekly_review').catch(() => {});
+      logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'weekly_review').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') {
         return text.text;
@@ -1109,7 +1109,7 @@ ${weekData}`;
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const weeklyUsage = result.response.usageMetadata;
-    if (weeklyUsage) logApiCost(userId, 'gemini-3.1-flash-lite', weeklyUsage.promptTokenCount ?? 0, weeklyUsage.candidatesTokenCount ?? 0, 'weekly_review_fallback').catch(() => {});
+    if (weeklyUsage) logApiCost(userId, 'gemini-2.5-flash', weeklyUsage.promptTokenCount ?? 0, weeklyUsage.candidatesTokenCount ?? 0, 'weekly_review_fallback').catch(() => {});
     return sanitizeLlmOutput(result.response.text());
   } catch {
     return `**주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +

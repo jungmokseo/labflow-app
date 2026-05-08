@@ -107,7 +107,7 @@ export async function handleCalendarCreate(
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const calModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const calModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     const today = new Date().toISOString().split('T')[0];
     const extractPrompt = `오늘 날짜: ${today}
@@ -121,7 +121,7 @@ export async function handleCalendarCreate(
       generationConfig: { temperature: 0, maxOutputTokens: 500 },
     });
     const calUsage = extractResult.response.usageMetadata;
-    if (calUsage) logApiCost(userId, 'gemini-3.1-flash-lite', calUsage.promptTokenCount ?? 0, calUsage.candidatesTokenCount ?? 0, 'calendar_extract').catch(() => {});
+    if (calUsage) logApiCost(userId, 'gemini-2.5-flash', calUsage.promptTokenCount ?? 0, calUsage.candidatesTokenCount ?? 0, 'calendar_extract').catch(() => {});
 
     const extractText = extractResult.response.text().trim();
     const jsonMatch = extractText.match(/\{[\s\S]*\}/);
@@ -229,16 +229,16 @@ ${context}`;
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-      // Opus 4.7 breaking change: temperature/top_p/top_k 미지원 (400 에러). 기본 sampling 사용.
       const response = await anthropic.messages.create({
-        model: 'claude-opus-4-7',
+        model: 'claude-opus-4-20250514',
         max_tokens: 4096,
+        temperature: 0.3,
         system: systemPrompt,
         messages: [{ role: 'user', content: message }],
       });
       const { trackAICost, calculateAnthropicCost } = await import('../middleware/rate-limiter.js');
       trackAICost(userId, 'claude-opus', calculateAnthropicCost('claude-opus', response.usage));
-      logApiCost(userId, 'claude-opus-4-7', response.usage.input_tokens, response.usage.output_tokens, 'papers_tool').catch(() => {});
+      logApiCost(userId, 'claude-opus-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'papers_tool').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') {
         return { response: text.text, intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length, model: 'opus' } };
@@ -250,7 +250,7 @@ ${context}`;
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: message }] }],
     systemInstruction: { role: 'user', parts: [{ text: systemPrompt }] },
@@ -258,7 +258,7 @@ ${context}`;
   const { trackAICost: trackCost, COST_PER_CALL: costs } = await import('../middleware/rate-limiter.js');
   trackCost(userId, 'gemini-flash', costs['gemini-flash']);
   const papersGeminiUsage = result.response.usageMetadata;
-  if (papersGeminiUsage) logApiCost(userId, 'gemini-3.1-flash-lite', papersGeminiUsage.promptTokenCount ?? 0, papersGeminiUsage.candidatesTokenCount ?? 0, 'papers_tool_fallback').catch(() => {});
+  if (papersGeminiUsage) logApiCost(userId, 'gemini-2.5-flash', papersGeminiUsage.promptTokenCount ?? 0, papersGeminiUsage.candidatesTokenCount ?? 0, 'papers_tool_fallback').catch(() => {});
   return { response: result.response.text(), intent: 'papers_tool', metadata: { publicationCount: publications.length, alertCount: alerts.length, model: 'gemini-fallback' } };
 }
 
@@ -282,7 +282,7 @@ export async function handleMeetingToolMessage(
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: message }] }],
     systemInstruction: { role: 'user', parts: [{ text: `당신은 미팅 기록 비서입니다. 최근 미팅 기록을 참고하여 답변하세요.\n\n최근 미팅:\n${meetingList}` }] },

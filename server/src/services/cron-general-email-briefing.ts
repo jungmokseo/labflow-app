@@ -322,7 +322,7 @@ async function classifyWithSonnet(items: ClassifyInput[]): Promise<ClassifyOutpu
 async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutput[]> {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY 미설정');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const result = await model.generateContent({
     contents: [
       { role: 'user', parts: [{ text: `${CLASSIFY_SYSTEM_PROMPT}\n\n---\n\n${buildUserPrompt(items)}` }] },
