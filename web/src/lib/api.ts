@@ -1783,6 +1783,29 @@ export async function getIngestLog(sinceTs?: number) {
   return apiFetch<{ events: IngestLogEvent[]; isRunning: boolean }>(`/api/wiki/ingest-log${q}`, { method: 'GET' }, 0, 15000);
 }
 
+// ── AI 모델 검증 (OWNER 전용) ───────────────────────
+export interface ModelTestEntry {
+  ok: boolean;
+  ms?: number;
+  output?: string;
+  error?: string;
+}
+
+export interface ModelTestResult {
+  ok: boolean;
+  results: Record<string, ModelTestEntry>;
+}
+
+/**
+ * 현재 코드에서 사용 중인 모든 AI 모델 ID로 minimal API call하여 production 작동 검증.
+ * Anthropic Sonnet/Opus + Gemini Flash-Lite/Pro + OpenAI Realtime 2.
+ *
+ * 모델 변경/deprecation 후 끝까지 검증 용도. settings → 시스템 상태 탭 button.
+ */
+export async function testModels() {
+  return apiFetch<ModelTestResult>('/api/automations/test-models', { method: 'POST' }, 0, 60000);
+}
+
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;

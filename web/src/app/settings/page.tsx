@@ -10,6 +10,7 @@ import {
   type ErrorLogEntry, type ErrorSummary,
   getSettingsSummary, deleteBrainInstruction, deleteBriefingInstruction,
   deleteImportanceRule, deleteKeyword, type SettingsSummary,
+  testModels,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
@@ -349,7 +350,99 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
           )}
         </div>
       </section>
+
+      <ModelValidationSection />
     </div>
+  );
+}
+
+// ── Model Validation Section (OWNER 전용 — production env 키로 모든 AI 모델 ID 실측) ──
+function ModelValidationSection() {
+  const { toast } = useToast();
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof testModels>> | null>(null);
+
+  const handleTest = async () => {
+    if (running) return;
+    setRunning(true);
+    try {
+      const r = await testModels();
+      setResult(r);
+      const okCount = Object.values(r.results).filter(x => x.ok).length;
+      const totalCount = Object.keys(r.results).length;
+      toast(
+        r.ok ? `✅ ${okCount}/${totalCount} 모델 정상` : `⚠️ ${okCount}/${totalCount} 모델 정상 — 일부 실패`,
+        r.ok ? 'success' : 'error',
+      );
+    } catch (err: any) {
+      const msg = err?.message?.slice(0, 200) ?? 'unknown';
+      toast(`모델 검증 실패: ${msg}`, 'error');
+      setResult(null);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-text-heading text-base">🔍 AI 모델 검증</h3>
+          <p className="text-xs text-text-muted mt-1">
+            현재 코드가 사용하는 모든 AI 모델 ID(Sonnet/Opus/Gemini/OpenAI Realtime)에 minimal API call 후 결과 표시.
+            모델 deprecation 또는 ID 변경 직후 production에서 실제 작동하는지 검증용.
+          </p>
+        </div>
+        <button
+          onClick={handleTest}
+          disabled={running}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+        >
+          {running && <span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />}
+          {running ? '검증 중… (~15초)' : '모델 검증 실행'}
+        </button>
+      </div>
+
+      {result && (
+        <div className="border-t border-border pt-3">
+          <div className="text-xs text-text-muted mb-2">
+            결과: <span className={result.ok ? 'text-emerald-500 font-medium' : 'text-amber-500 font-medium'}>
+              {Object.values(result.results).filter(x => x.ok).length}/{Object.keys(result.results).length} 모델 정상
+            </span>
+          </div>
+          <div className="space-y-1.5 font-mono text-[11px]">
+            {Object.entries(result.results).map(([model, entry]) => (
+              <div
+                key={model}
+                className={`px-2 py-1.5 rounded border ${
+                  entry.ok
+                    ? 'bg-emerald-500/5 border-emerald-500/30'
+                    : 'bg-red-500/5 border-red-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={entry.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>
+                    {entry.ok ? '✅' : '❌'} {model}
+                  </span>
+                  {typeof entry.ms === 'number' && (
+                    <span className="text-text-muted">{entry.ms}ms</span>
+                  )}
+                </div>
+                {entry.output && (
+                  <div className="text-text-muted mt-1 break-all">→ {entry.output.slice(0, 150)}</div>
+                )}
+                {entry.error && (
+                  <div className="text-red-500 mt-1 break-all">⚠ {entry.error.slice(0, 200)}</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-text-muted/70 mt-2">
+            ❌ fail이면 그 모델 ID가 invalid/deprecated. 즉시 코드 수정 필요.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 
