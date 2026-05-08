@@ -247,7 +247,7 @@ export async function paperRoutes(app: FastifyInstance) {
       // 1. Gemini로 논문 메타데이터 + 전문 추출
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
       const metaResult = await model.generateContent({
         contents: [{
@@ -425,7 +425,7 @@ export async function paperRoutes(app: FastifyInstance) {
     // Gemini로 자연어 쿼리 → 매칭
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const pubList = pubs.map((p, i) => `[${i}] "${p.title}" (${p.journal || '?'}, ${p.year || '?'})${p.nickname ? ` 별칭: ${p.nickname}` : ''} ${p.indexed ? '[indexed]' : '[pending]'}`).join('\n');
 

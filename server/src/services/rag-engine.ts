@@ -447,7 +447,7 @@ export async function rerank(
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
       const candidates = results.slice(0, 15).map((r, i) =>
         `[${i}] ${r.title || ''}: ${r.chunkText.substring(0, 200)}`

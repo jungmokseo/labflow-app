@@ -36,7 +36,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const result = await model.generateContent({
       contents: [{
@@ -63,7 +63,7 @@ async function parseExcel(buffer: Buffer): Promise<{ text: string; structured: a
     // Gemini에게 Excel 바이너리를 직접 분석하게 함
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const result = await model.generateContent({
       contents: [{
@@ -112,7 +112,7 @@ async function processImage(buffer: Buffer, mimetype: string): Promise<string> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const result = await model.generateContent({
       contents: [{

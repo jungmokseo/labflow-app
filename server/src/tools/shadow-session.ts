@@ -76,7 +76,7 @@ export async function compressForShadow(fullResponse: string, type: ShadowType):
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: fullResponse }] }],
@@ -88,7 +88,7 @@ export async function compressForShadow(fullResponse: string, type: ShadowType):
     });
 
     const shadowUsage = result.response.usageMetadata;
-    if (shadowUsage) logApiCost('system', 'gemini-2.5-flash', shadowUsage.promptTokenCount ?? 0, shadowUsage.candidatesTokenCount ?? 0, 'shadow_compress').catch(() => {});
+    if (shadowUsage) logApiCost('system', 'gemini-3.1-flash-lite', shadowUsage.promptTokenCount ?? 0, shadowUsage.candidatesTokenCount ?? 0, 'shadow_compress').catch(() => {});
     return result.response.text().trim();
   } catch {
     return fullResponse.slice(0, 1000);

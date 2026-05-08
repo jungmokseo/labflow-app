@@ -74,7 +74,7 @@ export interface UserProfileForClassification {
 // ── Stage 1: Gemini Flash 배치 라우팅 ────────────────
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const flashModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const flashModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
 
 function buildStage1Prompt(
   profile: UserProfileForClassification | null,
@@ -157,7 +157,7 @@ export async function classifyEmailBatchStage1(
     });
 
     const s1Usage = result.response.usageMetadata;
-    if (s1Usage && userId) logApiCost(userId, 'gemini-2.5-flash', s1Usage.promptTokenCount ?? 0, s1Usage.candidatesTokenCount ?? 0, 'email_classify_stage1').catch(() => {});
+    if (s1Usage && userId) logApiCost(userId, 'gemini-3.1-flash-lite', s1Usage.promptTokenCount ?? 0, s1Usage.candidatesTokenCount ?? 0, 'email_classify_stage1').catch(() => {});
     const responseText = result.response.text().trim();
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('No JSON array found in Gemini response');
@@ -251,7 +251,7 @@ export async function classifyEmailDetailStage2(
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       temperature: 0.1,
       system: systemPrompt,
@@ -261,7 +261,7 @@ export async function classifyEmailDetailStage2(
       }],
     });
 
-    if (userId) logApiCost(userId, 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'email_classify_stage2').catch(() => {});
+    if (userId) logApiCost(userId, 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'email_classify_stage2').catch(() => {});
     const textBlock = response.content.find(b => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') throw new Error('No text in Sonnet response');
 

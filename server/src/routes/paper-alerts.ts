@@ -440,12 +440,12 @@ stars 기준 (신중하게):
         const Anthropic = (await import('@anthropic-ai/sdk')).default;
         const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
         const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 2048,
           temperature: 0.1,
           messages: [{ role: 'user', content: prompt }],
         });
-        logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_relevance_score').catch(() => {});
+        logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'paper_relevance_score').catch(() => {});
         const text = response.content.find(b => b.type === 'text');
         if (text && text.type === 'text') {
           const match = text.text.match(/\[[\s\S]*\]/);
@@ -505,13 +505,13 @@ ${ctx}제목: ${title}
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      // Opus 4.7 breaking change: temperature/top_p/top_k 미지원 (400 에러). 기본 sampling 사용.
       const response = await anthropic.messages.create({
-        model: 'claude-opus-4-20250514',
+        model: 'claude-opus-4-7',
         max_tokens: 1024,
-        temperature: 0.2,
         messages: [{ role: 'user', content: prompt }],
       });
-      logApiCost('system', 'claude-opus-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary').catch(() => {});
+      logApiCost('system', 'claude-opus-4-7', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') return text.text.trim();
     } catch (err) {
@@ -521,12 +521,12 @@ ${ctx}제목: ${title}
         const Anthropic = (await import('@anthropic-ai/sdk')).default;
         const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
         const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 1024,
           temperature: 0.2,
           messages: [{ role: 'user', content: prompt }],
         });
-        logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary_fallback').catch(() => {});
+        logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'paper_summary_fallback').catch(() => {});
         const text = response.content.find(b => b.type === 'text');
         if (text && text.type === 'text') return text.text.trim();
       } catch { /* fall through to Gemini */ }
@@ -537,7 +537,7 @@ ${ctx}제목: ${title}
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
   } catch { return ''; }
@@ -608,12 +608,12 @@ ${paperList}
       const Anthropic = (await import('@anthropic-ai/sdk')).default;
       const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
       const response = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         temperature: 0.3,
         messages: [{ role: 'user', content: prompt }],
       });
-      logApiCost('system', 'claude-sonnet-4-20250514', response.usage.input_tokens, response.usage.output_tokens, 'weekly_insight').catch(() => {});
+      logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'weekly_insight').catch(() => {});
       const text = response.content.find(b => b.type === 'text');
       if (text && text.type === 'text') return text.text.trim();
     } catch (err) {
@@ -625,10 +625,10 @@ ${paperList}
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
     const result = await model.generateContent(prompt);
     const usage = result.response.usageMetadata;
-    if (usage) logApiCost('system', 'gemini-2.5-flash', usage.promptTokenCount ?? 0, usage.candidatesTokenCount ?? 0, 'weekly_insight_fallback').catch(() => {});
+    if (usage) logApiCost('system', 'gemini-3.1-flash-lite', usage.promptTokenCount ?? 0, usage.candidatesTokenCount ?? 0, 'weekly_insight_fallback').catch(() => {});
     return result.response.text().trim();
   } catch { return ''; }
 }
