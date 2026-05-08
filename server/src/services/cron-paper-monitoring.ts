@@ -27,11 +27,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Client as NotionClient } from '@notionhq/client';
 import { env } from '../config/env.js';
+import { postSlackMessage } from './cron-shared/slack-api.js';
 
 // ── 상수 (SKILL.md Step 0·3·4·6) ──────────────────────────
 const NOTION_SUMMARY_PAGE_ID = '312f9f176cf481b9a4caf3c23c20b7c0';
 const NOTION_PAPERS_DB_ID = '9d138950-c9f7-430b-a2f8-a6f45c091af0';
-const SLACK_CHANNEL_ID = 'C0B0R3M4X8T'; // #연구동향
+const SLACK_CHANNEL_RESEARCH_TRENDS = 'C0B0R3M4X8T'; // #연구동향
 const NOTION_PUBLIC_URL = 'https://conscious-grade-b90.notion.site/312f9f176cf481b9a4caf3c23c20b7c0';
 
 // 14개 저널 RSS (SKILL Step 1)
@@ -552,22 +553,12 @@ async function postSlackSummary(weekHeader: string, totalRss: number, filteredCo
   // Slack mrkdwn은 *bold*. **bold**는 그대로 표시되므로 변환.
   const slackNarrative = narrative.replace(/\*\*(.+?)\*\*/g, '*$1*');
   const text = `📚 이번 주 논문 모니터링 업데이트 (${weekHeader})\n\n*필터링 결과*: 총 ${totalRss}편 중 *${filteredCount}편* 관련 논문 선별 (중복·정정 제외)\n\n${slackNarrative}\n\n전체 보기 (토글·하이라이트 그대로):\n👉 ${NOTION_PUBLIC_URL}`;
-  try {
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`, 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ channel: SLACK_CHANNEL_ID, text, unfurl_links: true }),
-    });
-    const data = await res.json() as { ok: boolean; error?: string };
-    if (!data.ok) {
-      errors.push(`Slack 게시 실패: ${data.error}`);
-      return false;
-    }
-    return true;
-  } catch (e: any) {
-    errors.push(`Slack 게시 예외: ${e?.message || e}`);
+  const data = await postSlackMessage(SLACK_CHANNEL_RESEARCH_TRENDS, text);
+  if (!data.ok) {
+    errors.push(`Slack 게시 실패: ${data.error}`);
     return false;
   }
+  return true;
 }
 
 // ── 주차 라벨 생성 ────────────────────────────────────────

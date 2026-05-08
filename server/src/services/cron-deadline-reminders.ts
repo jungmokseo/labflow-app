@@ -21,6 +21,7 @@
 import { Client as NotionClient } from '@notionhq/client';
 import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
+import { lookupSlackUserByEmail, postSlackMessage } from './cron-shared/slack-api.js';
 
 const TASK_DB_ID = '70aa782f-245b-460c-93be-1f0920fc13e2';
 
@@ -128,48 +129,6 @@ async function findOwnerEmail(ownerName: string): Promise<string | null> {
   return member?.email || null;
 }
 
-async function lookupSlackUserByEmail(email: string): Promise<string | null> {
-  if (!env.SLACK_BOT_TOKEN) return null;
-  try {
-    const url = `https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(email)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
-    });
-    const data = (await res.json()) as { ok: boolean; user?: { id?: string }; error?: string };
-    if (!data.ok) {
-      console.warn(`[deadline-reminder] users.lookupByEmail 실패 (${email}): ${data.error}`);
-      return null;
-    }
-    return data.user?.id || null;
-  } catch (e: any) {
-    console.warn(`[deadline-reminder] users.lookupByEmail 예외 (${email}): ${e?.message}`);
-    return null;
-  }
-}
-
-async function postSlackDm(userId: string, text: string): Promise<boolean> {
-  if (!env.SLACK_BOT_TOKEN) return false;
-  try {
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify({ channel: userId, text }),
-    });
-    const data = (await res.json()) as { ok: boolean; error?: string };
-    if (!data.ok) {
-      console.warn(`[deadline-reminder] chat.postMessage 실패: ${data.error}`);
-      return false;
-    }
-    return true;
-  } catch (e: any) {
-    console.warn(`[deadline-reminder] chat.postMessage 예외: ${e?.message}`);
-    return false;
-  }
-}
-
 function buildMessage(item: TaskItem, stage: Stage): string {
   const headers: Record<Stage, string> = {
     'D-3': '🔔 *마감 D-3 리마인더* (BLISS Lab)',
@@ -273,7 +232,8 @@ export async function runDeadlineReminders(): Promise<DeadlineReminderResult> {
         continue;
       }
       const text = buildMessage(task, newStage);
-      const sent = await postSlackDm(slackUserId, text);
+      const slackResult = await postSlackMessage(slackUserId, text);
+      const sent = slackResult.ok;
       if (!sent) {
         result.failures.push({
           owner: task.ownerName,

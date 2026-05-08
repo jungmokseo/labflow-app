@@ -30,6 +30,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Prisma } from '@prisma/client';
 import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
+import { getSlackChannelHistory, getSlackPermalink } from './cron-shared/slack-api.js';
 
 // ── 정책 ────────────────────────────────────────────
 // poll.py와 동일 제외 목록 — 이름 소문자 비교 (Slack 채널명은 영소문자/한글 가능).
@@ -149,40 +150,16 @@ async function discoverTrackedChannels(): Promise<ChannelInfo[]> {
 }
 
 async function fetchHistory(channelId: string, oldestTs: number): Promise<SlackMessage[]> {
-  const messages: SlackMessage[] = [];
-  let cursor: string | undefined;
-  for (let i = 0; i < 10; i++) {
-    const params = new URLSearchParams({
-      channel: channelId,
-      limit: '200',
-      oldest: oldestTs.toString(),
-    });
-    if (cursor) params.set('cursor', cursor);
-    const data = await slackGet<{
-      ok: boolean;
-      error?: string;
-      messages?: SlackMessage[];
-      has_more?: boolean;
-      response_metadata?: { next_cursor?: string };
-    }>(`conversations.history?${params.toString()}`);
-    if (!data.ok) {
-      throw new Error(`conversations.history(${channelId}) 실패: ${data.error || 'unknown'}`);
-    }
-    if (data.messages) messages.push(...data.messages);
-    if (!data.has_more) break;
-    cursor = data.response_metadata?.next_cursor || undefined;
-    if (!cursor) break;
+  const data = await getSlackChannelHistory(channelId, oldestTs.toString(), 1000);
+  if (!data.ok) {
+    throw new Error(`conversations.history(${channelId}) 실패: ${data.error || 'unknown'}`);
   }
-  return messages;
+  return (data.messages as SlackMessage[] | undefined) || [];
 }
 
 async function getPermalink(channelId: string, ts: string): Promise<string> {
-  try {
-    const data = await slackGet<{ ok: boolean; permalink?: string }>(
-      `chat.getPermalink?channel=${channelId}&message_ts=${ts}`,
-    );
-    if (data.ok && data.permalink) return data.permalink;
-  } catch { /* ignore */ }
+  const permalink = await getSlackPermalink(channelId, ts);
+  if (permalink) return permalink;
   return `https://app.slack.com/client/${channelId}/p${ts.replace('.', '')}`;
 }
 

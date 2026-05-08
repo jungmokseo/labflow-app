@@ -25,9 +25,7 @@ import { google, type gmail_v1 } from 'googleapis';
 import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { decryptToken, isEncrypted } from '../utils/crypto.js';
-
-// PI Slack user ID — env.ts schema에는 없으므로 process.env에서 직접 읽음 (타입 안전성 위해 string | undefined)
-const ADMIN_USER_ID = process.env.ADMIN_USER_ID || 'U0ASESNE1UP'; // fallback: 서정목 (PI) — audit-slack-coverage.ts에서 검증된 값
+import { postSlackAdminDm } from './cron-shared/slack-api.js';
 
 // 주간보고 제외 패턴 (cron-email-briefing이 별도 처리)
 const WEEKLY_REPORT_PATTERN = /weekly\s*report|주간\s*진행\s*사항\s*보고|주간보고/i;
@@ -407,35 +405,6 @@ function buildMarkdown(briefed: BriefedEmail[]): string {
 }
 
 // ─────────────────────────────────────────────
-// Slack DM 전송
-// ─────────────────────────────────────────────
-
-async function postSlackDm(text: string): Promise<{ ok: boolean; error?: string }> {
-  if (!env.SLACK_BOT_TOKEN) return { ok: false, error: 'SLACK_BOT_TOKEN 미설정' };
-  if (!ADMIN_USER_ID) return { ok: false, error: 'ADMIN_USER_ID 미설정' };
-  try {
-    const res = await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: JSON.stringify({
-        channel: ADMIN_USER_ID,
-        text,
-        unfurl_links: false,
-        unfurl_media: false,
-      }),
-    });
-    const data = (await res.json()) as { ok: boolean; error?: string };
-    if (!data.ok) return { ok: false, error: data.error || 'chat.postMessage 실패' };
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message || 'fetch 예외' };
-  }
-}
-
-// ─────────────────────────────────────────────
 // 메인 entry
 // ─────────────────────────────────────────────
 
@@ -484,7 +453,7 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
 
   if (filtered.length === 0) {
     result.briefingMarkdown = `*📧 일반 이메일 브리핑 — ${formatKstDate(new Date())}*\n\n지난 24시간 동안 새로운 이메일이 없습니다.`;
-    const slack = await postSlackDm(result.briefingMarkdown);
+    const slack = await postSlackAdminDm(result.briefingMarkdown);
     result.slackDmSent = slack.ok;
     if (!slack.ok && slack.error) result.errors.push(`slack: ${slack.error}`);
     console.log(`[general-email-briefing] scanned=${result.emailsScanned} briefed=0 slack=${result.slackDmSent}`);
@@ -520,7 +489,7 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
           .slice(0, 50)
           .map(e => `- ${e.subject.slice(0, 80)} _(${e.senderName})_`)
           .join('\n');
-      const slack = await postSlackDm(result.briefingMarkdown);
+      const slack = await postSlackAdminDm(result.briefingMarkdown);
       result.slackDmSent = slack.ok;
       if (!slack.ok && slack.error) result.errors.push(`slack: ${slack.error}`);
       return result;
@@ -544,7 +513,7 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
 
   // 6. 마크다운 + Slack DM
   result.briefingMarkdown = buildMarkdown(briefed);
-  const slack = await postSlackDm(result.briefingMarkdown);
+  const slack = await postSlackAdminDm(result.briefingMarkdown);
   result.slackDmSent = slack.ok;
   if (!slack.ok && slack.error) {
     result.errors.push(`slack: ${slack.error}`);
