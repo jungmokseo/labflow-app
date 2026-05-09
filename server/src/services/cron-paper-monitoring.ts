@@ -330,7 +330,9 @@ JSON 배열만 출력 (코드블록 OK).`;
         max_tokens: 4096,
         messages: [{ role: 'user', content: prompt }],
       });
-      const text = res.content[0]?.type === 'text' ? res.content[0].text : '';
+      // Sonnet 4.6 multi-block response 대응 — thinking + text 가능, text 블록만 추출
+      const textBlock = res.content.find(b => b.type === 'text');
+      const text = textBlock?.type === 'text' ? textBlock.text : '';
       const arr = parseJsonArray(text);
       applyAiSummary(targets, arr);
       return;

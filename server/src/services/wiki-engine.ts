@@ -890,7 +890,9 @@ ${queueText}`;
     const inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
     const outputTokens = usage.output_tokens ?? 0;
     logApiCost(userId ?? 'system', 'claude-sonnet-4-6', inputTokens, outputTokens, 'wiki_ingest').catch(() => {});
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    // Sonnet 4.6 multi-block response 대응 — thinking + text 가능
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock?.type === 'text' ? textBlock.text : '';
     articles = extractJsonArray(text);
     const cacheRead = usage.cache_read_input_tokens ?? 0;
     logIngestEvent(labId, 'info', `Sonnet 응답 (입력 ${inputTokens}토큰, 캐시히트 ${cacheRead}, 출력 ${outputTokens}, 아티클 ${articles.length}개)`);
@@ -1070,8 +1072,10 @@ ${articlesText}
       messages: [{ role: 'user', content: prompt }],
     });
 
-    logApiCost(userId ?? 'system', 'claude-opus-4-6', response.usage.input_tokens, response.usage.output_tokens, 'wiki_deep_synthesis').catch(() => {});
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    logApiCost(userId ?? 'system', 'claude-opus-4-7', response.usage.input_tokens, response.usage.output_tokens, 'wiki_deep_synthesis').catch(() => {});
+    // Sonnet/Opus 4.7 multi-block response 대응 — thinking + text 가능
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock?.type === 'text' ? textBlock.text : '';
     updatedArticles = extractJsonArray(text);
   } catch (err) {
     logError('background', '[wiki-engine] Opus deepSynthesis 호출 실패', { labId })(err);

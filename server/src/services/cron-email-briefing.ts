@@ -267,7 +267,9 @@ async function summarizeReport(memberName: string, body: string, scope: 'student
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       });
-      const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+      // Sonnet 4.6 multi-block response 대응 — thinking + text 가능, text 블록만 추출
+      const textBlock = response.content.find(b => b.type === 'text');
+      const text = textBlock?.type === 'text' ? textBlock.text : '';
       if (text.trim()) return text.trim();
     } catch (e: any) {
       console.warn(`[email-briefing] Sonnet 실패 (${memberName}): ${e?.message} → Gemini fallback`);

@@ -315,7 +315,9 @@ async function classifyWithSonnet(items: ClassifyInput[]): Promise<ClassifyOutpu
     system: [{ type: 'text', text: CLASSIFY_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: buildUserPrompt(items) }],
   });
-  const text = response.content[0].type === 'text' ? response.content[0].text : '';
+  // Sonnet 4.6 multi-block response 대응 — thinking + text 동시 반환 가능. text 블록 찾아서 사용.
+  const textBlock = response.content.find(b => b.type === 'text');
+  const text = textBlock?.type === 'text' ? textBlock.text : '';
   return parseJsonArray(text);
 }
 

@@ -45,7 +45,9 @@ ${existing.map((inst, i) => `${i + 1}. ${inst}`).join('\n')}
       messages: [{ role: 'user', content: prompt }],
     });
     logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'consolidate_instructions').catch(() => {});
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+    // Sonnet 4.6 multi-block response 대응 — thinking + text 가능
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock?.type === 'text' ? textBlock.text.trim() : '';
     const match = text.match(/\[[\s\S]*\]/);
     if (match) {
       const parsed = JSON.parse(match[0]);
@@ -96,7 +98,9 @@ ${existing.map((r, i) => `${i + 1}. 조건: "${r.condition}" → 액션: "${r.ac
       messages: [{ role: 'user', content: prompt }],
     });
     logApiCost('system', 'claude-sonnet-4-6', response.usage.input_tokens, response.usage.output_tokens, 'consolidate_rules').catch(() => {});
-    const text = response.content[0].type === 'text' ? response.content[0].text.trim() : '';
+    // Sonnet 4.6 multi-block response 대응 — thinking + text 가능
+    const textBlock = response.content.find(b => b.type === 'text');
+    const text = textBlock?.type === 'text' ? textBlock.text.trim() : '';
     const match = text.match(/\[[\s\S]*\]/);
     if (match) {
       const parsed = JSON.parse(match[0]);

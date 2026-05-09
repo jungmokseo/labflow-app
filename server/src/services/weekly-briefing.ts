@@ -134,7 +134,9 @@ ${insightsText || '(없음)'}`;
     const usage = response.usage as any;
     const inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
     logApiCost(userId, 'claude-sonnet-4-6', inputTokens, usage.output_tokens ?? 0, 'weekly_briefing').catch(() => {});
-    briefingMarkdown = response.content[0].type === 'text' ? response.content[0].text : '';
+    // Sonnet 4.6 multi-block response 대응 — thinking + text 가능
+    const textBlock = response.content.find(b => b.type === 'text');
+    briefingMarkdown = textBlock?.type === 'text' ? textBlock.text : '';
   } catch (err) {
     logError('background', '[weekly-briefing] Sonnet 호출 실패', { labId })(err);
     throw err;
