@@ -192,23 +192,44 @@ async function getBotUserId(): Promise<string | null> {
 }
 
 // ── 룰 기반 필터 ────────────────────────────────────
+// 단순 답변/감사/확인 메시지 — 분류 대상 아님 (그룹DM에서 BeiBei 메시지 등 폭증 방지)
+const TRIVIAL_REPLY_PATTERNS = [
+  // 한국어
+  /^(네|넵|예|아 네|알겠습니다|확인했습니다|감사합니다|감사해요|고맙습니다|좋습니다|좋아요)[.!\s]*$/,
+  /^(괜찮습니다|괜찮아요|문제없습니다|문제없어요)[.!\s]*$/,
+  // 영어 짧은 답변
+  /^(ok|okay|thanks|thank you|got it|noted|sure|yes|sounds good)[.!\s]*$/i,
+  // 중국어 짧은 답변
+  /^(好的|好|收到|收到了|明白|明白了|谢谢|谢谢您|感谢|没问题|可以|行|嗯|嗯嗯)[，。！\s]*$/u,
+  /^(好的[，,]?\s*收到[!！]?\s*(我会|我将)?.{0,40})$/u, // "好的，收到！我会..."
+];
+
+function isTrivialReply(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length > 80) return false;  // 긴 메시지는 trivial 아닐 수 있음 (조기 종료)
+  return TRIVIAL_REPLY_PATTERNS.some(p => p.test(trimmed));
+}
+
 function passesHeuristicFilter(text: string): boolean {
   if (!text) return false;
   const trimmed = text.trim();
   if (trimmed.length < 5) return false;
   if (!ALPHANUM_OR_HANGUL.test(trimmed)) return false;       // 이모지만
   if (trimmed.startsWith('🔒')) return false;
+  // 단순 답변/감사/확인 메시지 — 분류 대상 아님 (그룹DM 폭증 방지)
+  if (isTrivialReply(trimmed)) return false;
   for (const kw of SENSITIVE_KEYWORDS) if (trimmed.includes(kw)) return false;
   // 질문/요청 단서 키워드 — 하나라도 매치하면 task 후보.
   for (const kw of TASK_HEURISTIC_KEYWORDS) if (trimmed.includes(kw)) return true;
-  // 키워드 매치 없어도 질문/명령형 끝맺음이면 후보.
-  if (trimmed.endsWith('?') || trimmed.endsWith('?')) return true;
+  // 키워드 매치 없어도 질문/명령형 끝맺음이면 후보 — 단, 아주 짧은 단순 의문사 제외.
+  if ((trimmed.endsWith('?') || trimmed.endsWith('?')) && trimmed.length >= 8) return true;
   return false;
 }
 
 // ── LLM 분류 ────────────────────────────────────────
 function buildClassifyPrompt(text: string, channelName: string, today: string): string {
   return `당신은 BLISS Lab(연세대 바이오센서/유연전자소자 연구실)의 Slack 메시지 분류기입니다.
+PI(서정목 교수)의 검토 큐가 노이즈로 폭증하지 않도록 **매우 보수적으로** 분류하세요.
 
 [메시지]
 채널: ${channelName}
@@ -224,13 +245,24 @@ function buildClassifyPrompt(text: string, channelName: string, today: string): 
   "type": "영수증 | 회의 | 보고서 | 신청 | 기타 (적절한 것 1개)"
 }
 
-[판단 기준]
-- task: 누군가 해야 할 명확한 작업 ("이 영수증 제출해주세요")
-- request: 교수에게 결정/승인/확인 요청 ("교수님, 이거 가도 될까요?")
-- decision: 의사결정 통지 ("다음 주에 재논의하기로")
-- discussion: 일반 잡담/정보 공유 → skip
-- sensitive: 개인사/평가/관계/정신건강 → skip
-- 확신 없으면 보수적으로 sensitive로 분류 (잘못 추출하느니 누락이 낫다).`;
+[판단 기준 — strict mode]
+- **task**: 학생에게 명확하게 배정해야 할 작업이 있을 때만 ("이 영수증 김수아님이 처리해주세요"처럼 담당자 + 행동 명시).
+- **request**: 교수가 **즉시 답변·승인·결재**해야 하는 명시적 요청만. 단순 "여쭙니다" "괜찮을까요?" 같은 가벼운 질문은 discussion. 교수가 모르면 일이 막히는 수준이어야 request.
+- **decision**: 그룹 합의/결정 통지 ("다음 주에 재논의하기로"), 단순 통보는 제외.
+- **discussion**: 다음은 모두 discussion (검토 큐 진입 X):
+  - 단순 답변·확인 ("好的，收到", "我会", "我已经...", "알겠습니다", "확인했습니다")
+  - 진행 상황 보고 ("我正在...", "已经更新了 notion", "我这边已经确认了")
+  - 잡담·정보 공유·뉴스
+  - 단순 질문이지만 누구나 답변 가능 (PI 외 학생들도 답할 수 있는 질문)
+  - 학생 본인이 검색하면 알 수 있는 질문
+- **sensitive**: 개인사/평가/관계/정신건강.
+
+[중요 규칙]
+- "교수님" 호칭이 있어도 **단순 보고/답변**이면 → discussion.
+- 진행상황 공유 ("做了 X", "已经做完 Y") → discussion. 교수가 즉시 행동할 필요 없음.
+- 그룹DM에서 학생끼리 질문·답변 주고받는 메시지 → 대부분 discussion.
+- **확신 없으면 무조건 discussion으로 분류**. 잘못 task로 만드는 것보다 누락이 훨씬 낫다.
+- task/request로 분류하려면 "PI가 이 메시지를 봤을 때 즉시 무언가 행동(답변·결정·작업 배정)을 해야만 한다"는 확신이 있어야 함.`;
 }
 
 function parseClassifyJson(raw: string): ClassifiedMessage | null {
