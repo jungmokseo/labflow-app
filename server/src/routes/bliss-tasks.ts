@@ -330,6 +330,67 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
+  // ── Slack ↔ ResearchFlow 양방향 동기화 ──────────────────────────
+  // bliss-slack-bot이 BLISS-Bot Home 탭의 button 클릭 처리 시 호출.
+  // X-Sync-Token 인증 (relay) + body에 actionType('archive'|'hold')과 captureId.
+  // capture는 metadata.blissSource로 식별 (Slack channel+ts 또는 직접 id 둘 다 지원).
+  const slackSyncActionSchema = z.object({
+    captureId: z.string().min(1).optional(),
+    slackChannel: z.string().min(1).optional(),
+    slackTs: z.string().min(1).optional(),
+    action: z.enum(['archive', 'hold']),
+  }).refine(d => d.captureId || (d.slackChannel && d.slackTs), {
+    message: 'captureId 또는 slackChannel+slackTs 둘 중 하나 필수',
+  });
+
+  app.post('/api/bliss-tasks/sync-action', async (request, reply) => {
+    const syncToken = request.headers['x-sync-token'] as string | undefined;
+    const auth = requireSyncToken(syncToken);
+    if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+
+    const body = slackSyncActionSchema.parse(request.body);
+
+    // capture 조회 — captureId 우선, 없으면 slackChannel+ts로 metadata 검색
+    let capture: { id: string; status: string; metadata: Prisma.JsonValue } | null = null;
+    if (body.captureId) {
+      capture = await prisma.capture.findUnique({
+        where: { id: body.captureId },
+        select: { id: true, status: true, metadata: true },
+      });
+    } else if (body.slackChannel && body.slackTs) {
+      capture = await prisma.capture.findFirst({
+        where: {
+          AND: [
+            { metadata: { path: ['blissSource', 'slackChannel'], equals: body.slackChannel } },
+            { metadata: { path: ['blissSource', 'slackTs'], equals: body.slackTs } },
+          ],
+        },
+        select: { id: true, status: true, metadata: true },
+      });
+    }
+    if (!capture) return reply.code(404).send({ error: '검토 항목을 찾을 수 없습니다' });
+
+    if (body.action === 'archive') {
+      await prisma.capture.update({
+        where: { id: capture.id },
+        data: { status: 'archived' },
+      });
+    } else if (body.action === 'hold') {
+      await prisma.capture.update({
+        where: { id: capture.id },
+        data: {
+          status: 'on_hold',
+          metadata: {
+            ...jsonObject(capture.metadata),
+            heldAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
+
+    return reply.send({ success: true, captureId: capture.id, action: body.action });
+  });
+
   // 교수가 web에서 직접 task 추가 (검토 단계 건너뛰고 즉시 학생 알림)
   app.post('/api/bliss-tasks/direct-create', { preHandler: authMiddleware }, async (request) => {
     const body = directCreateSchema.parse(request.body);
