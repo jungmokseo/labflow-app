@@ -96,6 +96,23 @@ export async function followUpRoutes(app: FastifyInstance) {
     });
   });
 
+  // POST /api/follow-up/:id/sync-skip — bliss-slack-bot용 server-to-server endpoint.
+  // X-Sync-Token 인증 (auth middleware 우회). BLISS-Bot Home의 [⏭️ Skip] button에서 호출.
+  app.post('/api/follow-up/:id/sync-skip', async (request: FastifyRequest, reply: FastifyReply) => {
+    const expected = env.LABFLOW_SYNC_TOKEN;
+    const got = request.headers['x-sync-token'] as string | undefined;
+    if (!expected) return reply.code(503).send({ error: 'LABFLOW_SYNC_TOKEN 미설정' });
+    if (!got || got !== expected) return reply.code(401).send({ error: '인증 실패' });
+    const { id } = request.params as { id: string };
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const resolvedBy = body.resolvedBy ?? 'PI (Slack)';
+    await callMember(reply, {
+      method: 'PATCH',
+      path: `/api/follow-up/${encodeURIComponent(id)}/skip`,
+      body: { ...body, resolvedBy },
+    });
+  });
+
   // DELETE /api/follow-up/:id
   app.delete('/api/follow-up/:id', { preHandler: authMiddleware }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
