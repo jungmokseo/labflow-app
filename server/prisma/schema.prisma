@@ -75,6 +75,9 @@ model Capture {
   @@index([labId, category])
   @@index([labId, status])
   @@index([userId, reviewed, status])
+  // BLISS-Bot get_my_tasks와 inbox-summary가 metadata JSONB의 path 쿼리 사용 (blissDirect.assignedOwner, assignedOwner, blissSource 존재 체크).
+  // GIN(jsonb_path_ops)으로 containment(@>) + path 쿼리 가속.
+  @@index([metadata(ops: JsonbPathOps)], type: Gin, map: "captures_metadata_gin")
   @@map("captures")
 }
 
