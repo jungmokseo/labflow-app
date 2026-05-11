@@ -440,6 +440,77 @@ export async function blissTasksRoutes(app: FastifyInstance) {
   });
 
   // 진행 중 task 목록 (확정된 것 + 직접 추가한 것 모두)
+  // ── 학생 이름으로 active task 조회 (BLISS-Bot get_my_tasks용, X-Sync-Token) ──
+  app.get('/api/bliss-tasks/by-assignee', async (request, reply) => {
+    const syncToken = request.headers['x-sync-token'] as string | undefined;
+    const auth = requireSyncToken(syncToken);
+    if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
+
+    const q = request.query as Record<string, string | undefined>;
+    const name = (q.name || '').trim();
+    if (!name) return reply.code(400).send({ error: 'name query required' });
+    const status = (q.status || 'active').trim();
+    const dueWithin = q.dueWithin ? parseInt(q.dueWithin, 10) : null;
+
+    const where: Prisma.CaptureWhereInput = {
+      category: 'TASK',
+      reviewed: true,
+      OR: [
+        { metadata: { path: ['blissDirect', 'assignedOwner'], equals: name } },
+        { metadata: { path: ['blissConfirmed', 'ownerName'], equals: name } },
+      ],
+    };
+
+    if (status === 'completed') where.completed = true;
+    else if (status === 'all') { /* no completed filter */ }
+    else where.completed = false; // default 'active'
+
+    if (dueWithin !== null && !isNaN(dueWithin) && dueWithin >= 0) {
+      const limit = new Date();
+      limit.setDate(limit.getDate() + dueWithin);
+      where.actionDate = { lte: limit, not: null };
+    }
+
+    const captures = await prisma.capture.findMany({
+      where,
+      select: {
+        id: true,
+        summary: true,
+        content: true,
+        metadata: true,
+        actionDate: true,
+        priority: true,
+        completed: true,
+        completedAt: true,
+        createdAt: true,
+      },
+      orderBy: [{ actionDate: 'asc' }, { createdAt: 'desc' }],
+      take: 25,
+    });
+
+    return reply.send({
+      assignee: name,
+      count: captures.length,
+      items: captures.map(c => {
+        const meta = (c.metadata as Prisma.JsonObject | null) ?? {};
+        const source = (meta.blissConfirmed as Prisma.JsonObject | null)
+          || (meta.blissDirect as Prisma.JsonObject | null) || {};
+        const slackPermalink = (meta.blissSource as Prisma.JsonObject | null)?.slackPermalink
+          ?? source.slackPermalink ?? null;
+        return {
+          id: c.id,
+          title: c.summary,
+          actionDate: c.actionDate,
+          priority: c.priority,
+          completed: c.completed,
+          createdAt: c.createdAt,
+          memo: (source.memo as string | undefined) || null,
+          slackPermalink,
+        };
+      }),
+    });
+  });
+
   app.get('/api/bliss-tasks/active', { preHandler: authMiddleware }, async () => {
     const captures = await prisma.capture.findMany({
       where: {
