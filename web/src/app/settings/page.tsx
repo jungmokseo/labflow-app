@@ -11,6 +11,8 @@ import {
   getSettingsSummary, deleteBrainInstruction, deleteBriefingInstruction,
   deleteImportanceRule, deleteKeyword, type SettingsSummary,
   testModels,
+  getModelUsage,
+  type ModelUsageResult,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
@@ -356,13 +358,62 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
   );
 }
 
+// ── 모델 ID → AiCostLog service 매핑 (cost-logger.ts deriveService와 동일) ──
+// 대시보드에서 model 단위 → service 단위로 사용량 집계 표시.
+function modelToService(modelId: string): string {
+  if (modelId.startsWith('claude')) {
+    if (modelId.includes('opus')) return 'claude-opus';
+    if (modelId.includes('haiku')) return 'claude-haiku';
+    return 'claude-sonnet';
+  }
+  if (modelId.startsWith('gemini')) {
+    return modelId.includes('pro') ? 'gemini-pro' : 'gemini-flash';
+  }
+  if (modelId.startsWith('gpt-realtime') || modelId.startsWith('gpt-4o-realtime')) return 'openai-realtime';
+  if (modelId.startsWith('text-embedding')) return 'openai-embedding';
+  return 'unknown';
+}
+
+// $0.0012 → "$0.001", $1.234 → "$1.23", $123.456 → "$123" 형태로 표시
+function formatCost(usd: number): string {
+  if (usd === 0) return '$0';
+  if (usd < 0.01) return `$${usd.toFixed(4)}`;
+  if (usd < 1) return `$${usd.toFixed(3)}`;
+  if (usd < 100) return `$${usd.toFixed(2)}`;
+  return `$${Math.round(usd)}`;
+}
+
+function formatCount(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${Math.round(n / 1000)}k`;
+}
+
 // ── Model Validation Section (OWNER 전용 — production env 키로 모든 AI 모델 ID 실측) ──
 // 회사별(Anthropic / Google Gemini / OpenAI) 카드 대시보드.
 // 검증 실행 전에도 현재 사용 중인 모델 카탈로그(id + 사용처)를 default로 표시.
+// 사용량(today/7d/30d) 자동 로드 — AiCostLog에서 service별 집계.
 function ModelValidationSection() {
   const { toast } = useToast();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof testModels>> | null>(null);
+  const [usage, setUsage] = useState<ModelUsageResult | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const u = await getModelUsage();
+        if (!cancelled) setUsage(u);
+      } catch {
+        // 사용량 fetch 실패해도 대시보드 렌더링은 계속
+      } finally {
+        if (!cancelled) setUsageLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // 검증 실행 전 default 카탈로그 (백엔드 응답과 동일 구조)
   const defaultProviders = [
@@ -446,7 +497,7 @@ function ModelValidationSection() {
             )}
           </h3>
           <p className="text-xs text-text-muted mt-1">
-            현재 labflow-app·labflow-member가 사용하는 모든 AI 모델 ID를 회사별로 정리.
+            현재 labflow-app·labflow-member가 사용하는 모든 AI 모델 ID + 실제 사용량(USD).
             검증 실행 시 production env 키로 minimal API call하여 실측 상태 표시.
           </p>
         </div>
@@ -460,25 +511,52 @@ function ModelValidationSection() {
         </button>
       </div>
 
+      {/* 전체 사용량 요약 */}
+      {!usageLoading && usage && (
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <UsageTotalCard label="오늘" cost={usage.totals.today} />
+          <UsageTotalCard label="최근 7일" cost={usage.totals.last7} />
+          <UsageTotalCard label="최근 30일" cost={usage.totals.last30} />
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         {providers.map(provider => (
-          <ProviderCard key={provider.name} provider={provider} hasResult={hasResult} />
+          <ProviderCard
+            key={provider.name}
+            provider={provider}
+            hasResult={hasResult}
+            usage={usage}
+            usageLoading={usageLoading}
+          />
         ))}
       </div>
 
-      {hasResult && (
-        <p className="text-[11px] text-text-muted/70 border-t border-border pt-3">
-          ❌ fail이면 그 모델 ID가 invalid/deprecated. 즉시 코드 수정 필요.
-          모델 ID 변경 가이드: <code className="font-mono">.claude/CLAUDE.md → AI 모델 사용 규칙</code> 섹션.
-        </p>
-      )}
+      <p className="text-[11px] text-text-muted/70 border-t border-border pt-3 space-y-1">
+        {hasResult && (
+          <>❌ fail이면 그 모델 ID가 invalid/deprecated. 즉시 코드 수정 필요.{' '}</>
+        )}
+        💰 사용량은 <code className="font-mono">ai_cost_logs</code> 테이블 최근 30일 데이터 — AiCostLog 비용 추정치.
+        OpenAI Realtime/Embedding은 client-side 호출 또는 미연결로 측정 불가 (OpenAI dashboard에서 직접 확인).
+      </p>
     </section>
+  );
+}
+
+function UsageTotalCard({ label, cost }: { label: string; cost: number }) {
+  return (
+    <div className="rounded-lg border border-border bg-bg p-2">
+      <div className="text-[10px] text-text-muted uppercase tracking-wide">{label}</div>
+      <div className="text-lg font-bold text-text-heading mt-0.5">{formatCost(cost)}</div>
+    </div>
   );
 }
 
 function ProviderCard({
   provider,
   hasResult,
+  usage,
+  usageLoading,
 }: {
   provider: {
     name: string;
@@ -496,11 +574,33 @@ function ProviderCard({
     }>;
   };
   hasResult: boolean;
+  usage: ModelUsageResult | null;
+  usageLoading: boolean;
 }) {
   const okCount = provider.models.filter(m => m.ok).length;
   const totalCount = provider.models.length;
   const allOk = hasResult && okCount === totalCount;
   const anyFail = hasResult && okCount < totalCount;
+
+  // 이 provider의 모든 모델 service를 모아서 합산
+  const providerServices = Array.from(new Set(provider.models.map(m => modelToService(m.id))));
+  const providerTotal = (bucket?: Record<string, { cost: number; count: number }>) => {
+    if (!bucket) return { cost: 0, count: 0 };
+    return providerServices.reduce(
+      (acc, svc) => {
+        const b = bucket[svc];
+        if (b) { acc.cost += b.cost; acc.count += b.count; }
+        return acc;
+      },
+      { cost: 0, count: 0 },
+    );
+  };
+  const todayTotal = providerTotal(usage?.today);
+  const last7Total = providerTotal(usage?.last7);
+  const last30Total = providerTotal(usage?.last30);
+
+  // OpenAI는 서버 측정 불가 (voice-chatbot client WebSocket, embedding 미연결)
+  const isOpenAI = provider.name === 'OpenAI';
 
   return (
     <div className={`rounded-lg border p-3 space-y-2 ${
@@ -529,9 +629,40 @@ function ProviderCard({
         </div>
       )}
 
+      {/* Provider 단위 사용량 요약 */}
+      {!usageLoading && usage && !isOpenAI && (
+        <div className="grid grid-cols-3 gap-1 text-center text-[10px] bg-bg-card/50 rounded p-1.5">
+          <div>
+            <div className="text-text-muted">오늘</div>
+            <div className="font-semibold text-text-heading">{formatCost(todayTotal.cost)}</div>
+            <div className="text-text-muted">{formatCount(todayTotal.count)}회</div>
+          </div>
+          <div>
+            <div className="text-text-muted">7일</div>
+            <div className="font-semibold text-text-heading">{formatCost(last7Total.cost)}</div>
+            <div className="text-text-muted">{formatCount(last7Total.count)}회</div>
+          </div>
+          <div>
+            <div className="text-text-muted">30일</div>
+            <div className="font-semibold text-text-heading">{formatCost(last30Total.cost)}</div>
+            <div className="text-text-muted">{formatCount(last30Total.count)}회</div>
+          </div>
+        </div>
+      )}
+      {!usageLoading && isOpenAI && (
+        <div className="text-[10px] text-text-muted bg-bg-card/50 rounded p-1.5 text-center">
+          💡 서버 측정 불가 — <a href="https://platform.openai.com/usage" target="_blank" rel="noreferrer" className="text-primary hover:underline">OpenAI dashboard</a>에서 확인
+        </div>
+      )}
+
       <div className="space-y-1.5">
         {provider.models.map(model => (
-          <ModelRow key={model.id} model={model} hasResult={hasResult} />
+          <ModelRow
+            key={model.id}
+            model={model}
+            hasResult={hasResult}
+            usage={usage}
+          />
         ))}
       </div>
     </div>
@@ -541,6 +672,7 @@ function ProviderCard({
 function ModelRow({
   model,
   hasResult,
+  usage,
 }: {
   model: {
     id: string;
@@ -552,7 +684,11 @@ function ModelRow({
     error?: string;
   };
   hasResult: boolean;
+  usage: ModelUsageResult | null;
 }) {
+  const service = modelToService(model.id);
+  const last7 = usage?.last7?.[service];
+
   return (
     <div className={`rounded border px-2 py-1.5 text-[11px] ${
       hasResult
@@ -575,6 +711,13 @@ function ModelRow({
       </div>
       <div className="font-mono text-[10px] text-text-muted mt-0.5 break-all">{model.id}</div>
       <div className="text-[10px] text-text-muted mt-0.5 leading-snug">{model.usage}</div>
+      {/* service 단위 사용량 — 같은 service의 다른 모델과 합산되므로 service 표기 */}
+      {last7 && last7.count > 0 && (
+        <div className="text-[10px] text-text-muted/80 mt-1 font-mono">
+          📊 7일: {formatCost(last7.cost)} · {formatCount(last7.count)}회
+          <span className="text-text-muted/50 ml-1">({service})</span>
+        </div>
+      )}
       {hasResult && model.output && (
         <div className="text-[10px] text-text-muted mt-1 break-all">→ {model.output.slice(0, 120)}</div>
       )}

@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
 import { env } from '../config/env.js';
+import { prisma } from '../config/prisma.js';
 import { runDeadlineReminders } from '../services/cron-deadline-reminders.js';
 import { runPaperMonitoring } from '../services/cron-paper-monitoring.js';
 import { runEmailBriefing } from '../services/cron-email-briefing.js';
@@ -366,5 +367,91 @@ export async function automationRoutes(app: FastifyInstance) {
       providers,
       results: flatResults, // backward-compat
     });
+  });
+
+  // GET /api/automations/model-usage — AiCostLog에서 service별 today/7d/30d 집계
+  //
+  // 응답 schema:
+  //   {
+  //     ok: true,
+  //     today:  { service: { cost: number, count: number } },
+  //     last7:  { service: { cost: number, count: number } },
+  //     last30: { service: { cost: number, count: number } },
+  //     totals: { today: number, last7: number, last30: number }   // 전체 cost 합
+  //   }
+  //
+  // service 종류 (cost-logger.ts deriveService):
+  //   claude-opus / claude-sonnet / claude-haiku
+  //   gemini-pro / gemini-flash
+  //   openai-realtime / openai-embedding (현재 client WebSocket으로 호출 → 미측정)
+  app.get('/api/automations/model-usage', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
+    try {
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // 한 번에 30일 데이터 fetch 후 메모리에서 group by — DB raw aggregate 3번 round trip보다 빠름
+      const logs = await prisma.aiCostLog.findMany({
+        where: { createdAt: { gte: thirtyDaysAgo } },
+        select: { service: true, cost: true, createdAt: true },
+      });
+
+      type Bucket = Record<string, { cost: number; count: number }>;
+      const today: Bucket = {};
+      const last7: Bucket = {};
+      const last30: Bucket = {};
+      let totalToday = 0;
+      let totalLast7 = 0;
+      let totalLast30 = 0;
+
+      for (const log of logs) {
+        const svc = log.service || 'unknown';
+        const cost = log.cost || 0;
+
+        // last30 — 모든 로그 포함
+        if (!last30[svc]) last30[svc] = { cost: 0, count: 0 };
+        last30[svc].cost += cost;
+        last30[svc].count += 1;
+        totalLast30 += cost;
+
+        // last7
+        if (log.createdAt >= sevenDaysAgo) {
+          if (!last7[svc]) last7[svc] = { cost: 0, count: 0 };
+          last7[svc].cost += cost;
+          last7[svc].count += 1;
+          totalLast7 += cost;
+        }
+
+        // today
+        if (log.createdAt >= todayStart) {
+          if (!today[svc]) today[svc] = { cost: 0, count: 0 };
+          today[svc].cost += cost;
+          today[svc].count += 1;
+          totalToday += cost;
+        }
+      }
+
+      return reply.send({
+        ok: true,
+        today,
+        last7,
+        last30,
+        totals: {
+          today: totalToday,
+          last7: totalLast7,
+          last30: totalLast30,
+        },
+        // 측정 불가 안내 (frontend 표시용)
+        notMeasured: {
+          'openai-realtime': 'voice-chatbot은 client-side WebSocket으로 호출되어 서버 추적 불가. OpenAI dashboard에서 직접 확인.',
+          'openai-embedding': 'labflow-member embedding-service에 logApiCost 미연결. 추가 작업 필요.',
+        },
+      });
+    } catch (e: any) {
+      console.error('[automation:model-usage] 실패:', e?.message || e);
+      return reply.code(500).send({ ok: false, error: e?.message || 'unknown' });
+    }
   });
 }

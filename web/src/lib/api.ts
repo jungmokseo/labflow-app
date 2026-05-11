@@ -1827,6 +1827,30 @@ export async function testModels() {
   return apiFetch<ModelTestResult>('/api/automations/test-models', { method: 'POST' }, 0, 60000);
 }
 
+// ── AI 모델 사용량 ────────────────────────────────────
+export interface ServiceUsageBucket {
+  cost: number;
+  count: number;
+}
+
+export interface ModelUsageResult {
+  ok: boolean;
+  today: Record<string, ServiceUsageBucket>;
+  last7: Record<string, ServiceUsageBucket>;
+  last30: Record<string, ServiceUsageBucket>;
+  totals: { today: number; last7: number; last30: number };
+  notMeasured?: Record<string, string>;
+}
+
+/**
+ * AiCostLog 30일 데이터를 service별 today/7d/30d 집계.
+ * service 종류: claude-opus, claude-sonnet, claude-haiku, gemini-pro, gemini-flash,
+ *               openai-realtime, openai-embedding, unknown.
+ */
+export async function getModelUsage() {
+  return apiFetch<ModelUsageResult>('/api/automations/model-usage', { method: 'GET' }, 0, 30000);
+}
+
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;
