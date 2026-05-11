@@ -40,6 +40,12 @@ const completeSchema = z.object({
   done: z.boolean().optional(),
 });
 
+const byAssigneeQuerySchema = z.object({
+  name: z.string().min(1).max(120),
+  status: z.enum(['active', 'completed', 'all']).optional().default('active'),
+  dueWithin: z.coerce.number().int().min(0).max(365).optional(),
+});
+
 // In-memory mutex per (slackChannel, slackTs) — 같은 메시지에 reaction 동시 두 번이면
 // 첫 요청이 끝날 때까지 두 번째는 같은 promise 결과 받음. Railway single-replica 환경에서
 // race-safe. multi-replica로 가면 DB unique constraint 또는 advisory lock 필요.
@@ -441,23 +447,34 @@ export async function blissTasksRoutes(app: FastifyInstance) {
 
   // 진행 중 task 목록 (확정된 것 + 직접 추가한 것 모두)
   // ── 학생 이름으로 active task 조회 (BLISS-Bot get_my_tasks용, X-Sync-Token) ──
+  // 실제 metadata 구조:
+  //   - direct-create 후: metadata.blissDirect.assignedOwner
+  //   - confirm 후:      metadata.assignedOwner (FLAT, blissConfirmed는 생성되지 않음)
+  //   - blissSource는 둘 다 가짐 (Slack 원본 메타)
+  // 학생용 응답에서 PI 교수 메모(content 안의 "[교수 메모]" 섹션)는 노출하지 않음.
   app.get('/api/bliss-tasks/by-assignee', async (request, reply) => {
     const syncToken = request.headers['x-sync-token'] as string | undefined;
     const auth = requireSyncToken(syncToken);
     if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
 
-    const q = request.query as Record<string, string | undefined>;
-    const name = (q.name || '').trim();
-    if (!name) return reply.code(400).send({ error: 'name query required' });
-    const status = (q.status || 'active').trim();
-    const dueWithin = q.dueWithin ? parseInt(q.dueWithin, 10) : null;
+    const queryParseResult = byAssigneeQuerySchema.safeParse(request.query);
+    if (!queryParseResult.success) {
+      return reply.code(400).send({ error: 'invalid_query', detail: queryParseResult.error.flatten() });
+    }
+    const q = queryParseResult.data;
+    // 한글 NFC normalize + trim — Slack display name과 일관된 매칭.
+    const name = q.name.normalize('NFC').trim();
+    const status = q.status;
+    const dueWithin = q.dueWithin ?? null;
 
     const where: Prisma.CaptureWhereInput = {
       category: 'TASK',
       reviewed: true,
       OR: [
+        // direct-create: metadata.blissDirect.assignedOwner
         { metadata: { path: ['blissDirect', 'assignedOwner'], equals: name } },
-        { metadata: { path: ['blissConfirmed', 'ownerName'], equals: name } },
+        // confirm: metadata.assignedOwner (flat) — 검토 큐 거친 task의 실제 저장 위치
+        { metadata: { path: ['assignedOwner'], equals: name } },
       ],
     };
 
@@ -465,7 +482,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     else if (status === 'all') { /* no completed filter */ }
     else where.completed = false; // default 'active'
 
-    if (dueWithin !== null && !isNaN(dueWithin) && dueWithin >= 0) {
+    if (dueWithin !== null && dueWithin >= 0) {
       const limit = new Date();
       limit.setDate(limit.getDate() + dueWithin);
       where.actionDate = { lte: limit, not: null };
@@ -476,7 +493,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
       select: {
         id: true,
         summary: true,
-        content: true,
+        // content는 PI 메모를 포함할 수 있으므로 학생 응답에서 제외
         metadata: true,
         actionDate: true,
         priority: true,
@@ -493,10 +510,12 @@ export async function blissTasksRoutes(app: FastifyInstance) {
       count: captures.length,
       items: captures.map(c => {
         const meta = (c.metadata as Prisma.JsonObject | null) ?? {};
-        const source = (meta.blissConfirmed as Prisma.JsonObject | null)
-          || (meta.blissDirect as Prisma.JsonObject | null) || {};
-        const slackPermalink = (meta.blissSource as Prisma.JsonObject | null)?.slackPermalink
-          ?? source.slackPermalink ?? null;
+        const direct = (meta.blissDirect as Prisma.JsonObject | null) ?? {};
+        // blissSource (Slack 원본) 또는 blissDirect에서 slackPermalink 추출
+        const slackPermalink =
+          ((meta.blissSource as Prisma.JsonObject | null)?.slackPermalink as string | undefined)
+          ?? (direct.slackPermalink as string | undefined)
+          ?? null;
         return {
           id: c.id,
           title: c.summary,
@@ -504,7 +523,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
           priority: c.priority,
           completed: c.completed,
           createdAt: c.createdAt,
-          memo: (source.memo as string | undefined) || null,
+          // PI 메모(memo)는 학생용 응답에서 의도적으로 제외 (평가/내부 코멘트 노출 방지)
           slackPermalink,
         };
       }),
