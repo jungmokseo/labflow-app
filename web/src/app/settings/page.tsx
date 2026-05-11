@@ -357,10 +357,47 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
 }
 
 // ── Model Validation Section (OWNER 전용 — production env 키로 모든 AI 모델 ID 실측) ──
+// 회사별(Anthropic / Google Gemini / OpenAI) 카드 대시보드.
+// 검증 실행 전에도 현재 사용 중인 모델 카탈로그(id + 사용처)를 default로 표시.
 function ModelValidationSection() {
   const { toast } = useToast();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Awaited<ReturnType<typeof testModels>> | null>(null);
+
+  // 검증 실행 전 default 카탈로그 (백엔드 응답과 동일 구조)
+  const defaultProviders = [
+    {
+      name: 'Anthropic',
+      icon: '🅰️',
+      envVar: 'ANTHROPIC_API_KEY',
+      envSet: true,
+      models: [
+        { id: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', usage: '기본 LLM — 이메일 분류·brain chat·논문 분석·모든 cron 자동화', ok: false },
+        { id: 'claude-opus-4-7', displayName: 'Opus 4.7', usage: 'papers tool·paper deep summary·wiki deep synthesis (1M context)', ok: false },
+      ],
+    },
+    {
+      name: 'Google Gemini',
+      icon: '🟦',
+      envVar: 'GEMINI_API_KEY',
+      envSet: true,
+      models: [
+        { id: 'gemini-3.1-flash-lite', displayName: 'Flash-Lite (stable)', usage: '경량 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat lite', ok: false },
+        { id: 'gemini-3.1-pro-preview', displayName: 'Pro Preview', usage: 'labflow-member RAG engine (rag-engine.ts)', ok: false },
+        { id: 'gemini-3.1-pro-preview-customtools', displayName: 'Pro Custom Tools', usage: 'labflow-member FAQ tool-use (chat.ts·slack-command.ts /질문)', ok: false },
+      ],
+    },
+    {
+      name: 'OpenAI',
+      icon: '🟢',
+      envVar: 'OPENAI_API_KEY',
+      envSet: true,
+      models: [
+        { id: 'gpt-realtime-2', displayName: 'Realtime 2', usage: 'labflow-app voice chatbot (routes/voice-chatbot.ts)', ok: false },
+        { id: 'text-embedding-3-small', displayName: 'Embedding 3 Small', usage: 'labflow-member RAG embedding (paper/wiki/memo). 변경 시 전체 재인덱싱 필요', ok: false },
+      ],
+    },
+  ];
 
   const handleTest = async () => {
     if (running) return;
@@ -368,8 +405,8 @@ function ModelValidationSection() {
     try {
       const r = await testModels();
       setResult(r);
-      const okCount = Object.values(r.results).filter(x => x.ok).length;
-      const totalCount = Object.keys(r.results).length;
+      const okCount = r.providers.reduce((s, p) => s + p.models.filter(m => m.ok).length, 0);
+      const totalCount = r.providers.reduce((s, p) => s + p.models.length, 0);
       toast(
         r.ok ? `✅ ${okCount}/${totalCount} 모델 정상` : `⚠️ ${okCount}/${totalCount} 모델 정상 — 일부 실패`,
         r.ok ? 'success' : 'error',
@@ -383,14 +420,34 @@ function ModelValidationSection() {
     }
   };
 
+  // 백엔드 응답이 providers를 안 보내면 (legacy) defaultProviders 사용
+  const providers = result?.providers && result.providers.length > 0
+    ? result.providers
+    : defaultProviders;
+  const hasResult = !!result;
+
+  const totalModels = providers.reduce((s, p) => s + p.models.length, 0);
+  const okModels = providers.reduce((s, p) => s + p.models.filter(m => m.ok).length, 0);
+
   return (
-    <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-3">
+    <section className="bg-bg-card rounded-xl border border-border p-4 md:p-5 space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h3 className="font-semibold text-text-heading text-base">🔍 AI 모델 검증</h3>
+          <h3 className="font-semibold text-text-heading text-base flex items-center gap-2">
+            🔍 AI 모델 대시보드
+            {hasResult && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                result?.ok
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              }`}>
+                {okModels}/{totalModels} 정상
+              </span>
+            )}
+          </h3>
           <p className="text-xs text-text-muted mt-1">
-            현재 코드가 사용하는 모든 AI 모델 ID(Sonnet/Opus/Gemini/OpenAI Realtime)에 minimal API call 후 결과 표시.
-            모델 deprecation 또는 ID 변경 직후 production에서 실제 작동하는지 검증용.
+            현재 labflow-app·labflow-member가 사용하는 모든 AI 모델 ID를 회사별로 정리.
+            검증 실행 시 production env 키로 minimal API call하여 실측 상태 표시.
           </p>
         </div>
         <button
@@ -399,50 +456,132 @@ function ModelValidationSection() {
           className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap"
         >
           {running && <span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />}
-          {running ? '검증 중… (~15초)' : '모델 검증 실행'}
+          {running ? '검증 중… (~20초)' : hasResult ? '🔄 재검증' : '🔬 검증 실행'}
         </button>
       </div>
 
-      {result && (
-        <div className="border-t border-border pt-3">
-          <div className="text-xs text-text-muted mb-2">
-            결과: <span className={result.ok ? 'text-emerald-500 font-medium' : 'text-amber-500 font-medium'}>
-              {Object.values(result.results).filter(x => x.ok).length}/{Object.keys(result.results).length} 모델 정상
-            </span>
-          </div>
-          <div className="space-y-1.5 font-mono text-[11px]">
-            {Object.entries(result.results).map(([model, entry]) => (
-              <div
-                key={model}
-                className={`px-2 py-1.5 rounded border ${
-                  entry.ok
-                    ? 'bg-emerald-500/5 border-emerald-500/30'
-                    : 'bg-red-500/5 border-red-500/30'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className={entry.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}>
-                    {entry.ok ? '✅' : '❌'} {model}
-                  </span>
-                  {typeof entry.ms === 'number' && (
-                    <span className="text-text-muted">{entry.ms}ms</span>
-                  )}
-                </div>
-                {entry.output && (
-                  <div className="text-text-muted mt-1 break-all">→ {entry.output.slice(0, 150)}</div>
-                )}
-                {entry.error && (
-                  <div className="text-red-500 mt-1 break-all">⚠ {entry.error.slice(0, 200)}</div>
-                )}
-              </div>
-            ))}
-          </div>
-          <p className="text-[10px] text-text-muted/70 mt-2">
-            ❌ fail이면 그 모델 ID가 invalid/deprecated. 즉시 코드 수정 필요.
-          </p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {providers.map(provider => (
+          <ProviderCard key={provider.name} provider={provider} hasResult={hasResult} />
+        ))}
+      </div>
+
+      {hasResult && (
+        <p className="text-[11px] text-text-muted/70 border-t border-border pt-3">
+          ❌ fail이면 그 모델 ID가 invalid/deprecated. 즉시 코드 수정 필요.
+          모델 ID 변경 가이드: <code className="font-mono">.claude/CLAUDE.md → AI 모델 사용 규칙</code> 섹션.
+        </p>
       )}
     </section>
+  );
+}
+
+function ProviderCard({
+  provider,
+  hasResult,
+}: {
+  provider: {
+    name: string;
+    icon: string;
+    envVar: string;
+    envSet: boolean;
+    models: Array<{
+      id: string;
+      displayName: string;
+      usage: string;
+      ok: boolean;
+      ms?: number;
+      output?: string;
+      error?: string;
+    }>;
+  };
+  hasResult: boolean;
+}) {
+  const okCount = provider.models.filter(m => m.ok).length;
+  const totalCount = provider.models.length;
+  const allOk = hasResult && okCount === totalCount;
+  const anyFail = hasResult && okCount < totalCount;
+
+  return (
+    <div className={`rounded-lg border p-3 space-y-2 ${
+      allOk ? 'border-emerald-500/30 bg-emerald-500/5'
+        : anyFail ? 'border-red-500/30 bg-red-500/5'
+        : 'border-border bg-bg'
+    }`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-base shrink-0">{provider.icon}</span>
+          <span className="font-semibold text-text-heading text-sm truncate">{provider.name}</span>
+        </div>
+        {hasResult && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+            allOk ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+              : 'bg-red-500/15 text-red-700 dark:text-red-300'
+          }`}>
+            {okCount}/{totalCount}
+          </span>
+        )}
+      </div>
+
+      {!provider.envSet && (
+        <div className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded px-1.5 py-1">
+          ⚠ {provider.envVar} 미설정
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        {provider.models.map(model => (
+          <ModelRow key={model.id} model={model} hasResult={hasResult} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModelRow({
+  model,
+  hasResult,
+}: {
+  model: {
+    id: string;
+    displayName: string;
+    usage: string;
+    ok: boolean;
+    ms?: number;
+    output?: string;
+    error?: string;
+  };
+  hasResult: boolean;
+}) {
+  return (
+    <div className={`rounded border px-2 py-1.5 text-[11px] ${
+      hasResult
+        ? model.ok
+          ? 'bg-emerald-500/5 border-emerald-500/30'
+          : 'bg-red-500/5 border-red-500/30'
+        : 'bg-bg-card border-border'
+    }`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className={`font-medium ${
+          hasResult
+            ? model.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'
+            : 'text-text-heading'
+        }`}>
+          {hasResult ? (model.ok ? '✅' : '❌') : '○'} {model.displayName}
+        </span>
+        {typeof model.ms === 'number' && (
+          <span className="text-text-muted shrink-0">{model.ms}ms</span>
+        )}
+      </div>
+      <div className="font-mono text-[10px] text-text-muted mt-0.5 break-all">{model.id}</div>
+      <div className="text-[10px] text-text-muted mt-0.5 leading-snug">{model.usage}</div>
+      {hasResult && model.output && (
+        <div className="text-[10px] text-text-muted mt-1 break-all">→ {model.output.slice(0, 120)}</div>
+      )}
+      {hasResult && model.error && (
+        <div className="text-[10px] text-red-500 mt-1 break-all">⚠ {model.error.slice(0, 180)}</div>
+      )}
+    </div>
   );
 }
 

@@ -73,45 +73,143 @@ export async function automationRoutes(app: FastifyInstance) {
 
   // POST /api/automations/test-models — 현재 코드에서 사용 중인 모든 모델 ID로 minimal API call.
   // Production env의 키로 실측. 모델 ID 변경/deprecation 검증용.
+  //
+  // 응답 schema:
+  //   {
+  //     ok: boolean,
+  //     providers: [
+  //       {
+  //         name: 'Anthropic' | 'Google Gemini' | 'OpenAI',
+  //         icon: string,
+  //         envVar: string,
+  //         envSet: boolean,
+  //         models: [
+  //           {
+  //             id: string,                    // API ID (e.g. 'claude-sonnet-4-6')
+  //             displayName: string,           // UI 표시명 (e.g. 'Sonnet 4.6')
+  //             usage: string,                 // 한 줄 사용처 설명
+  //             ok: boolean,
+  //             ms?: number,
+  //             output?: string,
+  //             error?: string,
+  //           },
+  //           ...
+  //         ]
+  //       },
+  //     ],
+  //     results: { [modelId]: entry }        // backward-compat flat 형태도 유지
+  //   }
   app.post('/api/automations/test-models', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    const results: Record<string, { ok: boolean; ms?: number; error?: string; output?: string }> = {};
+    type ModelEntry = {
+      id: string;
+      displayName: string;
+      usage: string;
+      ok: boolean;
+      ms?: number;
+      output?: string;
+      error?: string;
+    };
+    type Provider = {
+      name: string;
+      icon: string;
+      envVar: string;
+      envSet: boolean;
+      models: ModelEntry[];
+    };
 
-    // ── Anthropic Sonnet 4.6 ──
+    const providers: Provider[] = [];
+    const flatResults: Record<string, { ok: boolean; ms?: number; error?: string; output?: string }> = {};
+
+    // ── Anthropic ──
+    const anthropicModels: Array<{ id: string; displayName: string; usage: string }> = [
+      {
+        id: 'claude-sonnet-4-6',
+        displayName: 'Sonnet 4.6',
+        usage: '기본 LLM — 이메일 분류·brain chat·논문 분석·모든 cron 자동화',
+      },
+      {
+        id: 'claude-opus-4-7',
+        displayName: 'Opus 4.7',
+        usage: 'papers tool·paper deep summary·wiki deep synthesis (1M context)',
+      },
+    ];
+    const anthropicProvider: Provider = {
+      name: 'Anthropic',
+      icon: '🅰️',
+      envVar: 'ANTHROPIC_API_KEY',
+      envSet: !!env.ANTHROPIC_API_KEY,
+      models: [],
+    };
     if (env.ANTHROPIC_API_KEY) {
-      for (const model of ['claude-sonnet-4-6', 'claude-opus-4-7']) {
+      const Anthropic = (await import('@anthropic-ai/sdk')).default;
+      const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+      for (const meta of anthropicModels) {
         const t0 = Date.now();
         try {
-          const Anthropic = (await import('@anthropic-ai/sdk')).default;
-          const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
           const r = await client.messages.create({
-            model,
+            model: meta.id,
             max_tokens: 10,
             messages: [{ role: 'user', content: 'ping' }],
           });
           const text = r.content.find(b => b.type === 'text');
-          results[model] = {
+          const entry: ModelEntry = {
+            ...meta,
             ok: true,
             ms: Date.now() - t0,
             output: text?.type === 'text' ? text.text.slice(0, 50) : '(non-text)',
           };
+          anthropicProvider.models.push(entry);
+          flatResults[meta.id] = { ok: entry.ok, ms: entry.ms, output: entry.output };
         } catch (e: any) {
-          results[model] = {
+          const entry: ModelEntry = {
+            ...meta,
             ok: false,
             ms: Date.now() - t0,
             error: e?.message?.slice(0, 200) || 'unknown',
           };
+          anthropicProvider.models.push(entry);
+          flatResults[meta.id] = { ok: false, ms: entry.ms, error: entry.error };
         }
       }
     } else {
-      results['anthropic'] = { ok: false, error: 'ANTHROPIC_API_KEY 미설정' };
+      for (const meta of anthropicModels) {
+        const entry: ModelEntry = { ...meta, ok: false, error: 'ANTHROPIC_API_KEY 미설정' };
+        anthropicProvider.models.push(entry);
+        flatResults[meta.id] = { ok: false, error: entry.error };
+      }
     }
+    providers.push(anthropicProvider);
 
-    // ── Gemini ──
+    // ── Google Gemini ──
+    const geminiModels: Array<{ id: string; displayName: string; usage: string }> = [
+      {
+        id: 'gemini-3.1-flash-lite',
+        displayName: 'Flash-Lite (stable)',
+        usage: '경량 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat lite',
+      },
+      {
+        id: 'gemini-3.1-pro-preview',
+        displayName: 'Pro Preview',
+        usage: 'labflow-member RAG engine (rag-engine.ts)',
+      },
+      {
+        id: 'gemini-3.1-pro-preview-customtools',
+        displayName: 'Pro Custom Tools',
+        usage: 'labflow-member FAQ tool-use (chat.ts·slack-command.ts /질문)',
+      },
+    ];
+    const geminiProvider: Provider = {
+      name: 'Google Gemini',
+      icon: '🟦',
+      envVar: 'GEMINI_API_KEY',
+      envSet: !!env.GEMINI_API_KEY,
+      models: [],
+    };
     if (env.GEMINI_API_KEY) {
-      for (const model of ['gemini-3.1-flash-lite', 'gemini-3.1-pro-preview']) {
+      for (const meta of geminiModels) {
         const t0 = Date.now();
         try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${meta.id}:generateContent?key=${env.GEMINI_API_KEY}`;
           const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -122,55 +220,151 @@ export async function automationRoutes(app: FastifyInstance) {
           });
           const data = (await res.json()) as any;
           if (res.ok && data.candidates?.[0]) {
-            results[model] = {
+            const entry: ModelEntry = {
+              ...meta,
               ok: true,
               ms: Date.now() - t0,
               output: (data.candidates[0].content?.parts?.[0]?.text || '').slice(0, 50),
             };
+            geminiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: entry.ok, ms: entry.ms, output: entry.output };
           } else {
-            results[model] = {
+            const entry: ModelEntry = {
+              ...meta,
               ok: false,
               ms: Date.now() - t0,
               error: data.error?.message?.slice(0, 200) || `HTTP ${res.status}`,
             };
+            geminiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: false, ms: entry.ms, error: entry.error };
           }
         } catch (e: any) {
-          results[model] = { ok: false, error: e?.message || 'unknown' };
+          const entry: ModelEntry = { ...meta, ok: false, error: e?.message || 'unknown' };
+          geminiProvider.models.push(entry);
+          flatResults[meta.id] = { ok: false, error: entry.error };
         }
       }
     } else {
-      results['gemini'] = { ok: false, error: 'GEMINI_API_KEY 미설정' };
+      for (const meta of geminiModels) {
+        const entry: ModelEntry = { ...meta, ok: false, error: 'GEMINI_API_KEY 미설정' };
+        geminiProvider.models.push(entry);
+        flatResults[meta.id] = { ok: false, error: entry.error };
+      }
     }
+    providers.push(geminiProvider);
 
-    // ── OpenAI Realtime 2 (model list 조회로 존재 확인 — 실제 WebSocket 안 열음) ──
+    // ── OpenAI ──
+    const openaiProvider: Provider = {
+      name: 'OpenAI',
+      icon: '🟢',
+      envVar: 'OPENAI_API_KEY',
+      envSet: !!env.OPENAI_API_KEY,
+      models: [],
+    };
     if (env.OPENAI_API_KEY) {
-      const t0 = Date.now();
-      try {
-        const res = await fetch('https://api.openai.com/v1/models/gpt-realtime-2', {
-          headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
-        });
-        const data = (await res.json()) as any;
-        if (res.ok && data.id === 'gpt-realtime-2') {
-          results['gpt-realtime-2'] = {
-            ok: true,
-            ms: Date.now() - t0,
-            output: `id=${data.id}, owned_by=${data.owned_by}`,
-          };
-        } else {
-          results['gpt-realtime-2'] = {
-            ok: false,
-            ms: Date.now() - t0,
-            error: data.error?.message?.slice(0, 200) || `HTTP ${res.status}`,
-          };
+      // 1) gpt-realtime-2 — model metadata 조회 (WebSocket 실측 X, 존재 확인만)
+      {
+        const meta = {
+          id: 'gpt-realtime-2',
+          displayName: 'Realtime 2',
+          usage: 'labflow-app voice chatbot (routes/voice-chatbot.ts)',
+        };
+        const t0 = Date.now();
+        try {
+          const res = await fetch('https://api.openai.com/v1/models/gpt-realtime-2', {
+            headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+          });
+          const data = (await res.json()) as any;
+          if (res.ok && data.id === 'gpt-realtime-2') {
+            const entry: ModelEntry = {
+              ...meta,
+              ok: true,
+              ms: Date.now() - t0,
+              output: `id=${data.id}, owned_by=${data.owned_by}`,
+            };
+            openaiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: entry.ok, ms: entry.ms, output: entry.output };
+          } else {
+            const entry: ModelEntry = {
+              ...meta,
+              ok: false,
+              ms: Date.now() - t0,
+              error: data.error?.message?.slice(0, 200) || `HTTP ${res.status}`,
+            };
+            openaiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: false, ms: entry.ms, error: entry.error };
+          }
+        } catch (e: any) {
+          const entry: ModelEntry = { ...meta, ok: false, error: e?.message || 'unknown' };
+          openaiProvider.models.push(entry);
+          flatResults[meta.id] = { ok: false, error: entry.error };
         }
-      } catch (e: any) {
-        results['gpt-realtime-2'] = { ok: false, error: e?.message || 'unknown' };
+      }
+
+      // 2) text-embedding-3-small — minimal embedding API call로 실측
+      {
+        const meta = {
+          id: 'text-embedding-3-small',
+          displayName: 'Embedding 3 Small',
+          usage: 'labflow-member RAG embedding (paper/wiki/memo). 변경 시 전체 재인덱싱 필요',
+        };
+        const t0 = Date.now();
+        try {
+          const res = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              input: 'ping',
+            }),
+          });
+          const data = (await res.json()) as any;
+          if (res.ok && Array.isArray(data.data) && data.data[0]?.embedding) {
+            const dim = data.data[0].embedding.length;
+            const entry: ModelEntry = {
+              ...meta,
+              ok: true,
+              ms: Date.now() - t0,
+              output: `dim=${dim}, tokens=${data.usage?.total_tokens ?? '?'}`,
+            };
+            openaiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: entry.ok, ms: entry.ms, output: entry.output };
+          } else {
+            const entry: ModelEntry = {
+              ...meta,
+              ok: false,
+              ms: Date.now() - t0,
+              error: data.error?.message?.slice(0, 200) || `HTTP ${res.status}`,
+            };
+            openaiProvider.models.push(entry);
+            flatResults[meta.id] = { ok: false, ms: entry.ms, error: entry.error };
+          }
+        } catch (e: any) {
+          const entry: ModelEntry = { ...meta, ok: false, error: e?.message || 'unknown' };
+          openaiProvider.models.push(entry);
+          flatResults[meta.id] = { ok: false, error: entry.error };
+        }
       }
     } else {
-      results['openai'] = { ok: false, error: 'OPENAI_API_KEY 미설정' };
+      for (const meta of [
+        { id: 'gpt-realtime-2', displayName: 'Realtime 2', usage: 'voice chatbot' },
+        { id: 'text-embedding-3-small', displayName: 'Embedding 3 Small', usage: 'RAG embedding' },
+      ]) {
+        const entry: ModelEntry = { ...meta, ok: false, error: 'OPENAI_API_KEY 미설정' };
+        openaiProvider.models.push(entry);
+        flatResults[meta.id] = { ok: false, error: entry.error };
+      }
     }
+    providers.push(openaiProvider);
 
-    const allOk = Object.values(results).every(r => r.ok);
-    return reply.code(allOk ? 200 : 207).send({ ok: allOk, results });
+    const allOk = providers.every(p => p.models.every(m => m.ok));
+    return reply.code(allOk ? 200 : 207).send({
+      ok: allOk,
+      providers,
+      results: flatResults, // backward-compat
+    });
   });
 }

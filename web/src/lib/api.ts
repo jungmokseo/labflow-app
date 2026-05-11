@@ -1791,16 +1791,37 @@ export interface ModelTestEntry {
   error?: string;
 }
 
+export interface ProviderModelEntry {
+  id: string;
+  displayName: string;
+  usage: string;
+  ok: boolean;
+  ms?: number;
+  output?: string;
+  error?: string;
+}
+
+export interface ProviderEntry {
+  name: string;
+  icon: string;
+  envVar: string;
+  envSet: boolean;
+  models: ProviderModelEntry[];
+}
+
 export interface ModelTestResult {
   ok: boolean;
+  providers: ProviderEntry[];
+  /** @deprecated provider-grouped UI 도입 후에는 providers 사용 — backward-compat */
   results: Record<string, ModelTestEntry>;
 }
 
 /**
  * 현재 코드에서 사용 중인 모든 AI 모델 ID로 minimal API call하여 production 작동 검증.
- * Anthropic Sonnet/Opus + Gemini Flash-Lite/Pro + OpenAI Realtime 2.
+ * Anthropic Sonnet/Opus + Gemini Flash-Lite/Pro/CustomTools + OpenAI Realtime 2/Embedding.
  *
  * 모델 변경/deprecation 후 끝까지 검증 용도. settings → 시스템 상태 탭 button.
+ * Provider 별로 그룹핑된 응답 (providers[]) — UI 카드 표시용.
  */
 export async function testModels() {
   return apiFetch<ModelTestResult>('/api/automations/test-models', { method: 'POST' }, 0, 60000);
