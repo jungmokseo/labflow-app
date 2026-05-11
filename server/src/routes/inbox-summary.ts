@@ -71,6 +71,12 @@ export async function inboxSummaryRoutes(app: FastifyInstance) {
       category: 'TASK',
       status: 'active',
       completed: false,
+      // BLISS-Slack 출처 task만 카운트 (PI 일반 task와 분리).
+      // App Home "🟢 진행 중 task"는 학생→PI 흐름 기준 inbox 메트릭.
+      OR: [
+        { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
+        { metadata: { path: ['blissDirect'], not: Prisma.JsonNull } },
+      ],
     };
 
     const [reviewQueueCount, activeCount, recentReview] = await Promise.all([
