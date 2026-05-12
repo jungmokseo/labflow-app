@@ -289,10 +289,45 @@ function buildUserPrompt(items: ClassifyInput[]): string {
     .join('\n\n');
 }
 
+/**
+ * JSON 배열 파싱 — 다음 케이스에 robust:
+ *   - 응답 앞뒤에 설명 텍스트 (e.g. "Here's the classification:\n[...]")
+ *   - markdown code fence (```json ... ```)
+ *   - JSON 잘림 (max_tokens 초과로 마지막 객체가 짤린 경우)
+ *
+ * 잘림 복구: 마지막 정상 객체 끝에서 `]`로 닫아서 partial array 반환.
+ */
 function parseJsonArray(text: string): ClassifyOutput[] {
-  const m = text.match(/\[[\s\S]*\]/);
-  if (!m) throw new Error('JSON 배열 미감지');
-  const parsed = JSON.parse(m[0]);
+  // 1) code fence 제거
+  let cleaned = text.replace(/```(?:json)?\s*\n?/gi, '').replace(/```/g, '').trim();
+
+  // 2) 처음 [ 위치 찾기
+  const startIdx = cleaned.indexOf('[');
+  if (startIdx < 0) throw new Error(`JSON 배열 미감지 (응답 앞 100자: ${text.slice(0, 100)})`);
+  cleaned = cleaned.slice(startIdx);
+
+  // 3) parse 시도 — 성공이면 OK
+  let parsed: unknown;
+  try {
+    // 마지막 ] 까지 잘라서 (뒤에 남은 설명 텍스트 무시)
+    const endIdx = cleaned.lastIndexOf(']');
+    if (endIdx > 0) {
+      parsed = JSON.parse(cleaned.slice(0, endIdx + 1));
+    } else {
+      throw new Error('missing closing bracket');
+    }
+  } catch {
+    // 4) 잘린 응답 복구 — 마지막 정상 } 위치를 찾아 그 뒤로 ] 추가
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (lastBrace < 0) throw new Error(`JSON parse 실패 + 정상 객체 없음 (응답 앞 200자: ${text.slice(0, 200)})`);
+    const recovered = cleaned.slice(0, lastBrace + 1) + ']';
+    try {
+      parsed = JSON.parse(recovered);
+    } catch (e: any) {
+      throw new Error(`JSON parse 실패 (복구 시도 후): ${e?.message}. 응답 앞 200자: ${text.slice(0, 200)}`);
+    }
+  }
+
   if (!Array.isArray(parsed)) throw new Error('JSON이 배열 아님');
   const VALID_ORG = new Set<OrgKind>(['yonsei', 'lynksolutec', 'personal']);
   const VALID_URG = new Set<Urgency>(['urgent', 'action-needed', 'schedule', 'info', 'promo']);
@@ -306,12 +341,24 @@ function parseJsonArray(text: string): ClassifyOutput[] {
     }));
 }
 
+// ── 배치 분류 설정 ────────────────────────────────────
+// 한 배치당 이메일 수. 작을수록 token 안전 + per-batch fallback 격리도가 좋아짐.
+// 10개 = 평균 800~1200 output tokens (max_tokens 2048 충분).
+const BATCH_SIZE = 10;
+
+// API 호출 timeout (ms). Sonnet 4.6은 50개를 한 번에 처리할 때 60s+ 걸림 — 배치는 짧음.
+const CLASSIFY_TIMEOUT_MS = 90_000;
+
 async function classifyWithSonnet(items: ClassifyInput[]): Promise<ClassifyOutput[]> {
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY 미설정');
-  const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+  const anthropic = new Anthropic({
+    apiKey: env.ANTHROPIC_API_KEY,
+    timeout: CLASSIFY_TIMEOUT_MS,
+    maxRetries: 2, // SDK가 retryable 에러 (429/529 등) 자동 재시도
+  });
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
+    max_tokens: 2048, // 10개 이메일 × 평균 150 tokens = 1500 → 2048로 safety margin
     system: [{ type: 'text', text: CLASSIFY_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: buildUserPrompt(items) }],
   });
@@ -325,13 +372,78 @@ async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutpu
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY 미설정');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
-  const result = await model.generateContent({
+
+  // Gemini SDK는 native timeout 없음 → Promise.race로 강제 timeout
+  const callPromise = model.generateContent({
     contents: [
       { role: 'user', parts: [{ text: `${CLASSIFY_SYSTEM_PROMPT}\n\n---\n\n${buildUserPrompt(items)}` }] },
     ],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+    generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
   });
+  const timeoutPromise = new Promise<never>((_, rej) =>
+    setTimeout(() => rej(new Error(`Gemini timeout after ${CLASSIFY_TIMEOUT_MS}ms`)), CLASSIFY_TIMEOUT_MS),
+  );
+  const result = await Promise.race([callPromise, timeoutPromise]);
   return parseJsonArray(result.response.text());
+}
+
+/**
+ * 배치 분류 — inputs를 BATCH_SIZE개씩 나눠 병렬 호출.
+ * 각 배치는 자체 local index 0..n-1로 호출 (모델 confusion 방지),
+ * 결과는 globalIdx로 복원해서 반환.
+ *
+ * 각 배치는 독립적으로 Sonnet 시도 → 실패 시 Gemini fallback.
+ * 두 모델 모두 실패한 배치만 unclassified로 (다른 배치는 살아남음).
+ *
+ * 반환: { classified, batchErrors }
+ *   classified.index는 inputs 기준 global index (입력 그대로 매핑).
+ */
+async function classifyInBatches(
+  inputs: ClassifyInput[],
+): Promise<{ classified: ClassifyOutput[]; batchErrors: string[] }> {
+  // 배치 분할 + 각 배치 안에서 local index 0..n-1로 재매핑
+  type BatchSlot = { localItems: ClassifyInput[]; globalIdxs: number[]; batchNum: number };
+  const slots: BatchSlot[] = [];
+  for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
+    const slice = inputs.slice(i, i + BATCH_SIZE);
+    slots.push({
+      localItems: slice.map((e, localIdx) => ({ ...e, index: localIdx })),
+      globalIdxs: slice.map(e => e.index),
+      batchNum: Math.floor(i / BATCH_SIZE),
+    });
+  }
+
+  const batchErrors: string[] = [];
+  const results = await Promise.all(
+    slots.map(async ({ localItems, globalIdxs, batchNum }) => {
+      // Sonnet 시도
+      try {
+        const r = await classifyWithSonnet(localItems);
+        if (r.length === 0) throw new Error('Sonnet 응답 빈 배열');
+        return r.map(c => ({ ...c, index: globalIdxs[c.index] })).filter(c => c.index !== undefined);
+      } catch (sonnetErr: any) {
+        const sonnetMsg = sonnetErr?.message || String(sonnetErr);
+        console.warn(`[general-email-briefing] batch ${batchNum} Sonnet 실패 (${sonnetMsg}) → Gemini fallback`);
+        // Gemini fallback
+        try {
+          const r = await classifyWithGemini(localItems);
+          if (r.length === 0) throw new Error('Gemini 응답 빈 배열');
+          return r.map(c => ({ ...c, index: globalIdxs[c.index] })).filter(c => c.index !== undefined);
+        } catch (geminiErr: any) {
+          const geminiMsg = geminiErr?.message || String(geminiErr);
+          const summary = `batch ${batchNum} (${localItems.length}건): sonnet=${sonnetMsg.slice(0, 80)} | gemini=${geminiMsg.slice(0, 80)}`;
+          console.error(`[general-email-briefing] ${summary}`);
+          batchErrors.push(summary);
+          return []; // 이 배치만 unclassified — 다른 배치는 영향 없음
+        }
+      }
+    }),
+  );
+
+  return {
+    classified: results.flat(),
+    batchErrors,
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -462,9 +574,11 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     return result;
   }
 
-  // 4. 분류·요약 — Sonnet → Gemini fallback
+  // 4. 분류·요약 — 배치 분할 (BATCH_SIZE=10) + 배치별 Sonnet → Gemini fallback
+  //    이전엔 50개 한 번에 분류 → 4096 토큰 초과 / 60s+ 타임아웃으로 JSON 잘림 → 두 모델 모두 실패.
+  //    배치 분할로 단일 fail point 제거: 한 배치만 실패해도 나머지 배치는 살아남음.
   const classifyInputs: ClassifyInput[] = filtered.map((e, i) => ({
-    index: i,
+    index: i, // global index — classifyInBatches가 batch 내부에서 local 0..n-1로 재매핑 후 복원
     subject: e.subject,
     from: e.sender,
     toCC: e.toCC,
@@ -472,38 +586,19 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     body: e.body,
   }));
 
-  let classified: ClassifyOutput[] = [];
-  try {
-    classified = await classifyWithSonnet(classifyInputs);
-  } catch (err: any) {
-    console.warn(`[general-email-briefing] Sonnet 분류 실패 (${err?.message}) → Gemini fallback`);
-    result.errors.push(`sonnet: ${err?.message || err}`);
-    try {
-      classified = await classifyWithGemini(classifyInputs);
-    } catch (err2: any) {
-      result.errors.push(`gemini: ${err2?.message || err2}`);
-      console.error('[general-email-briefing] Gemini fallback도 실패 — 분류 없이 종료');
-      // 두 모델 모두 실패 — 분류 없이 raw 목록만 슬랙 전송
-      result.briefingMarkdown =
-        `*📧 일반 이메일 브리핑 — ${formatKstDate(new Date())}*\n` +
-        `_분류 모델 모두 실패. 메타 정보만 표시._\n\n` +
-        filtered
-          .slice(0, 50)
-          .map(e => `- ${e.subject.slice(0, 80)} _(${e.senderName})_`)
-          .join('\n');
-      const slack = await postSlackAdminDm(result.briefingMarkdown);
-      result.slackDmSent = slack.ok;
-      if (!slack.ok && slack.error) result.errors.push(`slack: ${slack.error}`);
-      return result;
-    }
-  }
+  const { classified: totalClassified, batchErrors: allBatchErrors } = await classifyInBatches(classifyInputs);
+  if (allBatchErrors.length > 0) result.errors.push(...allBatchErrors);
 
-  // 5. 분류 결과를 이메일에 매핑 (per-email 실패 → skip)
-  const classMap = new Map(classified.map(c => [c.index, c]));
+  // 5. 분류 결과를 이메일에 매핑 (per-email 실패 → unclassified 섹션으로)
+  const classMap = new Map(totalClassified.map(c => [c.index, c]));
   const briefed: BriefedEmail[] = [];
+  const unclassified: ParsedEmail[] = [];
   for (let i = 0; i < filtered.length; i++) {
     const c = classMap.get(i);
-    if (!c) continue; // 분류 누락 — skip
+    if (!c) {
+      unclassified.push(filtered[i]);
+      continue;
+    }
     briefed.push({
       ...filtered[i],
       org: c.org,
@@ -514,7 +609,29 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
   result.emailsBriefed = briefed.length;
 
   // 6. 마크다운 + Slack DM
-  result.briefingMarkdown = buildMarkdown(briefed);
+  // 분류 성공 0건이면 fallback (raw 메타 정보), 1건 이상이면 정상 + 분류 실패는 별도 섹션
+  if (briefed.length === 0 && unclassified.length > 0) {
+    result.briefingMarkdown =
+      `*📧 일반 이메일 브리핑 — ${formatKstDate(new Date())}*\n` +
+      `_⚠️ 분류 모델 모두 실패 (${allBatchErrors.length}개 배치). 메타 정보만 표시._\n\n` +
+      unclassified
+        .slice(0, 50)
+        .map(e => `- ${e.subject.slice(0, 80)} _(${e.senderName})_`)
+        .join('\n');
+  } else {
+    let markdown = buildMarkdown(briefed);
+    // 일부 배치만 실패한 경우 — 분류 실패 이메일을 끝에 추가 (사용자가 알 수 있게)
+    if (unclassified.length > 0) {
+      markdown +=
+        `\n\n*⚠️ 분류 실패 (${unclassified.length}건)*\n` +
+        unclassified
+          .slice(0, 20)
+          .map(e => `- ${e.subject.slice(0, 80)} _(${e.senderName})_`)
+          .join('\n');
+    }
+    result.briefingMarkdown = markdown;
+  }
+
   const slack = await postSlackAdminDm(result.briefingMarkdown);
   result.slackDmSent = slack.ok;
   if (!slack.ok && slack.error) {
@@ -524,7 +641,8 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
 
   console.log(
     `[general-email-briefing] scanned=${result.emailsScanned} briefed=${result.emailsBriefed} ` +
-      `excluded(weekly)=${result.excludedWeeklyReports} slack=${result.slackDmSent} errors=${result.errors.length}`,
+      `unclassified=${unclassified.length} excluded(weekly)=${result.excludedWeeklyReports} ` +
+      `slack=${result.slackDmSent} batchErrors=${allBatchErrors.length}`,
   );
   return result;
 }
