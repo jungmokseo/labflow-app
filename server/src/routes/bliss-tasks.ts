@@ -1,10 +1,55 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { Capture, Prisma, Priority } from '@prisma/client';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { notifyStudentTaskAssigned } from '../services/slack-notify.js';
+
+/**
+ * 외국어 detect — 한자/일본어가 한글보다 많으면 외국어로 판정.
+ * detectLanguageForTranslation (bliss-slack-bot translate-config.ts) 와 같은 정책.
+ * 영어 단독은 false (영어 title은 PI가 그대로 보길 원할 수 있음 — 기술 용어).
+ */
+function isLikelyForeignTitle(s: string): boolean {
+  if (!s) return false;
+  const cjk = (s.match(/[一-鿿]/g) ?? []).length;       // 한자 (중국어 + 일본어 한자)
+  const hangul = (s.match(/[가-힣]/g) ?? []).length;     // 한글
+  // 한자가 3자 이상이고 한자가 한글보다 많으면 외국어 (중국어/일본어)
+  return cjk >= 3 && cjk > hangul;
+}
+
+/**
+ * 외국어 → 한국어 번역 (Gemini 3.1 Flash-Lite).
+ * 실패 시 null 반환 — caller가 원본 사용.
+ * 6초 timeout — capture 등록 latency 우선 (실패해도 원본 title 그대로 진행).
+ */
+async function translateTitleToKorean(text: string): Promise<string | null> {
+  if (!env.GEMINI_API_KEY) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-3.1-flash-lite',
+      systemInstruction:
+        'You are a translator. Translate the user text to Korean (한국어). ' +
+        'Output ONLY the translated text — no preamble, no explanation, no quotes. ' +
+        'Keep English technical terms (e.g. MOF, PDMS, project titles) as-is. ' +
+        'Never refuse or apologize — produce the best translation.',
+      generationConfig: { temperature: 0.2, maxOutputTokens: 256 },
+    });
+    const callPromise = model.generateContent(text);
+    const timeoutPromise = new Promise<never>((_, rej) =>
+      setTimeout(() => rej(new Error('translate timeout')), 6000),
+    );
+    const result = await Promise.race([callPromise, timeoutPromise]);
+    const translated = result.response.text().trim();
+    return translated || null;
+  } catch (e: any) {
+    console.warn('[bliss-tasks] title 번역 실패 (silent):', e?.message);
+    return null;
+  }
+}
 
 const captureSchema = z.object({
   title: z.string().min(1).max(300),
@@ -145,6 +190,22 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     // 학생 DM 발송 안 함 (PI 본인 할 일이라 알림 불필요).
     const fromPi = body.metadata?.fromPi === true;
 
+    // ── 외국어 title 자동 번역 ──
+    // mpim/reaction 등에서 raw text 첫 30~80자가 title로 들어오면 중국어/일본어 그대로일 수 있음.
+    // BLISS-Bot Home 탭에서 PI가 한국어로 한눈에 파악할 수 있도록 자동 번역.
+    // 원문(originalMessage)은 그대로 보존.
+    let finalTitle = body.title;
+    let translatedKoTitle: string | null = null;
+    if (isLikelyForeignTitle(body.title)) {
+      // 짧은 title보다 원문 전체를 번역하는 게 품질 ↑ — 첫 200자만 번역해서 latency 통제.
+      const sourceForTranslation = body.originalMessage.slice(0, 200) || body.title;
+      translatedKoTitle = await translateTitleToKorean(sourceForTranslation);
+      if (translatedKoTitle) {
+        // 번역 결과의 첫 줄 + 60자 cap (App Home 가독성)
+        finalTitle = translatedKoTitle.split('\n')[0].slice(0, 60);
+      }
+    }
+
     // ── Idempotency — Slack reaction trigger 중복 등록 방지 ──
     // reaction이 짧게 두 번 들어오거나(race) 사용자가 같은 메시지에 다른 trigger emoji 추가하면
     // 중복 capture 가능. 같은 channel+ts는 하나의 capture만 유지.
@@ -173,12 +234,22 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         if (existing) return { captureId: existing.id, deduped: true };
       }
       // 2) 신규 생성
+      // content: 외국어 원문일 경우 "📝 한글 요약: ... --- 원문 ---" prefix 추가하여 PI가 양쪽 다 볼 수 있게.
+      const contentParts: string[] = [];
+      if (translatedKoTitle && translatedKoTitle.trim()) {
+        contentParts.push(`📝 한글 번역: ${translatedKoTitle.trim()}`);
+        contentParts.push('');
+        contentParts.push('--- 원문 ---');
+      }
+      contentParts.push(body.originalMessage);
+      const finalContent = contentParts.join('\n').slice(0, 8000);
+
       const created = await prisma.capture.create({
         data: {
           userId: user.id,
           labId,
-          content: body.originalMessage,
-          summary: body.title.slice(0, 200),
+          content: finalContent,
+          summary: finalTitle.slice(0, 200),
           category: 'TASK',
           tags: fromPi
             ? ['bliss-slack', 'pi-self-task']
@@ -199,6 +270,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
               slackChannel: body.slackChannel,
               slackTs: body.slackTs,
             },
+            ...(translatedKoTitle ? { translatedKoTitle, originalTitle: body.title } : {}),
             ...(fromPi ? { fromPi: true } : {}),
             capturedAt: new Date().toISOString(),
           },

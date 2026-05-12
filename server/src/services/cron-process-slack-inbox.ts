@@ -119,6 +119,27 @@ async function slackGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * 채널의 멤버 ID 배열 (in-memory cache, 5분 TTL).
+ * conversations.members 호출 — public/private 채널 모두 지원.
+ * 실패 시 null (cron은 채널 스캔을 안전 skip).
+ */
+const channelMembersCache = new Map<string, { members: string[]; expiresAt: number }>();
+async function getChannelMembers(channelId: string): Promise<string[] | null> {
+  const cached = channelMembersCache.get(channelId);
+  if (cached && cached.expiresAt > Date.now()) return cached.members;
+  try {
+    const data = await slackGet<{ ok: boolean; members?: string[]; error?: string }>(
+      `conversations.members?channel=${encodeURIComponent(channelId)}&limit=200`,
+    );
+    if (!data.ok || !Array.isArray(data.members)) return null;
+    channelMembersCache.set(channelId, { members: data.members, expiresAt: Date.now() + 5 * 60 * 1000 });
+    return data.members;
+  } catch {
+    return null;
+  }
+}
+
 async function discoverTrackedChannels(): Promise<ChannelInfo[]> {
   const out: ChannelInfo[] = [];
   let cursor: string | undefined;
@@ -138,11 +159,20 @@ async function discoverTrackedChannels(): Promise<ChannelInfo[]> {
     if (!data.ok) {
       throw new Error(`conversations.list 실패: ${data.error || 'unknown'}`);
     }
+    // PI(ADMIN_USER_ID)가 멤버인 채널만 스캔 — 사용자가 참여 안 한 봇+학생만 채널은 제외.
+    // 정책: "내가 봇과 같이 참여하거나 봇 없이 나와 학생이 참여한 대화만 검토 큐에 들어옴".
+    // ADMIN_USER_ID 미설정 시 PI 체크 건너뜀 (이전 동작 유지 — 봇 멤버십만 검증).
+    const piUserId = env.ADMIN_USER_ID;
     for (const ch of data.channels || []) {
       if (!ch.is_member) continue;
       const name = (ch.name || '').toLowerCase();
       if (!name) continue;
       if (EXCLUDED_CHANNEL_NAMES.has(name)) continue;
+      if (piUserId) {
+        const members = await getChannelMembers(ch.id);
+        if (members && !members.includes(piUserId)) continue;
+        // members fetch 실패 시 보수적으로 포함 (이전 동작 유지)
+      }
       out.push({ id: ch.id, name: `#${ch.name}` });
     }
     cursor = data.response_metadata?.next_cursor || undefined;
@@ -401,6 +431,33 @@ async function resolveOwner() {
   return { userId: user.id, labId: lab?.id ?? null };
 }
 
+/**
+ * LLM이 prompt instruction을 무시하고 외국어 title을 반환하는 경우 후처리.
+ * 한자 ≥ 3자 AND 한자 > 한글이면 summary_ko의 첫 문장으로 대체 (이미 한국어).
+ * summary_ko 없으면 "(외국어 메시지)" prefix 추가 — 최소한 PI가 외국어임을 인지.
+ */
+function normalizeKoreanTitle(classified: ClassifiedMessage): ClassifiedMessage {
+  const title = classified.title;
+  if (!title) return classified;
+  const cjk = (title.match(/[一-鿿]/g) ?? []).length;
+  const hangul = (title.match(/[가-힣]/g) ?? []).length;
+  const isForeign = cjk >= 3 && cjk > hangul;
+  if (!isForeign) return classified;
+
+  // summary_ko가 있으면 첫 문장을 title로 (이미 한국어로 LLM이 작성한 요약)
+  if (classified.summaryKo && classified.summaryKo.trim()) {
+    const firstSentence = classified.summaryKo
+      .split(/[.!?。！？]\s*/)[0]
+      .trim()
+      .slice(0, 60);
+    if (firstSentence) {
+      return { ...classified, title: firstSentence };
+    }
+  }
+  // summary_ko도 없으면 원본 title 앞에 [외국어] prefix 추가 (시각 표시)
+  return { ...classified, title: `[외국어] ${title.slice(0, 50)}` };
+}
+
 // ── Capture 생성 (bliss-tasks/captures와 동일 schema) ─
 async function createCapture(input: {
   userId: string;
@@ -427,9 +484,12 @@ async function createCapture(input: {
   });
   if (existing) return { created: false };
 
+  // LLM이 prompt를 무시하고 외국어 title을 반환했을 때 한국어로 후처리 (summary_ko 사용).
+  const classified = normalizeKoreanTitle(input.classified);
+
   // Content는 한글 요약 + 원문. summary는 한글 title 그대로.
   // 외국어 메시지(중국어 등)도 PI가 한국어로 한눈에 파악 가능.
-  const koSummary = input.classified.summaryKo;
+  const koSummary = classified.summaryKo;
   const contentParts: string[] = [];
   if (koSummary) {
     contentParts.push(`📝 한글 요약: ${koSummary}`);
@@ -443,7 +503,7 @@ async function createCapture(input: {
       userId: input.userId,
       labId: input.labId,
       content: contentParts.join('\n').slice(0, 8000),
-      summary: input.classified.title.slice(0, 200),  // 이미 한글 (prompt에서 강제)
+      summary: classified.title.slice(0, 200),  // normalize로 한국어 보장
       category: 'TASK',
       tags: ['bliss-slack', 'review-queue'],
       priority: 'MEDIUM',
@@ -463,11 +523,12 @@ async function createCapture(input: {
           slackTs: input.ts,
         },
         classification: {
-          kind: input.classified.kind,
-          ownerKoreanName: input.classified.ownerKoreanName,
-          dueDate: input.classified.dueDate,
-          type: input.classified.type,
+          kind: classified.kind,
+          ownerKoreanName: classified.ownerKoreanName,
+          dueDate: classified.dueDate,
+          type: classified.type,
           summaryKo: koSummary,  // BLISS-Bot Home에서 표시 가능
+          originalTitleIfForeign: classified.title !== input.classified.title ? input.classified.title : undefined,
         },
         capturedAt: new Date().toISOString(),
       },
