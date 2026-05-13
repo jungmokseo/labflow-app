@@ -41,6 +41,7 @@ import { monitorManuscriptMail } from './services/manuscript-mail-monitor.js';
 import { syncVacationsToCalendar } from './services/vacation-calendar-sync.js';
 import { grantRoutes } from './routes/grants.js';
 import { automationRoutes } from './routes/automations.js';
+import { internalTriggerRoutes } from './routes/internal-trigger.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
@@ -120,6 +121,7 @@ async function buildApp() {
     await app.register(manuscriptRoutes);
     await app.register(grantRoutes);
     await app.register(automationRoutes);
+    await app.register(internalTriggerRoutes);
 
   return app;
 }
