@@ -635,11 +635,14 @@ export default function BrainPage() {
   // Conversations store
   const { conversations, setMessages: storeMessages, addMessage: storeAddMessage, setStreaming } = useConversationsStore();
 
-  // SWR for channels list — sync to shared store for Sidebar
+  // SWR for channels list — sync to shared store for Sidebar.
+  // PWA cross-device sync: 다른 기기(PC/모바일)에서 만든 새 채널이 즉시 보이도록
+  // focus revalidate + 30초 polling 활성화. 이전엔 revalidateOnFocus:false +
+  // dedupingInterval:60s로 60초 동안 stale 채널 목록이 표시되던 문제.
   const { data: channelsData, mutate: refreshChannels } = useApiData(
     'brain-channels',
     async () => { const res = await getBrainChannels(); return Array.isArray(res.data) ? res.data : []; },
-    { revalidateOnFocus: false, dedupingInterval: 60000 }
+    { revalidateOnFocus: true, refreshInterval: 30_000, dedupingInterval: 2000 }
   );
   const sessions = useMemo(() => channelsData || [], [channelsData]);
   useEffect(() => {
@@ -654,12 +657,14 @@ export default function BrainPage() {
   const isChannelStreaming = activeChannelId ? (conversations[activeChannelId]?.isStreaming || false) : false;
   const loading = localLoading || isChannelStreaming;
 
-  const loadMessages = useCallback(async (channelId: string) => {
+  // Force flag — 다른 기기에서 새 메시지 추가됐는지 확인하려면 강제 refetch가 필요.
+  // loadMessages는 기본적으로 store cache hit 시 fetch skip — force=true면 cache 무시.
+  const loadMessages = useCallback(async (channelId: string, opts?: { force?: boolean }) => {
     // 세션 명시적 선택 시 "새 대화 선택" 플래그 해제
     userChoseNewSessionRef.current = false;
-    // Check store first
+    // Check store first — force 옵션이 없을 때만 cache hit 활용 (cross-device sync 시 force=true).
     const conversationsNow = useConversationsStore.getState().conversations;
-    if (conversationsNow[channelId]?.messages?.length) {
+    if (!opts?.force && conversationsNow[channelId]?.messages?.length) {
       setActiveChannelId(channelId);
       shouldScrollToBottomRef.current = true;
       return;
@@ -690,6 +695,51 @@ export default function BrainPage() {
       loadMessages(activeChannelId);
     }
   }, [activeChannelId, conversations, loadMessages]);
+
+  // Cross-device sync — 활성 채널의 메시지를 다른 기기 변경 시 자동 반영.
+  // 1) 30초 polling
+  // 2) window focus / online 복귀 시 즉시 refetch
+  //
+  // 중요 — background refresh는 loadMessages를 재사용하지 않는다:
+  //   - loadMessages는 user-selection loader (setActiveChannelId + scroll-to-bottom)
+  //   - 30s polling 응답이 늦게 도착하면 사용자가 다른 채널로 옮겨도 옛 채널로 돌아감 (race)
+  //   - 또는 사용자가 옛 메시지 읽고 있는데 매번 bottom으로 snap
+  // 따라서 store만 직접 update, activeChannelId/scroll 변경 X.
+  // streaming 중에는 skip — 응답 중 fetch가 partial 메시지 덮어쓰는 race 방지.
+  useEffect(() => {
+    if (!activeChannelId) return;
+    const channelIdAtMount = activeChannelId;
+
+    const refresh = async () => {
+      const store = useConversationsStore.getState();
+      // 다른 채널로 옮겼으면 abort
+      if (store.activeChannelId !== channelIdAtMount) return;
+      const conv = store.conversations[channelIdAtMount];
+      if (conv?.isStreaming) return; // streaming 중 skip
+      try {
+        const res = await getChannelMessages(channelIdAtMount);
+        const msgs = res.data || res || [];
+        // double-check after async fetch — race로 채널이 바뀌었으면 결과 버림
+        const after = useConversationsStore.getState();
+        if (after.activeChannelId !== channelIdAtMount) return;
+        if (after.conversations[channelIdAtMount]?.isStreaming) return;
+        // store만 update, scroll/active 안 건드림
+        useConversationsStore.getState().setMessages(channelIdAtMount, msgs);
+      } catch {
+        // silent — polling 실패는 noise 안 만듦
+      }
+    };
+
+    const intervalId = window.setInterval(refresh, 30_000);
+    const onFocus = () => { refresh(); };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+    };
+  }, [activeChannelId]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
