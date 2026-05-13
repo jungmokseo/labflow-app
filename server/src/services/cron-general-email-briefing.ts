@@ -31,14 +31,23 @@ import { postSlackAdminDm } from './cron-shared/slack-api.js';
 const WEEKLY_REPORT_PATTERN = /weekly\s*report|주간\s*진행\s*사항\s*보고|주간보고/i;
 
 // 분류 schema
-type OrgKind = 'yonsei' | 'lynksolutec' | 'personal';
+// org는 EmailProfile.groups에서 동적으로 결정 — 사용자가 ResearchFlow /settings에서 설정.
+// profile 없으면 기본 3개 그룹 (yonsei / lynksolutec / personal)으로 fallback.
 type Urgency = 'urgent' | 'action-needed' | 'schedule' | 'info' | 'promo';
 
-const ORG_LABEL: Record<OrgKind, string> = {
-  yonsei: '🏫 연세대학교',
-  lynksolutec: '🏢 링크솔루텍',
-  personal: '👤 개인',
-};
+interface OrgGroup {
+  name: string;     // e.g., "연세대학교"
+  emoji: string;    // e.g., "🏫"
+  domains: string[]; // e.g., ["yonsei.ac.kr"]
+}
+
+const DEFAULT_GROUPS: OrgGroup[] = [
+  { name: '연세대학교', emoji: '🏫', domains: ['yonsei.ac.kr'] },
+  { name: '링크솔루텍', emoji: '🏢', domains: ['lynksolutec.com'] },
+  // personal은 매칭 안 되는 모든 메일 — 매핑 코드에서 처리
+];
+const FALLBACK_GROUP: OrgGroup = { name: '개인', emoji: '👤', domains: [] };
+
 const URGENCY_LABEL: Record<Urgency, string> = {
   urgent: '⚠️ 긴급',
   'action-needed': '📝 대응필요',
@@ -54,6 +63,14 @@ const URGENCY_ORDER: Record<Urgency, number> = {
   promo: 5,
 };
 
+// EmailProfile에서 가져오는 사용자 맞춤 설정 (ResearchFlow /settings에서 등록)
+interface BriefingProfile {
+  groups: OrgGroup[];           // 기관 분류 — 비어 있으면 DEFAULT_GROUPS 사용
+  keywords: string[];           // 중요도 상향 키워드 (e.g., "PMK-08", "박지혜")
+  importanceRules: Array<{ condition: string; action: string; description?: string }>; // 사용자 맞춤 규칙
+  excludePatterns: Array<{ field: 'subject' | 'from'; pattern: string }>; // 제외할 메일
+}
+
 interface ParsedEmail {
   messageId: string;
   threadId: string;
@@ -67,7 +84,8 @@ interface ParsedEmail {
 }
 
 interface BriefedEmail extends ParsedEmail {
-  org: OrgKind;
+  orgName: string;      // 동적 — profile.groups[i].name 또는 '개인'
+  orgEmoji: string;     // 동적
   urgency: Urgency;
   summary: string;      // ~5 sentence Korean briefing
 }
@@ -237,17 +255,146 @@ async function fetchRecentEmails(gmail: gmail_v1.Gmail): Promise<ParsedEmail[]> 
 }
 
 // ─────────────────────────────────────────────
+// EmailProfile (ResearchFlow /settings 에 저장된 PI 맞춤 설정) 가져오기
+// ─────────────────────────────────────────────
+
+/**
+ * PI의 EmailProfile DB row를 가져와서 BriefingProfile로 정규화.
+ * - 없거나 비어 있으면 DEFAULT_GROUPS만 사용 (backward compat).
+ * - LAB_OWNER_EMAIL → LAB_OWNER_CLERK_ID → Lab.ownerId 순으로 PI userId 식별 (findOwnerGmailToken과 동일 패턴).
+ */
+async function loadBriefingProfile(): Promise<BriefingProfile> {
+  let userId: string | null = null;
+  if (env.LAB_OWNER_EMAIL) {
+    const u = await prisma.user.findFirst({ where: { email: env.LAB_OWNER_EMAIL }, select: { id: true } });
+    if (u) userId = u.id;
+  }
+  if (!userId && env.LAB_OWNER_CLERK_ID) {
+    const u = await prisma.user.findFirst({ where: { clerkId: env.LAB_OWNER_CLERK_ID }, select: { id: true } });
+    if (u) userId = u.id;
+  }
+  if (!userId && env.LAB_ID) {
+    const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID }, select: { ownerId: true } });
+    if (lab?.ownerId) userId = lab.ownerId;
+  }
+
+  // profile 없으면 default groups + 빈 rules
+  if (!userId) {
+    return { groups: DEFAULT_GROUPS, keywords: [], importanceRules: [], excludePatterns: [] };
+  }
+
+  const profile = await prisma.emailProfile.findUnique({ where: { userId } });
+  if (!profile) {
+    return { groups: DEFAULT_GROUPS, keywords: [], importanceRules: [], excludePatterns: [] };
+  }
+
+  // JSON column 안전 파싱
+  const groups = parseGroups(profile.groups);
+  const keywords = parseStringArray(profile.keywords);
+  const importanceRules = parseImportanceRules(profile.importanceRules);
+  const excludePatterns = parseExcludePatterns(profile.excludePatterns);
+
+  return {
+    groups: groups.length > 0 ? groups : DEFAULT_GROUPS,
+    keywords,
+    importanceRules,
+    excludePatterns,
+  };
+}
+
+function parseGroups(v: unknown): OrgGroup[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((g): g is Record<string, unknown> => g !== null && typeof g === 'object')
+    .map(g => ({
+      name: typeof g.name === 'string' ? g.name : '',
+      emoji: typeof g.emoji === 'string' ? g.emoji : '📁',
+      domains: Array.isArray(g.domains) ? g.domains.filter((d): d is string => typeof d === 'string') : [],
+    }))
+    .filter(g => g.name.length > 0);
+}
+
+function parseStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((s): s is string => typeof s === 'string' && s.length > 0);
+}
+
+function parseImportanceRules(v: unknown): BriefingProfile['importanceRules'] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((r): r is Record<string, unknown> => r !== null && typeof r === 'object')
+    .map(r => ({
+      condition: typeof r.condition === 'string' ? r.condition : '',
+      action: typeof r.action === 'string' ? r.action : '',
+      description: typeof r.description === 'string' ? r.description : undefined,
+    }))
+    .filter(r => r.condition.length > 0 && r.action.length > 0);
+}
+
+function parseExcludePatterns(v: unknown): BriefingProfile['excludePatterns'] {
+  if (!Array.isArray(v)) return [];
+  const out: BriefingProfile['excludePatterns'] = [];
+  for (const p of v) {
+    if (p === null || typeof p !== 'object') continue;
+    const rec = p as Record<string, unknown>;
+    const field: 'subject' | 'from' = rec.field === 'from' ? 'from' : 'subject';
+    const pattern = typeof rec.pattern === 'string' ? rec.pattern : '';
+    if (pattern.length > 0) out.push({ field, pattern });
+  }
+  return out;
+}
+
+/**
+ * 발신자 도메인으로 group 매칭 — rule-based 1차 분류 (LLM 호출 전).
+ * profile.groups를 위에서부터 순회. 매칭 없으면 FALLBACK_GROUP ('개인').
+ */
+function matchGroupByDomain(sender: string, groups: OrgGroup[]): OrgGroup {
+  const senderLower = sender.toLowerCase();
+  for (const g of groups) {
+    if (g.domains.some(d => senderLower.includes(d.toLowerCase()))) return g;
+  }
+  return FALLBACK_GROUP;
+}
+
+// ─────────────────────────────────────────────
 // 분류·요약 — Anthropic Sonnet → Gemini fallback
 // ─────────────────────────────────────────────
 
-const CLASSIFY_SYSTEM_PROMPT = `당신은 서정목 교수(연세대 BLISS LAB / 링크솔루텍 CEO)의 이메일 분류·요약 비서입니다.
+/**
+ * 동적 분류 prompt 생성 — ResearchFlow email.ts buildClassificationPrompt와 1:1 정합.
+ * profile.groups + keywords + importanceRules 모두 prompt에 주입하여 PI 맞춤 분류.
+ */
+function buildClassifySystemPrompt(profile: BriefingProfile): string {
+  // ── 기관 정의 ──
+  const groupList = profile.groups
+    .map(g => `- "${g.name}": @${g.domains.join(', @')} 도메인의 발신자/수신지`)
+    .join('\n');
+  const groupNames = [...profile.groups.map(g => g.name), FALLBACK_GROUP.name];
+
+  // ── keywords ──
+  let keywordSection = '';
+  if (profile.keywords.length > 0) {
+    keywordSection = `\n- **키워드 상향:** 다음 키워드가 제목/내용에 등장하면 중요도 1단계 상향: ${profile.keywords.join(', ')}`;
+  }
+
+  // ── importanceRules ──
+  let rulesSection = '';
+  if (profile.importanceRules.length > 0) {
+    const rules = profile.importanceRules
+      .map((r, i) => `${i + 1}. ${r.condition} → ${r.action}${r.description ? ` (${r.description})` : ''}`)
+      .join('\n');
+    rulesSection = `\n\n## 사용자 맞춤 중요도 규칙 (순서대로 적용)\n${rules}`;
+  }
+
+  return `당신은 서정목 교수(연세대 BLISS LAB / 링크솔루텍 CEO)의 이메일 분류·요약 비서입니다.
 
 각 이메일을 다음 두 축으로 분류하고 한국어 요약을 작성하세요.
 
-## 기관 (org)
-- "yonsei": @yonsei.ac.kr 도메인, 연세대 관련 발신자/수신지
-- "lynksolutec": @lynksolutec.com 도메인, 링크솔루텍 거래처/파트너 (정부 rnd@, 채용 saramin도 여기)
-- "personal": 위 둘에 해당하지 않는 모든 메일
+## 기관 (orgName)
+${groupList}
+- "${FALLBACK_GROUP.name}": 위에 해당하지 않는 모든 메일
+
+응답의 orgName 필드는 위에 명시된 정확한 한국어 이름 중 하나만 사용: ${groupNames.map(n => `"${n}"`).join(', ')}.
 
 ## 성격 (urgency)
 - "urgent": 마감 24시간 이내 또는 즉각 조치 필요. 저널 Decision/Review/Revision 등.
@@ -256,13 +403,16 @@ const CLASSIFY_SYSTEM_PROMPT = `당신은 서정목 교수(연세대 BLISS LAB /
 - "info": 공지, 뉴스레터, 단순 CC, 처리 완료 보고
 - "promo": Call for Papers, 광고성 투고 초대, 프로모션
 
+## 중요도 조정 규칙${keywordSection}${rulesSection}
+
 ## 요약 (summary)
 - 한국어 4~6문장. 발신자/제목 그대로 반복하지 말고 핵심 내용·조치 포인트·마감/일정을 담을 것.
 - 연구 키워드(하이드로겔, 액체금속, 방오코팅, 자가치유 PDMS, 웨어러블 바이오일렉트로닉스 등)가 등장하면 강조.
 
-반드시 JSON 배열로만 응답:
-[{"index": 0, "org": "yonsei", "urgency": "action-needed", "summary": "..."}]
+반드시 JSON 배열로만 응답 (다른 텍스트 없이):
+[{"index": 0, "orgName": "${profile.groups[0]?.name || FALLBACK_GROUP.name}", "urgency": "action-needed", "summary": "..."}]
 `;
+}
 
 interface ClassifyInput {
   index: number;
@@ -275,7 +425,7 @@ interface ClassifyInput {
 
 interface ClassifyOutput {
   index: number;
-  org: OrgKind;
+  orgName: string;      // 동적 group name — prompt에서 명시한 문자열 중 하나
   urgency: Urgency;
   summary: string;
 }
@@ -297,7 +447,7 @@ function buildUserPrompt(items: ClassifyInput[]): string {
  *
  * 잘림 복구: 마지막 정상 객체 끝에서 `]`로 닫아서 partial array 반환.
  */
-function parseJsonArray(text: string): ClassifyOutput[] {
+function parseJsonArray(text: string, validOrgNames: Set<string>): ClassifyOutput[] {
   // 1) code fence 제거
   let cleaned = text.replace(/```(?:json)?\s*\n?/gi, '').replace(/```/g, '').trim();
 
@@ -329,16 +479,20 @@ function parseJsonArray(text: string): ClassifyOutput[] {
   }
 
   if (!Array.isArray(parsed)) throw new Error('JSON이 배열 아님');
-  const VALID_ORG = new Set<OrgKind>(['yonsei', 'lynksolutec', 'personal']);
   const VALID_URG = new Set<Urgency>(['urgent', 'action-needed', 'schedule', 'info', 'promo']);
+  // LLM이 orgName을 prompt에 명시한 정확한 값으로 출력해야 함. 매칭 실패 시 FALLBACK_GROUP.name으로 자동 강등.
   return parsed
-    .filter((p: any) => typeof p?.index === 'number' && VALID_ORG.has(p.org) && VALID_URG.has(p.urgency))
-    .map((p: any) => ({
-      index: p.index,
-      org: p.org as OrgKind,
-      urgency: p.urgency as Urgency,
-      summary: String(p.summary || '').slice(0, 1000),
-    }));
+    .filter((p: any) => typeof p?.index === 'number' && VALID_URG.has(p.urgency))
+    .map((p: any) => {
+      const rawOrg = String(p.orgName || p.org || '').trim();
+      const orgName = validOrgNames.has(rawOrg) ? rawOrg : FALLBACK_GROUP.name;
+      return {
+        index: p.index,
+        orgName,
+        urgency: p.urgency as Urgency,
+        summary: String(p.summary || '').slice(0, 1000),
+      };
+    });
 }
 
 // ── 배치 분류 설정 ────────────────────────────────────
@@ -349,7 +503,11 @@ const BATCH_SIZE = 10;
 // API 호출 timeout (ms). Sonnet 4.6은 50개를 한 번에 처리할 때 60s+ 걸림 — 배치는 짧음.
 const CLASSIFY_TIMEOUT_MS = 90_000;
 
-async function classifyWithSonnet(items: ClassifyInput[]): Promise<ClassifyOutput[]> {
+async function classifyWithSonnet(
+  items: ClassifyInput[],
+  systemPrompt: string,
+  validOrgNames: Set<string>,
+): Promise<ClassifyOutput[]> {
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY 미설정');
   const anthropic = new Anthropic({
     apiKey: env.ANTHROPIC_API_KEY,
@@ -359,16 +517,20 @@ async function classifyWithSonnet(items: ClassifyInput[]): Promise<ClassifyOutpu
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2048, // 10개 이메일 × 평균 150 tokens = 1500 → 2048로 safety margin
-    system: [{ type: 'text', text: CLASSIFY_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: buildUserPrompt(items) }],
   });
   // Sonnet 4.6 multi-block response 대응 — thinking + text 동시 반환 가능. text 블록 찾아서 사용.
   const textBlock = response.content.find(b => b.type === 'text');
   const text = textBlock?.type === 'text' ? textBlock.text : '';
-  return parseJsonArray(text);
+  return parseJsonArray(text, validOrgNames);
 }
 
-async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutput[]> {
+async function classifyWithGemini(
+  items: ClassifyInput[],
+  systemPrompt: string,
+  validOrgNames: Set<string>,
+): Promise<ClassifyOutput[]> {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY 미설정');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
@@ -376,7 +538,7 @@ async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutpu
   // Gemini SDK는 native timeout 없음 → Promise.race로 강제 timeout
   const callPromise = model.generateContent({
     contents: [
-      { role: 'user', parts: [{ text: `${CLASSIFY_SYSTEM_PROMPT}\n\n---\n\n${buildUserPrompt(items)}` }] },
+      { role: 'user', parts: [{ text: `${systemPrompt}\n\n---\n\n${buildUserPrompt(items)}` }] },
     ],
     generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
   });
@@ -384,7 +546,7 @@ async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutpu
     setTimeout(() => rej(new Error(`Gemini timeout after ${CLASSIFY_TIMEOUT_MS}ms`)), CLASSIFY_TIMEOUT_MS),
   );
   const result = await Promise.race([callPromise, timeoutPromise]);
-  return parseJsonArray(result.response.text());
+  return parseJsonArray(result.response.text(), validOrgNames);
 }
 
 /**
@@ -400,7 +562,11 @@ async function classifyWithGemini(items: ClassifyInput[]): Promise<ClassifyOutpu
  */
 async function classifyInBatches(
   inputs: ClassifyInput[],
+  profile: BriefingProfile,
 ): Promise<{ classified: ClassifyOutput[]; batchErrors: string[] }> {
+  const systemPrompt = buildClassifySystemPrompt(profile);
+  const validOrgNames = new Set([...profile.groups.map(g => g.name), FALLBACK_GROUP.name]);
+
   // 배치 분할 + 각 배치 안에서 local index 0..n-1로 재매핑
   type BatchSlot = { localItems: ClassifyInput[]; globalIdxs: number[]; batchNum: number };
   const slots: BatchSlot[] = [];
@@ -418,7 +584,7 @@ async function classifyInBatches(
     slots.map(async ({ localItems, globalIdxs, batchNum }) => {
       // Sonnet 시도
       try {
-        const r = await classifyWithSonnet(localItems);
+        const r = await classifyWithSonnet(localItems, systemPrompt, validOrgNames);
         if (r.length === 0) throw new Error('Sonnet 응답 빈 배열');
         return r.map(c => ({ ...c, index: globalIdxs[c.index] })).filter(c => c.index !== undefined);
       } catch (sonnetErr: any) {
@@ -426,7 +592,7 @@ async function classifyInBatches(
         console.warn(`[general-email-briefing] batch ${batchNum} Sonnet 실패 (${sonnetMsg}) → Gemini fallback`);
         // Gemini fallback
         try {
-          const r = await classifyWithGemini(localItems);
+          const r = await classifyWithGemini(localItems, systemPrompt, validOrgNames);
           if (r.length === 0) throw new Error('Gemini 응답 빈 배열');
           return r.map(c => ({ ...c, index: globalIdxs[c.index] })).filter(c => c.index !== undefined);
         } catch (geminiErr: any) {
@@ -465,6 +631,18 @@ function formatTime(d: Date): string {
   return `${String(kst.getUTCHours()).padStart(2, '0')}:${String(kst.getUTCMinutes()).padStart(2, '0')}`;
 }
 
+/**
+ * Markdown 출력 — ResearchFlow 정책: 중요도 1차, 기관 2차.
+ * 사용자 보고: "기관별로는 나누었는데 모든 메일을 그냥 요약" → 중요도 hierarchy가 시각적으로 약했음.
+ * 변경: 중요도 섹션이 top-level 헤더, 같은 중요도 안에서 기관별 sub-grouping.
+ *
+ * 섹션 순서:
+ *   1. ⚠️ 긴급           (org 표시 inline)
+ *   2. 📝 대응필요        (org 표시 inline)
+ *   3. 📅 일정            (org 표시 inline)
+ *   4. 📰 정보성          (org별 collapsed list)
+ *   5. 🛒 광고/프로모션   (sender만 모음)
+ */
 function buildMarkdown(briefed: BriefedEmail[]): string {
   const today = formatKstDate(new Date());
   const total = briefed.length;
@@ -479,33 +657,60 @@ function buildMarkdown(briefed: BriefedEmail[]): string {
   const lines: string[] = [];
   lines.push(`*📧 일반 이메일 브리핑 — ${today}*`);
   lines.push(
-    `총 ${total}건 신규 | 긴급 ${counts.urgent} · 대응필요 ${counts.action} · 일정 ${counts.schedule} · 정보성 ${counts.info} · 광고 ${counts.promo}`,
+    `총 ${total}건 신규 | ⚠️ ${counts.urgent} · 📝 ${counts.action} · 📅 ${counts.schedule} · 📰 ${counts.info} · 🛒 ${counts.promo}`,
   );
   lines.push('');
 
-  // 기관별 섹션
-  const orgs: OrgKind[] = ['yonsei', 'lynksolutec', 'personal'];
-  for (const org of orgs) {
-    const inOrg = briefed.filter(b => b.org === org && b.urgency !== 'promo');
-    if (inOrg.length === 0) continue;
-    lines.push(`*${ORG_LABEL[org]} (${inOrg.length}건)*`);
-    inOrg.sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
-    for (const e of inOrg) {
-      const time = formatTime(e.receivedAt);
-      const urgencyEmoji = URGENCY_LABEL[e.urgency].split(' ')[0];
-      const subjectShort = e.subject.length > 80 ? e.subject.slice(0, 77) + '...' : e.subject;
-      if (e.urgency === 'info') {
-        // 정보성: 발신자 + 한 줄 요약만
-        lines.push(`${urgencyEmoji} _${e.senderName}_ (${time}) — ${e.summary.split('\n')[0]}`);
-      } else {
-        lines.push(`${urgencyEmoji} *${subjectShort}* (${time}, ${e.senderName})`);
-        lines.push(`   ${e.summary}`);
+  // ── 중요도별 섹션 (urgent → action-needed → schedule) ──
+  // 각 섹션 안에서 기관별로 sub-group (가독성 향상).
+  const detailedUrgencies: Urgency[] = ['urgent', 'action-needed', 'schedule'];
+  for (const urg of detailedUrgencies) {
+    const inUrg = briefed.filter(b => b.urgency === urg);
+    if (inUrg.length === 0) continue;
+    lines.push(`*${URGENCY_LABEL[urg]} (${inUrg.length}건)*`);
+
+    // 같은 urgency 안에서 orgName별 sub-group
+    const byOrg = new Map<string, { emoji: string; items: BriefedEmail[] }>();
+    for (const e of inUrg) {
+      const bucket = byOrg.get(e.orgName);
+      if (bucket) bucket.items.push(e);
+      else byOrg.set(e.orgName, { emoji: e.orgEmoji, items: [e] });
+    }
+    // org 순서: 메일 많은 순
+    const orgEntries = [...byOrg.entries()].sort((a, b) => b[1].items.length - a[1].items.length);
+    for (const [orgName, { emoji, items }] of orgEntries) {
+      lines.push(`  ${emoji} *${orgName}* (${items.length})`);
+      for (const e of items) {
+        const time = formatTime(e.receivedAt);
+        const subjectShort = e.subject.length > 80 ? e.subject.slice(0, 77) + '...' : e.subject;
+        lines.push(`  • *${subjectShort}* — _${e.senderName}_ (${time})`);
+        lines.push(`    ${e.summary}`);
       }
     }
     lines.push('');
   }
 
-  // 광고 — 마지막에 모음
+  // ── 정보성 — 기관별 collapsed (한 줄 per 메일) ──
+  const infoItems = briefed.filter(b => b.urgency === 'info');
+  if (infoItems.length > 0) {
+    lines.push(`*📰 정보성 (${infoItems.length}건)*`);
+    const byOrg = new Map<string, { emoji: string; items: BriefedEmail[] }>();
+    for (const e of infoItems) {
+      const bucket = byOrg.get(e.orgName);
+      if (bucket) bucket.items.push(e);
+      else byOrg.set(e.orgName, { emoji: e.orgEmoji, items: [e] });
+    }
+    const orgEntries = [...byOrg.entries()].sort((a, b) => b[1].items.length - a[1].items.length);
+    for (const [orgName, { emoji, items }] of orgEntries) {
+      lines.push(`  ${emoji} *${orgName}*`);
+      for (const e of items) {
+        lines.push(`  • _${e.senderName}_ — ${e.summary.split('\n')[0].slice(0, 120)}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // ── 광고 — 발신자만 ──
   const promos = briefed.filter(b => b.urgency === 'promo');
   if (promos.length > 0) {
     lines.push(`*🛒 광고/프로모션 (${promos.length}건)*`);
@@ -556,11 +761,29 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
   }
   result.emailsScanned = parsed.length;
 
-  // 3. 주간보고 제외
+  // 2.5. EmailProfile (ResearchFlow /settings) 로드 — keywords/importanceRules/groups/excludePatterns
+  let profile: BriefingProfile;
+  try {
+    profile = await loadBriefingProfile();
+  } catch (err: any) {
+    console.warn(`[general-email-briefing] EmailProfile 로드 실패 → default 사용 (${err?.message})`);
+    profile = { groups: DEFAULT_GROUPS, keywords: [], importanceRules: [], excludePatterns: [] };
+  }
+
+  // 3. 주간보고 제외 + excludePatterns (사용자 등록 규칙)
+  const excludeRegexes = profile.excludePatterns.map(p => {
+    try { return { field: p.field, regex: new RegExp(p.pattern, 'i') }; }
+    catch { return null; } // invalid regex skip
+  }).filter((x): x is { field: 'subject' | 'from'; regex: RegExp } => x !== null);
+
   const filtered = parsed.filter(e => {
     if (WEEKLY_REPORT_PATTERN.test(e.subject)) {
       result.excludedWeeklyReports++;
       return false;
+    }
+    for (const ex of excludeRegexes) {
+      const target = ex.field === 'subject' ? e.subject : e.sender;
+      if (ex.regex.test(target)) return false;
     }
     return true;
   });
@@ -586,10 +809,13 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     body: e.body,
   }));
 
-  const { classified: totalClassified, batchErrors: allBatchErrors } = await classifyInBatches(classifyInputs);
+  const { classified: totalClassified, batchErrors: allBatchErrors } = await classifyInBatches(classifyInputs, profile);
   if (allBatchErrors.length > 0) result.errors.push(...allBatchErrors);
 
   // 5. 분류 결과를 이메일에 매핑 (per-email 실패 → unclassified 섹션으로)
+  //    LLM orgName → profile.groups의 emoji 매핑 (또는 도메인 매칭으로 fallback).
+  const orgEmojiMap = new Map<string, string>(profile.groups.map(g => [g.name, g.emoji]));
+  orgEmojiMap.set(FALLBACK_GROUP.name, FALLBACK_GROUP.emoji);
   const classMap = new Map(totalClassified.map(c => [c.index, c]));
   const briefed: BriefedEmail[] = [];
   const unclassified: ParsedEmail[] = [];
@@ -599,9 +825,13 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
       unclassified.push(filtered[i]);
       continue;
     }
+    // LLM이 orgName 정확히 못 채운 경우 도메인 매칭으로 보정
+    const orgName = orgEmojiMap.has(c.orgName) ? c.orgName : matchGroupByDomain(filtered[i].sender, profile.groups).name;
+    const orgEmoji = orgEmojiMap.get(orgName) || FALLBACK_GROUP.emoji;
     briefed.push({
       ...filtered[i],
-      org: c.org,
+      orgName,
+      orgEmoji,
       urgency: c.urgency,
       summary: c.summary,
     });
