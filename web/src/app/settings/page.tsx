@@ -13,6 +13,10 @@ import {
   testModels,
   getModelUsage,
   type ModelUsageResult,
+  getCronStatus,
+  runAllCrons,
+  type CronStatusResult,
+  type CronRunAllResult,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
@@ -354,6 +358,7 @@ function StatusTab({ health, emailConnected, calendarConnected, calendarMessage,
       </section>
 
       <ModelValidationSection />
+      <CronDiagnosticsSection />
     </div>
   );
 }
@@ -1344,5 +1349,196 @@ function ErrorLogTab({ onCountChange }: { onCountChange: (n: number) => void }) 
         </section>
       )}
     </div>
+  );
+}
+
+// ── Cron 진단 대시보드 (OWNER 전용) ─────────────────────
+// in-memory CRON_STATUS로 cron 6개 health + 마지막 실행 결과 표시.
+// "🚀 모두 실행" button으로 전체 cron 수동 trigger.
+function CronDiagnosticsSection() {
+  const { toast } = useToast();
+  const [data, setData] = useState<CronStatusResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [lastRun, setLastRun] = useState<CronRunAllResult | null>(null);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const r = await getCronStatus();
+      setData(r);
+    } catch (e: any) {
+      toast(`Cron status 로드 실패: ${e?.message || ''}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const handleRunAll = async () => {
+    if (!confirm('모든 cron 6개를 즉시 실행합니다. ~5분 정도 소요됩니다. 계속하시겠습니까?')) return;
+    setRunning(true);
+    try {
+      const r = await runAllCrons();
+      setLastRun(r);
+      toast(r.ok ? '모든 cron 실행 완료' : '일부 cron 실패 — 결과 확인', r.ok ? 'success' : 'error');
+      await fetchStatus();
+    } catch (e: any) {
+      toast(`실행 실패: ${e?.message || ''}`, 'error');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const formatRelative = (iso?: string) => {
+    if (!iso) return '없음';
+    const ms = Date.now() - new Date(iso).getTime();
+    const abs = Math.abs(ms);
+    const min = Math.floor(abs / 60_000);
+    const hr = Math.floor(min / 60);
+    const day = Math.floor(hr / 24);
+    let label: string;
+    if (day > 0) label = `${day}일`;
+    else if (hr > 0) label = `${hr}시간`;
+    else label = `${min}분`;
+    return ms >= 0 ? `${label} 전` : `${label} 후`;
+  };
+
+  return (
+    <section className="bg-bg-card border border-border rounded-xl p-4 md:p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-text-heading text-base flex items-center gap-2">
+            🕒 Cron 진단 대시보드
+            {data && (
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                data.cronCount > 0 && data.hints.length === 0
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              }`}>
+                {data.cronCount}개 등록 · {data.hints.length}개 경고
+              </span>
+            )}
+          </h3>
+          <p className="text-xs text-text-muted mt-1">
+            서버 in-memory 추적. 매일 이메일 브리핑/마감 리마인더 등 6개 cron의 마지막 실행 결과·다음 일정·에러를 확인하세요.
+            server restart 시 카운터 reset.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchStatus}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-bg hover:bg-bg-card border border-border text-text-heading rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            🔄 새로고침
+          </button>
+          <button
+            onClick={handleRunAll}
+            disabled={running || loading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+          >
+            {running && <span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />}
+            {running ? '실행 중… (~5분)' : '🚀 모두 즉시 실행'}
+          </button>
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="text-sm text-text-muted">로딩 중...</div>
+      )}
+
+      {data && data.hints.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-1">
+          <div className="text-xs font-semibold text-amber-700 dark:text-amber-300">⚠️ 경고 / 진단 hint</div>
+          {data.hints.map((h, i) => (
+            <div key={i} className="text-xs text-amber-700 dark:text-amber-300 font-mono">{h}</div>
+          ))}
+        </div>
+      )}
+
+      {data && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+          {Object.entries(data.envHealth).map(([k, v]) => (
+            <div key={k} className={`rounded border px-2 py-1.5 ${
+              v === true ? 'bg-emerald-500/5 border-emerald-500/30'
+                : v === false ? 'bg-red-500/5 border-red-500/30'
+                : 'bg-bg border-border'
+            }`}>
+              <div className="font-mono text-text-muted text-[10px]">{k}</div>
+              <div className={`font-semibold ${
+                v === true ? 'text-emerald-700 dark:text-emerald-300'
+                  : v === false ? 'text-red-700 dark:text-red-300'
+                  : 'text-text-heading'
+              }`}>
+                {v === true ? '✅ 설정됨' : v === false ? '❌ 미설정' : String(v).slice(0, 30)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data && data.crons.length > 0 && (
+        <div className="space-y-2">
+          {data.crons.map(c => (
+            <div key={c.label} className={`rounded border p-3 ${
+              c.lastSuccess === true ? 'bg-emerald-500/5 border-emerald-500/30'
+                : c.lastSuccess === false ? 'bg-red-500/5 border-red-500/30'
+                : 'bg-bg-card border-border'
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="font-mono text-sm font-semibold text-text-heading">
+                  {c.lastSuccess === true ? '✅' : c.lastSuccess === false ? '❌' : '○'} {c.label}
+                </span>
+                <span className="text-[10px] text-text-muted">{c.schedule}</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
+                <div>
+                  <div className="text-text-muted">다음 실행</div>
+                  <div className="font-mono text-text-heading">{formatRelative(c.nextRunAt || undefined)}</div>
+                </div>
+                <div>
+                  <div className="text-text-muted">마지막 완료</div>
+                  <div className="font-mono text-text-heading">{formatRelative(c.lastCompletedAt)}</div>
+                </div>
+                <div>
+                  <div className="text-text-muted">실행 / 에러</div>
+                  <div className="font-mono text-text-heading">{c.runCount} / {c.errorCount}</div>
+                </div>
+                <div>
+                  <div className="text-text-muted">등록 시점</div>
+                  <div className="font-mono text-text-heading">{formatRelative(c.scheduledAt)}</div>
+                </div>
+              </div>
+              {c.lastError && (
+                <div className="mt-2 text-[11px] text-red-600 dark:text-red-400 font-mono break-all bg-red-500/10 rounded p-2">
+                  ⚠ {c.lastError}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data && data.crons.length === 0 && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-700 dark:text-red-400">
+          🚨 등록된 cron이 0개. env.LAB_ID + env.NOTION_API_KEY 둘 다 Railway에 설정되어야 합니다.
+        </div>
+      )}
+
+      {lastRun && (
+        <div className="border-t border-border pt-3 space-y-1">
+          <div className="text-xs font-semibold text-text-heading">📊 마지막 일괄 실행 결과</div>
+          {lastRun.summary.map(s => (
+            <div key={s.label} className={`text-[11px] font-mono flex items-center justify-between gap-2 ${
+              s.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              <span>{s.ok ? '✅' : '❌'} {s.label}</span>
+              <span>{(s.ms / 1000).toFixed(1)}s {s.error ? `— ${s.error.slice(0, 80)}` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

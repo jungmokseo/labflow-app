@@ -369,6 +369,81 @@ export async function automationRoutes(app: FastifyInstance) {
     });
   });
 
+  // GET /api/automations/cron-status — OWNER 인증으로 cron 진단 (internal-trigger와 동일 데이터, sync-token 불필요)
+  app.get('/api/automations/cron-status', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
+    const { CRON_STATUS } = await import('../services/cron-utils.js');
+    const crons = Array.from(CRON_STATUS.values()).sort((a, b) => a.label.localeCompare(b.label));
+    const envHealth = {
+      LAB_ID: !!env.LAB_ID,
+      NOTION_API_KEY: !!env.NOTION_API_KEY,
+      ADMIN_USER_ID: !!env.ADMIN_USER_ID,
+      SLACK_BOT_TOKEN: !!env.SLACK_BOT_TOKEN,
+      ANTHROPIC_API_KEY: !!env.ANTHROPIC_API_KEY,
+      GEMINI_API_KEY: !!env.GEMINI_API_KEY,
+      GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET: !!env.GOOGLE_CLIENT_SECRET,
+      GOOGLE_REFRESH_TOKEN: !!env.GOOGLE_REFRESH_TOKEN,
+      LAB_OWNER_EMAIL: env.LAB_OWNER_EMAIL || null,
+      LAB_OWNER_CLERK_ID: env.LAB_OWNER_CLERK_ID || null,
+    };
+
+    const hints: string[] = [];
+    if (crons.length === 0) {
+      hints.push('등록된 cron이 0개. env.LAB_ID + env.NOTION_API_KEY 둘 다 설정되어야 cron 블록이 실행됨.');
+    }
+    if (!envHealth.ADMIN_USER_ID) {
+      hints.push('ADMIN_USER_ID 미설정 — general-email-briefing cron은 등록되지 않음.');
+    }
+    if (!envHealth.SLACK_BOT_TOKEN) {
+      hints.push('SLACK_BOT_TOKEN 미설정 — Slack 알림이 모두 비활성.');
+    }
+    const now = Date.now();
+    for (const c of crons) {
+      if (c.lastCompletedAt) {
+        const lastMs = new Date(c.lastCompletedAt).getTime();
+        const hoursSince = (now - lastMs) / (60 * 60 * 1000);
+        if (hoursSince > 48 && c.schedule.startsWith('매일')) {
+          hints.push(`${c.label}: 마지막 성공이 ${Math.round(hoursSince)}h 전 — 비정상 (매일 cron)`);
+        }
+      } else if (c.runCount > 0 && c.errorCount === c.runCount) {
+        hints.push(`${c.label}: 모든 실행 실패 (${c.errorCount}/${c.runCount}). lastError 참조.`);
+      }
+    }
+
+    return reply.send({
+      ok: true,
+      nowIso: new Date().toISOString(),
+      envHealth,
+      cronCount: crons.length,
+      crons,
+      hints,
+    });
+  });
+
+  // POST /api/automations/run-all — 6개 cron 즉시 실행 + 결과 요약 (OWNER)
+  app.post('/api/automations/run-all', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
+    const { manualRunCron } = await import('../services/cron-utils.js');
+    const runners: Record<string, () => Promise<unknown>> = {
+      'deadline-reminder-cron': runDeadlineReminders,
+      'paper-monitoring-cron': runPaperMonitoring,
+      'email-briefing-cron': () => runEmailBriefing('both'),
+      'iris-monitoring-cron': runIrisMonitoring,
+      'general-email-briefing-cron': runGeneralEmailBriefing,
+      'process-slack-inbox-cron': runProcessSlackInbox,
+    };
+    const summary: Array<{ label: string; ok: boolean; error?: string; ms: number }> = [];
+    for (const [label, runner] of Object.entries(runners)) {
+      const t0 = Date.now();
+      try {
+        await manualRunCron(label, async () => { await runner(); });
+        summary.push({ label, ok: true, ms: Date.now() - t0 });
+      } catch (e: any) {
+        summary.push({ label, ok: false, error: e?.message || 'unknown', ms: Date.now() - t0 });
+      }
+    }
+    return reply.send({ ok: summary.every(s => s.ok), summary });
+  });
+
   // GET /api/automations/model-usage — AiCostLog에서 service별 today/7d/30d 집계
   //
   // 응답 schema:

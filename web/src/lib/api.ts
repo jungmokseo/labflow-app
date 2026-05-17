@@ -1851,6 +1851,43 @@ export async function getModelUsage() {
   return apiFetch<ModelUsageResult>('/api/automations/model-usage', { method: 'GET' }, 0, 30000);
 }
 
+// ── Cron 진단 ─────────────────────────────────────────
+export interface CronStatus {
+  label: string;
+  schedule: string;
+  scheduledAt: string;
+  nextRunAt: string | null;
+  lastStartedAt?: string;
+  lastCompletedAt?: string;
+  lastSuccess?: boolean;
+  lastError?: string;
+  runCount: number;
+  errorCount: number;
+}
+
+export interface CronStatusResult {
+  ok: boolean;
+  nowIso: string;
+  envHealth: Record<string, boolean | string | null>;
+  cronCount: number;
+  crons: CronStatus[];
+  hints: string[];
+}
+
+export interface CronRunAllResult {
+  ok: boolean;
+  summary: Array<{ label: string; ok: boolean; error?: string; ms: number }>;
+}
+
+export async function getCronStatus() {
+  return apiFetch<CronStatusResult>('/api/automations/cron-status', { method: 'GET' }, 0, 30000);
+}
+
+export async function runAllCrons() {
+  // 6개 cron 순차 실행 — Sonnet/Gemini API 호출 + Slack DM 포함되어 ~5분 정도 소요 가능
+  return apiFetch<CronRunAllResult>('/api/automations/run-all', { method: 'POST' }, 0, 600_000);
+}
+
 export async function diagnoseNotion() {
   return apiFetch<{
     apiKeySet: boolean;
