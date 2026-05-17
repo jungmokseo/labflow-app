@@ -3,18 +3,23 @@
  *
  * Railway 컨테이너는 UTC. setTimeout으로 다음 매칭 시간까지 wait → 이후 setInterval 24h 또는 7d.
  *
- * 정확도 한계: setInterval은 누적 drift 가능. 24h drift는 수십 ms 수준이므로 KST 09:00 ±초 단위
- * 차이는 무시 가능. drift 보정 필요 시 cron 라이브러리(node-cron) 도입 검토.
+ * 핵심 정책 (2026-05-17 강화):
+ *   1) **영구 기록**: 매 실행을 prisma.cronRun에 저장 → server restart 후에도 history 유지.
+ *   2) **Startup backfill**: server 시작 시 마지막 성공이 24h+ 경과면 즉시 실행. 매일 deploy해도 cron missed 안 됨.
+ *   3) **In-memory mirror (CRON_STATUS)**: 빠른 dashboard fetch용.
+ *   4) **KST 시간 계산 fix**: setUTCHours 음수 wrap 버그 해결 — KST를 가상 UTC로 다룸.
  *
- * 진단용 in-memory status (CRON_STATUS) — 서버 restart 시 reset.
- * GET /api/internal/cron-status 로 조회. DB 영구 기록은 후속 작업.
+ * 정확도 한계: setInterval은 누적 drift 가능 (수십 ms). KST 09:00 ±초 단위 차이는 무시 가능.
+ * drift 보정 필요 시 node-cron 도입 검토.
  */
+
+import { basePrismaClient as prisma } from '../config/prisma.js';
 
 interface CronStatus {
   label: string;
   schedule: string;
   scheduledAt: string;        // ISO — schedule 시점
-  nextRunAt: string | null;   // ISO — 다음 실행 예정 (서버 startup 시 setTimeout 등록 시점에서 계산)
+  nextRunAt: string | null;   // ISO — 다음 실행 예정
   lastStartedAt?: string;     // ISO
   lastCompletedAt?: string;   // ISO
   lastSuccess?: boolean;
@@ -25,11 +30,16 @@ interface CronStatus {
 
 export const CRON_STATUS = new Map<string, CronStatus>();
 
+/**
+ * 매일 KST hourKst:minuteKst 실행하는 cron 등록.
+ * options.backfill: 마지막 성공이 24h+ 경과면 startup 후 즉시 한 번 실행 (기본 true).
+ */
 export function scheduleDailyKst(
   hourKst: number,
   minuteKst: number,
   fn: () => Promise<void>,
   label: string,
+  options: { backfill?: boolean } = {},
 ): void {
   const period = 24 * 60 * 60 * 1000;
   const initialMs = msUntilNextKstTime(hourKst, minuteKst);
@@ -45,6 +55,9 @@ export function scheduleDailyKst(
     errorCount: 0,
   });
 
+  // 마지막 성공을 hydrate (in-memory status에 DB 값 반영)
+  hydrateLastRun(label).catch(() => {});
+
   setTimeout(() => {
     runOnce(fn, label, period);
     setInterval(() => runOnce(fn, label, period), period);
@@ -53,14 +66,23 @@ export function scheduleDailyKst(
     `[${label}] 예약됨 — 매일 KST ${pad(hourKst)}:${pad(minuteKst)} ` +
     `(다음: ${minutesFromNow(initialMs)})`,
   );
+
+  // Startup backfill — 마지막 성공이 25h+ 경과면 즉시 실행
+  if (options.backfill !== false) {
+    setTimeout(() => backfillIfMissed(fn, label, period), 5000); // server start 5초 후 (다른 init 완료 대기)
+  }
 }
 
+/**
+ * 매주 KST weekday(0=일~6=토) hourKst:minuteKst 실행.
+ */
 export function scheduleWeeklyKst(
-  weekday: number /* 0=일 ~ 6=토 (KST 기준) */,
+  weekday: number,
   hourKst: number,
   minuteKst: number,
   fn: () => Promise<void>,
   label: string,
+  options: { backfill?: boolean } = {},
 ): void {
   const period = 7 * 24 * 60 * 60 * 1000;
   const initialMs = msUntilNextKstWeekday(weekday, hourKst, minuteKst);
@@ -77,6 +99,8 @@ export function scheduleWeeklyKst(
     errorCount: 0,
   });
 
+  hydrateLastRun(label).catch(() => {});
+
   setTimeout(() => {
     runOnce(fn, label, period);
     setInterval(() => runOnce(fn, label, period), period);
@@ -85,39 +109,130 @@ export function scheduleWeeklyKst(
     `[${label}] 예약됨 — 매주 ${dayLabels[weekday]} KST ${pad(hourKst)}:${pad(minuteKst)} ` +
     `(다음: ${minutesFromNow(initialMs)})`,
   );
+
+  if (options.backfill !== false) {
+    setTimeout(() => backfillIfMissed(fn, label, period), 5000);
+  }
+}
+
+/**
+ * In-memory status에 DB의 마지막 실행 정보 반영.
+ * Server restart 후 대시보드가 "실행 0회"로 표시되는 문제 해결.
+ */
+async function hydrateLastRun(label: string): Promise<void> {
+  const status = CRON_STATUS.get(label);
+  if (!status) return;
+  try {
+    const last = await prisma.cronRun.findFirst({
+      where: { label, NOT: { success: null } },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true, completedAt: true, success: true, errorMessage: true },
+    });
+    if (last) {
+      status.lastStartedAt = last.startedAt.toISOString();
+      if (last.completedAt) status.lastCompletedAt = last.completedAt.toISOString();
+      if (last.success !== null) status.lastSuccess = last.success;
+      if (last.errorMessage) status.lastError = last.errorMessage;
+    }
+    // runCount + errorCount 집계
+    const [runCount, errorCount] = await Promise.all([
+      prisma.cronRun.count({ where: { label } }),
+      prisma.cronRun.count({ where: { label, success: false } }),
+    ]);
+    status.runCount = runCount;
+    status.errorCount = errorCount;
+  } catch (e: any) {
+    // hydrate 실패해도 cron은 정상 동작 (in-memory만 0으로)
+    console.warn(`[${label}] hydrateLastRun 실패:`, e?.message);
+  }
+}
+
+/**
+ * Server startup backfill — 마지막 성공이 period의 1.05배(여유) 이상 경과했으면 즉시 실행.
+ * 이를 통해 매일 deploy로 인한 cron miss 방지.
+ */
+async function backfillIfMissed(fn: () => Promise<void>, label: string, periodMs: number): Promise<void> {
+  try {
+    const lastSuccess = await prisma.cronRun.findFirst({
+      where: { label, success: true },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true },
+    });
+    const now = Date.now();
+    const threshold = periodMs * 1.05; // 5% 여유 (drift 흡수)
+    const elapsed = lastSuccess ? now - lastSuccess.startedAt.getTime() : Infinity;
+    if (elapsed > threshold) {
+      const elapsedHours = lastSuccess ? Math.round(elapsed / 3600_000) : null;
+      console.log(`[${label}] 🔄 backfill 실행 — 마지막 성공 ${elapsedHours ?? '없음'}h 전 (threshold ${Math.round(threshold/3600_000)}h)`);
+      runOnce(fn, label, periodMs);
+    }
+  } catch (e: any) {
+    console.warn(`[${label}] backfill 체크 실패:`, e?.message);
+  }
 }
 
 async function runOnce(fn: () => Promise<void>, label: string, periodMs?: number): Promise<void> {
   const status = CRON_STATUS.get(label);
-  const startedAt = new Date().toISOString();
+  const startedAt = new Date();
+  const startedAtIso = startedAt.toISOString();
+
+  // 1) DB record 생성 (success=null = 진행 중)
+  let cronRunId: string | null = null;
+  try {
+    const row = await prisma.cronRun.create({
+      data: { label, startedAt, success: null },
+      select: { id: true },
+    });
+    cronRunId = row.id;
+  } catch (e: any) {
+    console.warn(`[${label}] cronRun.create 실패 (DB 미사용 모드로 계속):`, e?.message);
+  }
+
   if (status) {
-    status.lastStartedAt = startedAt;
+    status.lastStartedAt = startedAtIso;
     status.runCount += 1;
   }
+
+  const t0 = Date.now();
   try {
     await fn();
+    const durationMs = Date.now() - t0;
+    const completedAt = new Date();
     if (status) {
-      status.lastCompletedAt = new Date().toISOString();
+      status.lastCompletedAt = completedAt.toISOString();
       status.lastSuccess = true;
       status.lastError = undefined;
       if (periodMs) status.nextRunAt = new Date(Date.now() + periodMs).toISOString();
     }
+    if (cronRunId) {
+      await prisma.cronRun.update({
+        where: { id: cronRunId },
+        data: { completedAt, success: true, durationMs },
+      }).catch(() => {});
+    }
   } catch (e: any) {
     const msg = e?.message || String(e);
+    const durationMs = Date.now() - t0;
+    const completedAt = new Date();
     console.error(`[${label}] 실패:`, msg);
     if (status) {
-      status.lastCompletedAt = new Date().toISOString();
+      status.lastCompletedAt = completedAt.toISOString();
       status.lastSuccess = false;
       status.lastError = msg.slice(0, 500);
       status.errorCount += 1;
       if (periodMs) status.nextRunAt = new Date(Date.now() + periodMs).toISOString();
     }
+    if (cronRunId) {
+      await prisma.cronRun.update({
+        where: { id: cronRunId },
+        data: { completedAt, success: false, durationMs, errorMessage: msg.slice(0, 2000) },
+      }).catch(() => {});
+    }
   }
 }
 
 /**
- * 외부에서 cron을 즉시 실행 (manual trigger). status도 함께 update.
- * Internal-trigger endpoint에서 사용.
+ * 외부에서 cron을 즉시 실행 (manual trigger). status + DB 기록 포함.
  */
 export async function manualRunCron(label: string, fn: () => Promise<void>): Promise<void> {
   await runOnce(fn, label);
@@ -136,40 +251,35 @@ function minutesFromNow(ms: number): string {
 }
 
 /**
- * 현재 UTC 시각 기준 다음 KST hourKst:minuteKst 까지 남은 ms.
- * KST = UTC + 9. 예) KST 09:00 → UTC 00:00 (당일). KST 07:00 → UTC 22:00 (전날).
- * setUTCHours가 day overflow를 자동 처리하므로 단순 계산 가능.
+ * 다음 KST hourKst:minuteKst 까지 남은 ms.
+ *
+ * 구현: KST를 가상 UTC로 다루기 (epoch + 9h 변환) → 계산 → 마지막에 -9h로 실제 UTC 환원.
+ * 이전 버그: setUTCHours(hourKst - 9)가 UTC 자정 기준이라 KST date가 다음날로 넘어간 경우 잘못 계산.
  */
 function msUntilNextKstTime(hourKst: number, minuteKst: number): number {
-  const now = new Date();
-  const target = new Date(now);
-  // KST hour → UTC hour (음수 wrap은 setUTCHours가 알아서 전날로 처리)
-  // 간단하게: setUTCHours(hourKst - 9) — 음수면 자동 전날
-  target.setUTCHours(hourKst - 9, minuteKst, 0, 0);
-  // setUTCHours로 음수 hour를 넣으면 자동으로 전날 normalize됨
-  if (target.getTime() <= now.getTime()) {
+  const now = Date.now();
+  const KST_OFFSET = 9 * 60 * 60 * 1000;
+  const nowKst = new Date(now + KST_OFFSET);
+  const target = new Date(nowKst);
+  target.setUTCHours(hourKst, minuteKst, 0, 0);
+  if (target.getTime() <= nowKst.getTime()) {
     target.setUTCDate(target.getUTCDate() + 1);
   }
-  return target.getTime() - now.getTime();
+  return (target.getTime() - KST_OFFSET) - now;
 }
 
 /**
- * 현재 시각 기준 다음 KST 요일·시간까지 남은 ms.
+ * 다음 KST weekday(0=일~6=토) hourKst:minuteKst 까지 남은 ms.
  */
 function msUntilNextKstWeekday(weekdayKst: number, hourKst: number, minuteKst: number): number {
-  const now = new Date();
-  // KST 현재 요일 계산: now + 9h → 그 시각의 UTC day가 KST day
-  const nowKstMs = now.getTime() + 9 * 60 * 60 * 1000;
-  const nowKst = new Date(nowKstMs);
-  const nowKstDay = nowKst.getUTCDay();
+  const now = Date.now();
+  const KST_OFFSET = 9 * 60 * 60 * 1000;
+  const nowKst = new Date(now + KST_OFFSET);
+  const target = new Date(nowKst);
+  target.setUTCHours(hourKst, minuteKst, 0, 0);
 
-  // 일단 오늘 KST의 hourKst:minuteKst 시각을 UTC로 표현
-  const target = new Date(now);
-  target.setUTCHours(hourKst - 9, minuteKst, 0, 0);
-
-  // 며칠 후로 옮길지: weekdayKst - nowKstDay (mod 7)
-  let daysUntil = (weekdayKst - nowKstDay + 7) % 7;
-  if (daysUntil === 0 && target.getTime() <= now.getTime()) daysUntil = 7;
+  let daysUntil = (weekdayKst - target.getUTCDay() + 7) % 7;
+  if (daysUntil === 0 && target.getTime() <= nowKst.getTime()) daysUntil = 7;
   target.setUTCDate(target.getUTCDate() + daysUntil);
-  return target.getTime() - now.getTime();
+  return (target.getTime() - KST_OFFSET) - now;
 }

@@ -883,3 +883,24 @@ model ErrorLog {
   @@index([userId, createdAt(sort: Desc)])
   @@map("error_logs")
 }
+
+// ── Cron 실행 기록 ──────────────────────────────────────
+// 6개 server-side cron의 매 실행을 영구 기록.
+// 목적:
+//   1. 대시보드에서 history 표시 (server restart해도 유지)
+//   2. server startup 시 "마지막 성공 이후 N시간 경과" backfill 판단
+//   3. multi-replica race 방지 (dedupe within periodMs)
+model CronRun {
+  id            String   @id @default(cuid())
+  label         String                       // e.g. 'general-email-briefing-cron'
+  startedAt     DateTime @default(now()) @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  success       Boolean? // null = 진행 중, true/false = 완료
+  errorMessage  String?  @map("error_message") @db.Text
+  durationMs    Int?     @map("duration_ms")
+  resultSummary Json?    @map("result_summary") // cron 함수의 result 일부 (선택)
+
+  @@index([label, startedAt(sort: Desc)])
+  @@index([startedAt(sort: Desc)])
+  @@map("cron_runs")
+}
