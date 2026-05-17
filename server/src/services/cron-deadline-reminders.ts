@@ -23,7 +23,10 @@ import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { lookupSlackUserByEmail, postSlackMessage } from './cron-shared/slack-api.js';
 
-const TASK_DB_ID = '70aa782f-245b-460c-93be-1f0920fc13e2';
+// 📝 연구실 할 일·요청 (Slack 자동 추출) Notion DB.
+// 2026-05-17: 옛 ID 70aa782f-245b-460c-93be-1f0920fc13e2 → bcaf30f0-... (DB 위치 이동/재생성 추정).
+// env.NOTION_TASK_DB_ID로 override 가능 — 향후 재이동 시 코드 수정 없이 env로 처리.
+const TASK_DB_ID = env.NOTION_TASK_DB_ID || 'bcaf30f0-c5af-4d9c-967b-62a3baeaa093';
 
 type Stage = 'D-3' | 'D-1' | '당일' | '지남';
 const STAGE_ORDER: Record<Stage, number> = { 'D-3': 1, 'D-1': 2, '당일': 3, '지남': 4 };

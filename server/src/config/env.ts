@@ -16,6 +16,10 @@ const envSchema = z.object({
   GOOGLE_REFRESH_TOKEN: z.string().optional(), // GDrive 동기화용 고정 토큰 (PI 계정)
   GOOGLE_REDIRECT_URI: z.string().default('https://labflow-app-production.up.railway.app/api/email/auth/callback'),
   NOTION_API_KEY: z.string().optional(),
+  // 📝 연구실 할 일·요청 (Slack 자동 추출) DB ID override.
+  // 미설정 시 cron-deadline-reminders.ts의 default 사용 (현재 bcaf30f0-...).
+  // Notion에서 DB 위치 이동되면 새 ID로 env 설정 → 즉시 반영 (코드 수정 없이).
+  NOTION_TASK_DB_ID: z.string().optional(),
   GDRIVE_FILE_ACCOUNTS: z.string().optional(),       // BLISS 아이디/비밀번호 스프레드시트 ID
   GDRIVE_FILE_PROJECT_INFO: z.string().optional(),   // 과제 정보 스프레드시트 ID
   GDRIVE_FILE_ACKNOWLEDGMENT: z.string().optional(), // 과제 사사 스프레드시트 ID
