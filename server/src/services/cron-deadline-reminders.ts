@@ -82,8 +82,14 @@ async function fetchActiveTasks(notion: NotionClient): Promise<TaskItem[]> {
       filter: {
         and: [
           // 2026-05-17: Notion DB 마이그레이션으로 '상태' property type이 status → select로 변경됨.
-          // 옛 코드의 `status: { equals: '진행중' }` 사용 시 "property type mismatch" 에러 발생.
-          { property: '상태', select: { equals: '진행중' } },
+          // 사용자 정책: '확정' + '진행중' 둘 다 마감 추적 — PI 검토 후 학생에게 배정된 시점부터
+          // 학생 진행 여부와 무관하게 마감 임박 알림. (이전엔 '진행중'만 → 학생 미시작 task 모두 누락)
+          {
+            or: [
+              { property: '상태', select: { equals: '확정' } },
+              { property: '상태', select: { equals: '진행중' } },
+            ],
+          },
           { property: '마감일', date: { is_not_empty: true } },
         ],
       },
