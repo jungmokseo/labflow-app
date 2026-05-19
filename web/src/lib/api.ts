@@ -247,6 +247,7 @@ export interface BlissTaskSource {
   slackPermalink?: string;
   slackUserId?: string;
   requesterName?: string;
+  attachments?: BlissTaskAttachment[];
 }
 
 export interface BlissTaskDirect {
@@ -254,9 +255,40 @@ export interface BlissTaskDirect {
   notifiedAt?: string;
 }
 
+export interface BlissTaskAttachment {
+  memoId?: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  type?: string;
+  suggestedAction?: string;
+  textPreview?: string;
+  slackUrl?: string;
+  slackPermalink?: string;
+  imageDataUrl?: string;
+  error?: string;
+}
+
+export interface BlissTaskMeetingAction {
+  id?: string;
+  title?: string;
+  evidence?: string;
+  ownerName?: string | null;
+  dueDate?: string | null;
+  priority?: BlissTaskPriority;
+  reviewReason?: string[];
+  meetingTitle?: string;
+}
+
 export interface BlissTaskMetadata {
   blissSource?: BlissTaskSource;
   blissDirect?: BlissTaskDirect;
+  meetingAction?: BlissTaskMeetingAction;
+  meetingId?: string;
+  meetingTitle?: string;
+  ownerNameHint?: string | null;
+  dueDateHint?: string | null;
+  reviewReason?: string[];
   heldAt?: string;
   notifiedAt?: string;
   assignedOwner?: string;
@@ -902,16 +934,67 @@ export async function initEmailProfile() {
 }
 
 // ── 회의 ──────────────────────────────────────────
+export interface MeetingDiscussion {
+  topic: string;
+  bullets?: string[];
+  content?: string;
+}
+
+export interface MeetingTaskCandidate {
+  id: string;
+  title: string;
+  evidence: string;
+  source: 'action_item' | 'next_step';
+  sourceIndex: number;
+  ownerName: string | null;
+  dueDate: string | null;
+  dueText: string | null;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  reviewReason: string[];
+  status: 'queued_for_review';
+}
+
+export interface MeetingOpsPacket {
+  version: 1;
+  generatedAt: string;
+  decisions: string[];
+  openQuestions: string[];
+  contextForAgents: string[];
+  taskCandidates: MeetingTaskCandidate[];
+  integrationEvents: Array<{
+    target: 'tasks' | 'calendar' | 'knowledge' | 'google_docs';
+    status: 'ready' | 'queued' | 'manual_review' | 'synced';
+    label: string;
+    count?: number;
+  }>;
+  readiness: {
+    score: number;
+    summary: string;
+    missing: string[];
+  };
+}
+
 export interface Meeting {
   id: string;
   title: string;
   summary: string | null;
   transcription: string | null;
-  discussions: string | null;
+  discussions: MeetingDiscussion[];
   agenda: string[];
   actionItems: string[];
   nextSteps: string[];
+  duration: number | null;
+  modelUsed: string | null;
+  metadata: {
+    participants?: string[];
+    team?: string;
+    decisions?: string[];
+    openQuestions?: string[];
+    opsPacket?: MeetingOpsPacket;
+    [key: string]: unknown;
+  };
   createdAt: string;
+  updatedAt: string;
 }
 
 export async function getMeetings(limit = 10) {
@@ -925,7 +1008,7 @@ export async function createMeeting(data: { title: string; agenda?: string[] }) 
   });
 }
 
-export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary' | 'transcription'>> & { agenda?: string[]; discussions?: string; actionItems?: string[]; nextSteps?: string[]; corrections?: Array<{ wrong: string; correct: string }> }) {
+export async function updateMeeting(id: string, data: Partial<Pick<Meeting, 'title' | 'summary' | 'transcription'>> & { agenda?: string[]; discussions?: string | MeetingDiscussion[]; actionItems?: string[]; nextSteps?: string[]; corrections?: Array<{ wrong: string; correct: string }> }) {
   return apiFetch<{ success: boolean; data: Meeting }>(`/api/meetings/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -1886,6 +1969,54 @@ export async function getCronStatus() {
 export async function runAllCrons() {
   // 6개 cron 순차 실행 — Sonnet/Gemini API 호출 + Slack DM 포함되어 ~5분 정도 소요 가능
   return apiFetch<CronRunAllResult>('/api/automations/run-all', { method: 'POST' }, 0, 600_000);
+}
+
+// ── Slack 발송 경로 QA ────────────────────────────────
+export interface SlackCanaryResult {
+  ok: boolean;
+  steps: {
+    authTest?: {
+      ok: boolean;
+      botUserId: string | null;
+      botUsername: string | null;
+      workspace: string | null;
+      url: string | null;
+      scopes: string[];
+      error: string | null;
+    };
+    lookupByEmail?: {
+      ok: boolean;
+      email: string;
+      userId: string | null;
+      name: string | null;
+      error: string | null;
+    };
+    adminDm?: {
+      ok: boolean;
+      channel: string | null;
+      ts: string | null;
+      error: string | null;
+    };
+  };
+  error?: string;
+}
+
+/**
+ * Slack 발송 경로 end-to-end QA.
+ * lookupEmail 지정 시 users.lookupByEmail 매칭도 검증 (학생 email 권장).
+ * admin DM은 ADMIN_USER_ID(PI 본인)에게 발송 — 학생 spam 0.
+ */
+export async function runSlackCanary(lookupEmail?: string) {
+  return apiFetch<SlackCanaryResult>(
+    '/api/automations/slack-canary',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: lookupEmail ? JSON.stringify({ lookupEmail }) : '{}',
+    },
+    0,
+    30_000,
+  );
 }
 
 export async function diagnoseNotion() {

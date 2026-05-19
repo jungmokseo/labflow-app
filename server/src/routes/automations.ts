@@ -369,6 +369,109 @@ export async function automationRoutes(app: FastifyInstance) {
     });
   });
 
+  // POST /api/automations/slack-canary — Slack 발송 경로 end-to-end QA (OWNER)
+  //
+  // 검증 항목:
+  //   1) auth.test    — bot identity + workspace
+  //   2) bot info     — granted scopes (chat:write, users:read, users:read.email 등)
+  //   3) chat.postMessage — ADMIN_USER_ID(PI)에게 QA DM 1회 (자기 자신이라 학생 spam 0)
+  //   4) (옵션) users.lookupByEmail — labMember email로 user id 매칭 검증
+  //
+  // body: { lookupEmail?: string } — 있으면 그 email로 lookupByEmail 호출하여 매칭 검증
+  // 학생에게 spam 발송 안 함 — admin에게만.
+  app.post<{ Body: { lookupEmail?: string } }>('/api/automations/slack-canary', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
+    const token = env.SLACK_BOT_TOKEN;
+    const adminUserId = env.ADMIN_USER_ID;
+    if (!token) return reply.code(503).send({ ok: false, error: 'SLACK_BOT_TOKEN 미설정' });
+    if (!adminUserId) return reply.code(503).send({ ok: false, error: 'ADMIN_USER_ID 미설정' });
+
+    const lookupEmail = request.body?.lookupEmail?.trim();
+    const out: any = { ok: true, steps: {} };
+
+    // 1) auth.test
+    try {
+      const r = await fetch('https://slack.com/api/auth.test', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json() as any;
+      out.steps.authTest = {
+        ok: d.ok,
+        botUserId: d.user_id || null,
+        botUsername: d.user || null,
+        workspace: d.team || null,
+        url: d.url || null,
+        scopes: r.headers.get('x-oauth-scopes')?.split(',').map(s => s.trim()).sort() || [],
+        error: d.error || null,
+      };
+      if (!d.ok) {
+        out.ok = false;
+        return reply.send(out);
+      }
+    } catch (e: any) {
+      out.ok = false;
+      out.steps.authTest = { ok: false, error: e?.message };
+      return reply.send(out);
+    }
+
+    // 2) lookupByEmail (옵션)
+    if (lookupEmail) {
+      try {
+        const r = await fetch(`https://slack.com/api/users.lookupByEmail?email=${encodeURIComponent(lookupEmail)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await r.json() as any;
+        out.steps.lookupByEmail = {
+          ok: d.ok,
+          email: lookupEmail,
+          userId: d.user?.id || null,
+          name: d.user?.real_name || d.user?.name || null,
+          error: d.error || null,
+        };
+      } catch (e: any) {
+        out.steps.lookupByEmail = { ok: false, error: e?.message };
+      }
+    }
+
+    // 3) admin DM canary
+    try {
+      const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      const text = [
+        '🧪 *Slack QA 테스트*',
+        '',
+        `시각: ${now} KST`,
+        `발신: ResearchFlow Settings (slack-canary endpoint)`,
+        '',
+        `이 메시지는 Slack 발송 경로 검증용이며, 별도 조치 불필요합니다.`,
+      ].join('\n');
+      const r = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify({
+          channel: adminUserId,
+          text,
+          unfurl_links: false,
+          unfurl_media: false,
+        }),
+      });
+      const d = await r.json() as any;
+      out.steps.adminDm = {
+        ok: d.ok,
+        channel: d.channel || null,
+        ts: d.ts || null,
+        error: d.error || null,
+      };
+      if (!d.ok) out.ok = false;
+    } catch (e: any) {
+      out.ok = false;
+      out.steps.adminDm = { ok: false, error: e?.message };
+    }
+
+    return reply.send(out);
+  });
+
   // GET /api/automations/cron-status — OWNER 인증으로 cron 진단 (internal-trigger와 동일 데이터, sync-token 불필요)
   app.get('/api/automations/cron-status', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
     const { CRON_STATUS } = await import('../services/cron-utils.js');
@@ -376,8 +479,15 @@ export async function automationRoutes(app: FastifyInstance) {
     const envHealth = {
       LAB_ID: !!env.LAB_ID,
       NOTION_API_KEY: !!env.NOTION_API_KEY,
+      NOTION_TASK_DB_ID: !!env.NOTION_TASK_DB_ID,
       ADMIN_USER_ID: !!env.ADMIN_USER_ID,
       SLACK_BOT_TOKEN: !!env.SLACK_BOT_TOKEN,
+      // Slack ↔ ResearchFlow 양방향 동기화 인증 토큰
+      LABFLOW_SYNC_TOKEN: !!env.LABFLOW_SYNC_TOKEN,
+      // labflow-member /api/slack-command 인증 (bliss-slack-bot이 호출)
+      SLACK_RELAY_SECRET: !!env.SLACK_RELAY_SECRET,
+      // labflow-member URL — inbox-summary가 follow-up/vacations 조회
+      LABFLOW_MEMBER_URL: env.LABFLOW_MEMBER_URL ? 'configured' : null,
       ANTHROPIC_API_KEY: !!env.ANTHROPIC_API_KEY,
       GEMINI_API_KEY: !!env.GEMINI_API_KEY,
       GOOGLE_CLIENT_ID: !!env.GOOGLE_CLIENT_ID,

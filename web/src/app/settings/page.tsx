@@ -17,6 +17,8 @@ import {
   runAllCrons,
   type CronStatusResult,
   type CronRunAllResult,
+  runSlackCanary,
+  type SlackCanaryResult,
 } from '@/lib/api';
 import { SettingsSkeleton } from '@/components/Skeleton';
 import { useToast } from '@/components/Toast';
@@ -1361,6 +1363,9 @@ function CronDiagnosticsSection() {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<CronRunAllResult | null>(null);
+  const [slackCanaryEmail, setSlackCanaryEmail] = useState('');
+  const [slackCanaryRunning, setSlackCanaryRunning] = useState(false);
+  const [slackCanaryResult, setSlackCanaryResult] = useState<SlackCanaryResult | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -1387,6 +1392,21 @@ function CronDiagnosticsSection() {
       toast(`실행 실패: ${e?.message || ''}`, 'error');
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleSlackCanary = async () => {
+    setSlackCanaryRunning(true);
+    setSlackCanaryResult(null);
+    try {
+      const email = slackCanaryEmail.trim() || undefined;
+      const r = await runSlackCanary(email);
+      setSlackCanaryResult(r);
+      toast(r.ok ? 'Slack 발송 경로 정상 — PI DM 확인하세요' : 'Slack 발송 실패 — 결과 확인', r.ok ? 'success' : 'error');
+    } catch (e: any) {
+      toast(`canary 실패: ${e?.message || ''}`, 'error');
+    } finally {
+      setSlackCanaryRunning(false);
     }
   };
 
@@ -1539,6 +1559,95 @@ function CronDiagnosticsSection() {
           ))}
         </div>
       )}
+
+      {/* ── Slack 발송 경로 QA ───────────────────────── */}
+      <div className="border-t border-border pt-3 space-y-2">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <div className="text-sm font-semibold text-text-heading">📨 Slack 발송 경로 QA</div>
+            <div className="text-[11px] text-text-muted mt-0.5">
+              auth.test → (옵션) users.lookupByEmail → chat.postMessage (PI 본인에게 QA DM 1회).
+              학생에게 spam 발송 안 됨.
+            </div>
+          </div>
+          <button
+            onClick={handleSlackCanary}
+            disabled={slackCanaryRunning}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            {slackCanaryRunning && <span className="w-3.5 h-3.5 border border-white border-t-transparent rounded-full animate-spin" />}
+            {slackCanaryRunning ? '실행 중…' : '📨 Slack 발송 QA'}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="email"
+            value={slackCanaryEmail}
+            onChange={e => setSlackCanaryEmail(e.target.value)}
+            placeholder="(선택) 학생 email — users.lookupByEmail 매칭 검증"
+            className="flex-1 px-3 py-1.5 text-xs border border-border bg-bg-card rounded text-text-heading placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+        {slackCanaryResult && (
+          <div className="space-y-1.5 text-[11px] font-mono">
+            {slackCanaryResult.steps.authTest && (
+              <div className={`rounded border px-2 py-1.5 ${
+                slackCanaryResult.steps.authTest.ok
+                  ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-red-500/5 border-red-500/30 text-red-700 dark:text-red-300'
+              }`}>
+                <div className="font-semibold">
+                  {slackCanaryResult.steps.authTest.ok ? '✅' : '❌'} auth.test
+                </div>
+                {slackCanaryResult.steps.authTest.ok ? (
+                  <>
+                    <div>bot: <span className="text-text-heading">{slackCanaryResult.steps.authTest.botUsername}</span> ({slackCanaryResult.steps.authTest.botUserId})</div>
+                    <div>workspace: <span className="text-text-heading">{slackCanaryResult.steps.authTest.workspace}</span></div>
+                    {slackCanaryResult.steps.authTest.scopes.length > 0 && (
+                      <div className="text-text-muted/70 break-all">scopes: {slackCanaryResult.steps.authTest.scopes.join(', ')}</div>
+                    )}
+                  </>
+                ) : (
+                  <div>⚠ {slackCanaryResult.steps.authTest.error}</div>
+                )}
+              </div>
+            )}
+            {slackCanaryResult.steps.lookupByEmail && (
+              <div className={`rounded border px-2 py-1.5 ${
+                slackCanaryResult.steps.lookupByEmail.ok
+                  ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-red-500/5 border-red-500/30 text-red-700 dark:text-red-300'
+              }`}>
+                <div className="font-semibold">
+                  {slackCanaryResult.steps.lookupByEmail.ok ? '✅' : '❌'} users.lookupByEmail
+                </div>
+                <div>email: <span className="text-text-heading">{slackCanaryResult.steps.lookupByEmail.email}</span></div>
+                {slackCanaryResult.steps.lookupByEmail.ok ? (
+                  <div>userId: <span className="text-text-heading">{slackCanaryResult.steps.lookupByEmail.userId}</span> ({slackCanaryResult.steps.lookupByEmail.name})</div>
+                ) : (
+                  <div>⚠ {slackCanaryResult.steps.lookupByEmail.error}</div>
+                )}
+              </div>
+            )}
+            {slackCanaryResult.steps.adminDm && (
+              <div className={`rounded border px-2 py-1.5 ${
+                slackCanaryResult.steps.adminDm.ok
+                  ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                  : 'bg-red-500/5 border-red-500/30 text-red-700 dark:text-red-300'
+              }`}>
+                <div className="font-semibold">
+                  {slackCanaryResult.steps.adminDm.ok ? '✅' : '❌'} chat.postMessage (PI DM)
+                </div>
+                {slackCanaryResult.steps.adminDm.ok ? (
+                  <div>channel: {slackCanaryResult.steps.adminDm.channel} · ts: {slackCanaryResult.steps.adminDm.ts}</div>
+                ) : (
+                  <div>⚠ {slackCanaryResult.steps.adminDm.error}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
