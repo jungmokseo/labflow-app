@@ -21,7 +21,7 @@ function isLikelyForeignTitle(s: string): boolean {
 }
 
 /**
- * 외국어 → 한국어 번역 (Gemini 3.1 Flash-Lite).
+ * 외국어 → 한국어 번역 (Gemini 3.5 Flash).
  * 실패 시 null 반환 — caller가 원본 사용.
  * 6초 timeout — capture 등록 latency 우선 (실패해도 원본 title 그대로 진행).
  */
@@ -30,7 +30,7 @@ async function translateTitleToKorean(text: string): Promise<string | null> {
   try {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-3.1-flash-lite',
+      model: 'gemini-3.5-flash',
       systemInstruction:
         'You are a translator. Translate the user text to Korean (한국어). ' +
         'Output ONLY the translated text — no preamble, no explanation, no quotes. ' +
@@ -58,6 +58,14 @@ const captureSchema = z.object({
   sourceChannel: z.string().min(1).max(120),
   slackPermalink: z.string().url().optional(),
   slackUserId: z.string().min(1).max(80).optional(),
+  attachments: z.array(z.object({
+    data: z.string().min(1).max(28_000_000),
+    mimeType: z.string().min(1).max(100),
+    name: z.string().max(200).optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+    slackUrl: z.string().url().optional(),
+    slackPermalink: z.string().url().optional(),
+  })).max(4).optional(),
   // Slack 메시지 dedup용 — reaction trigger가 짧게 두 번 들어와도 중복 capture 방지.
   slackChannel: z.string().min(1).max(80).optional(),
   slackTs: z.string().min(1).max(40).optional(),
@@ -96,11 +104,52 @@ const byAssigneeQuerySchema = z.object({
 // race-safe. multi-replica로 가면 DB unique constraint 또는 advisory lock 필요.
 const inFlightSlackCaptures = new Map<string, Promise<{ captureId: string; deduped: boolean }>>();
 
+/**
+ * 검토 큐에서 영구 차단할 Slack user IDs.
+ *
+ * 정책 결정 (2026-05-19):
+ * - XIA BEIBEI (U0B176EUAR2): 일상 진행 보고/상의/언어 노이즈가 많아 검토 큐 폭증.
+ *   해당 사용자와의 대화 자체를 검토 흐름에서 제외 — Notion task로 만들 가치 있는 정보가
+ *   거의 없고, 별도 1:1 mpim에서 자체 관리되고 있음. translate 흐름은 별개로 유지.
+ *
+ * 차단 효과:
+ * - mpim 그룹DM 경로: handleMpimAsReviewRequest의 capture API 호출 시 reject (204)
+ * - reaction 경로: PI가 직접 reaction 추가한 경우라도 발신자가 차단 user면 reject
+ * - cron 폴링 경로: cron-process-slack-inbox의 발신자 필터에서 사전 skip
+ *
+ * 사용자 명시 요청 또는 자동화 출처(BLISS-Bot 자체 cron)는 영향 없음.
+ */
+const BLOCKED_SLACK_USER_IDS = new Set<string>([
+  'U0B176EUAR2', // XIA BEIBEI (Ph.D. '25)
+]);
+
+export function isBlockedSlackUserId(userId: string | undefined | null): boolean {
+  if (!userId) return false;
+  return BLOCKED_SLACK_USER_IDS.has(userId);
+}
+
 type BlissSource = {
   sourceChannel?: string;
   slackPermalink?: string;
   slackUserId?: string;
   requesterName?: string;
+  attachments?: ReviewAttachmentMetadata[];
+};
+
+type ReviewAttachmentInput = NonNullable<z.infer<typeof captureSchema>['attachments']>[number];
+
+type ReviewAttachmentMetadata = {
+  memoId?: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  type?: string;
+  suggestedAction?: string;
+  textPreview?: string;
+  slackUrl?: string;
+  slackPermalink?: string;
+  imageDataUrl?: string;
+  error?: string;
 };
 
 function jsonObject(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject {
@@ -117,6 +166,13 @@ function getBlissSource(value: Prisma.JsonValue | null | undefined): BlissSource
   return source as BlissSource;
 }
 
+function getMeetingAction(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject {
+  const metadata = jsonObject(value);
+  const action = metadata.meetingAction;
+  if (!action || typeof action !== 'object' || Array.isArray(action)) return {};
+  return action as Prisma.JsonObject;
+}
+
 function parseDateOnly(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
@@ -125,6 +181,90 @@ function appendMemo(content: string, memo?: string): string {
   const trimmed = memo?.trim();
   if (!trimmed) return content;
   return `${content}\n\n[교수 메모]\n${trimmed}`.slice(0, 5000);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function attachmentPreview(text: string, limit = 1200): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function normalizeMimeType(mimeType: string): string {
+  return mimeType.toLowerCase().split(';')[0].trim();
+}
+
+async function processReviewAttachments(input: {
+  attachments?: ReviewAttachmentInput[];
+  userId: string;
+  labId: string | null;
+}): Promise<ReviewAttachmentMetadata[]> {
+  const attachments = input.attachments ?? [];
+  if (attachments.length === 0) return [];
+
+  const { processUploadedFile } = await import('../services/file-processor.js');
+  const processed: ReviewAttachmentMetadata[] = [];
+
+  for (const attachment of attachments) {
+    const name = attachment.name?.trim() || 'slack-attachment';
+    const mimeType = normalizeMimeType(attachment.mimeType);
+    const buffer = Buffer.from(attachment.data, 'base64');
+    const sizeBytes = buffer.length;
+    const base: ReviewAttachmentMetadata = {
+      name,
+      mimeType,
+      sizeBytes,
+      slackUrl: attachment.slackUrl,
+      slackPermalink: attachment.slackPermalink,
+    };
+
+    try {
+      const result = await processUploadedFile(buffer, name, mimeType);
+      const memo = await prisma.memo.create({
+        data: {
+          userId: input.userId,
+          labId: input.labId || undefined,
+          title: `[Slack 첨부] ${result.filename}`,
+          content: result.text || `[첨부 파일] ${result.filename} (${mimeType}, ${formatBytes(sizeBytes)})`,
+          tags: ['slack-attachment', result.type],
+          source: 'slack-attachment',
+        },
+      });
+
+      processed.push({
+        ...base,
+        memoId: memo.id,
+        type: result.type,
+        suggestedAction: result.suggestedAction,
+        textPreview: attachmentPreview(result.text || ''),
+        imageDataUrl: mimeType.startsWith('image/') && sizeBytes <= 2 * 1024 * 1024
+          ? `data:${mimeType};base64,${attachment.data}`
+          : undefined,
+      });
+    } catch (error) {
+      processed.push({
+        ...base,
+        error: error instanceof Error ? error.message : 'attachment processing failed',
+      });
+    }
+  }
+
+  return processed;
+}
+
+function formatAttachmentBlock(attachments: ReviewAttachmentMetadata[]): string {
+  if (attachments.length === 0) return '';
+  const lines = ['[첨부 파일]'];
+  attachments.forEach((attachment, idx) => {
+    lines.push(`${idx + 1}. ${attachment.name} (${attachment.mimeType}, ${formatBytes(attachment.sizeBytes)})`);
+    if (attachment.textPreview) lines.push(`   미리보기: ${attachment.textPreview}`);
+    if (attachment.slackPermalink || attachment.slackUrl) lines.push(`   원본: ${attachment.slackPermalink || attachment.slackUrl}`);
+    if (attachment.error) lines.push(`   처리 오류: ${attachment.error}`);
+  });
+  return lines.join('\n');
 }
 
 async function resolveOwner() {
@@ -166,13 +306,17 @@ function formatReviewItem(capture: Pick<Capture, 'id' | 'summary' | 'content' | 
 }
 
 async function findReviewCapture(id: string, _userId: string) {
-  // BLISS Lab은 단일 PI 환경 — userId 매칭 제거. blissSource로 자동 식별.
+  // BLISS Lab은 단일 PI 환경 — userId 매칭 제거.
+  // Slack 입력(blissSource)과 회의록 액션(meetingAction)을 같은 PI 검토 큐에서 처리.
   return prisma.capture.findFirst({
     where: {
       id,
       category: 'TASK',
       status: 'active',
-      metadata: { path: ['blissSource'], not: Prisma.JsonNull },
+      OR: [
+        { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
+        { metadata: { path: ['meetingAction'], not: Prisma.JsonNull } },
+      ],
     },
   });
 }
@@ -184,6 +328,21 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
 
     const body = captureSchema.parse(request.body);
+
+    // ── 차단 user ID 사전 거부 ──
+    // BLOCKED_SLACK_USER_IDS (현재 XIA BEIBEI)와의 대화는 검토 큐에 들어가지 않음.
+    // capture 생성 자체 reject — DB row 만들지 않고 정상 응답 (caller에서 skip로 처리).
+    // 204 No Content 대신 200 + { success: true, skipped: true, reason } 로 caller가 silent 처리 가능.
+    if (isBlockedSlackUserId(body.slackUserId)) {
+      console.log('[bliss-tasks:captures] blocked slackUserId 거부:', body.slackUserId, 'title=', body.title.slice(0, 60));
+      return reply.code(200).send({
+        success: true,
+        skipped: true,
+        reason: 'sender blocked from review queue',
+        slackUserId: body.slackUserId,
+      });
+    }
+
     const { user, labId } = await resolveOwner();
 
     // PI 본인 메시지에서 추출된 task → 검토 단계 건너뛰고 즉시 active.
@@ -233,6 +392,11 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         });
         if (existing) return { captureId: existing.id, deduped: true };
       }
+      const reviewAttachments = await processReviewAttachments({
+        attachments: body.attachments,
+        userId: user.id,
+        labId,
+      });
       // 2) 신규 생성
       // content: 외국어 원문일 경우 "📝 한글 요약: ... --- 원문 ---" prefix 추가하여 PI가 양쪽 다 볼 수 있게.
       const contentParts: string[] = [];
@@ -242,6 +406,11 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         contentParts.push('--- 원문 ---');
       }
       contentParts.push(body.originalMessage);
+      const attachmentBlock = formatAttachmentBlock(reviewAttachments);
+      if (attachmentBlock) {
+        contentParts.push('');
+        contentParts.push(attachmentBlock);
+      }
       const finalContent = contentParts.join('\n').slice(0, 8000);
 
       const created = await prisma.capture.create({
@@ -266,6 +435,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
               slackPermalink: body.slackPermalink,
               slackUserId: body.slackUserId,
               requesterName: body.requesterName,
+              attachments: reviewAttachments,
               // dedup key — reaction trigger의 같은 메시지 중복 방지용
               slackChannel: body.slackChannel,
               slackTs: body.slackTs,
@@ -312,13 +482,16 @@ export async function blissTasksRoutes(app: FastifyInstance) {
   app.get('/api/bliss-tasks/review-queue', { preHandler: authMiddleware }, async (_request) => {
     // BLISS Lab 단일 PI 환경 — userId 매칭 제거.
     // BLISS Slack에서 들어온 task는 항상 dev-user-seo / LAB_OWNER_CLERK_ID로 저장되지만
-    // web 로그인한 Clerk userId와 다를 수 있어 매칭 실패. blissSource 메타로 식별.
+    // web 로그인한 Clerk userId와 다를 수 있어 매칭 실패. Slack/meeting metadata로 식별.
     const captures = await prisma.capture.findMany({
       where: {
         reviewed: false,
         category: 'TASK',
         status: 'active',
-        metadata: { path: ['blissSource'], not: Prisma.JsonNull },
+        OR: [
+          { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
+          { metadata: { path: ['meetingAction'], not: Prisma.JsonNull } },
+        ],
       },
       select: {
         id: true,
@@ -341,8 +514,20 @@ export async function blissTasksRoutes(app: FastifyInstance) {
 
     const currentMetadata = jsonObject(capture.metadata);
     const blissSource = getBlissSource(capture.metadata);
+    const meetingAction = getMeetingAction(capture.metadata);
     const actionDate = parseDateOnly(body.actionDate);
     const notificationAt = new Date().toISOString();
+    const meetingTitle = typeof currentMetadata.meetingTitle === 'string'
+      ? currentMetadata.meetingTitle
+      : typeof meetingAction.meetingTitle === 'string'
+        ? meetingAction.meetingTitle
+        : undefined;
+    const sourceLabel = meetingTitle
+      ? `회의: ${meetingTitle}`
+      : blissSource.sourceChannel
+        ? `Slack: ${blissSource.sourceChannel}`
+        : undefined;
+    const sourceUrl = blissSource.slackPermalink;
 
     await prisma.capture.update({
       where: { id: capture.id },
@@ -355,6 +540,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
           ...currentMetadata,
           notifiedAt: notificationAt,
           assignedOwner: body.ownerName,
+          confirmedAt: notificationAt,
         },
       },
     });
@@ -364,6 +550,8 @@ export async function blissTasksRoutes(app: FastifyInstance) {
       taskTitle: capture.summary,
       actionDate,
       slackPermalink: blissSource.slackPermalink,
+      sourceLabel,
+      sourceUrl,
       memo: body.memo,
     });
 
@@ -611,6 +799,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         OR: [
           { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
           { metadata: { path: ['blissDirect'], not: Prisma.JsonNull } },
+          { metadata: { path: ['meetingAction'], not: Prisma.JsonNull } },
         ],
       },
       select: {
@@ -654,6 +843,7 @@ export async function blissTasksRoutes(app: FastifyInstance) {
         OR: [
           { metadata: { path: ['blissSource'], not: Prisma.JsonNull } },
           { metadata: { path: ['blissDirect'], not: Prisma.JsonNull } },
+          { metadata: { path: ['meetingAction'], not: Prisma.JsonNull } },
         ],
       },
     });

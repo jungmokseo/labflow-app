@@ -68,6 +68,13 @@ const SENSITIVE_KEYWORDS = [
 // 이모지/스티커만 있는지 (대략) — 한글/영문/숫자가 5자 이상 있어야 task 후보로 봄.
 const ALPHANUM_OR_HANGUL = /[\p{L}\p{N}]/u;
 
+// 검토 큐 차단 발신자 Slack user IDs (2026-05-19 정책).
+// labflow-app bliss-tasks.ts BLOCKED_SLACK_USER_IDS와 일치 유지.
+// mpim 진입 경로(events.ts)에서 1차 차단, 여기서는 fallback (channel polling 시).
+const BLOCKED_SENDER_IDS = new Set<string>([
+  'U0B176EUAR2', // XIA BEIBEI (Ph.D. '25) — 일상 진행 노이즈로 review queue 폭증 방지
+]);
+
 // state 저장용 Capture 행 식별자 — sourceType + summary + tags로 유니크하게 잡음.
 const STATE_SOURCE_TYPE = 'slack-poll-state';
 const STATE_SUMMARY = 'BLISS Slack Poll State';
@@ -346,7 +353,7 @@ async function classifyWithGemini(text: string, channelName: string): Promise<Cl
   const today = new Date().toISOString().slice(0, 10);
   try {
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const result = await model.generateContent({
       contents: [
         { role: 'user', parts: [{ text: buildClassifyPrompt(text, channelName, today) }] },
@@ -589,6 +596,7 @@ export async function runProcessSlackInbox(): Promise<ProcessSlackInboxResult> {
       if (!m.user) continue;                                // user 없는 메시지(시스템) skip
       if (botUserId && m.user === botUserId) continue;      // 자기 봇 메시지 skip
       if (m.bot_id) continue;                               // 다른 봇 메시지 skip
+      if (BLOCKED_SENDER_IDS.has(m.user)) continue;          // 차단 user (Beibei 등) skip — LLM call 자체 회피
       const subtype = m.subtype || '';
       if (SYSTEM_MESSAGE_SUBTYPES.has(subtype)) continue;
       if (subtype && subtype !== 'thread_broadcast') continue;
