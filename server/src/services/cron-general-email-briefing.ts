@@ -25,7 +25,7 @@ import { google, type gmail_v1 } from 'googleapis';
 import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { decryptToken, isEncrypted } from '../utils/crypto.js';
-import { postSlackAdminDm } from './cron-shared/slack-api.js';
+import { postSlackAdminDm, postSlackAdminDmChunked } from './cron-shared/slack-api.js';
 
 // 주간보고 제외 패턴 (cron-email-briefing이 별도 처리)
 const WEEKLY_REPORT_PATTERN = /weekly\s*report|주간\s*진행\s*사항\s*보고|주간보고/i;
@@ -81,6 +81,11 @@ interface ParsedEmail {
   body: string;         // text/plain (5KB cap)
   toCC: string;
   receivedAt: Date;
+  // ── thread 대응 상태 (2026-05-19 추가) ──
+  // 사용자(PI)가 이 thread에 답장한 적이 있으면 true.
+  // urgent/action-needed로 분류되어도 후처리에서 info로 강등 — "이미 처리한 메일"이 자꾸 [대응] 표시되던 문제 해결.
+  userReplied: boolean;
+  userRepliedAt?: Date;  // 가장 최근 사용자 발신 시각 (있을 때만)
 }
 
 interface BriefedEmail extends ParsedEmail {
@@ -222,7 +227,103 @@ function parseMsg(data: gmail_v1.Schema$Message): ParsedEmail {
     body: extractPlainBody(data.payload).slice(0, 5000),
     toCC: `${get('To')} ${get('Cc')}`.trim(),
     receivedAt: new Date(Number(data.internalDate) || Date.now()),
+    userReplied: false, // enrichReplyStatus가 thread.get으로 채움
   };
+}
+
+/**
+ * From 헤더에서 email address 추출 — "Name <addr@x.com>" 또는 "addr@x.com" 형태 모두 지원.
+ */
+function extractEmailAddress(fromHeader: string): string | null {
+  if (!fromHeader) return null;
+  const angle = fromHeader.match(/<([^>]+)>/);
+  if (angle) return angle[1].trim().toLowerCase();
+  const direct = fromHeader.match(/[\w.+-]+@[\w.-]+/);
+  return direct ? direct[0].toLowerCase() : null;
+}
+
+/**
+ * PI 본인 email 결정 — env.LAB_OWNER_EMAIL 우선, fallback DB GmailToken.email.
+ * "사용자가 보낸 thread message" 판정 시 From header가 이 주소와 일치하는지 확인.
+ */
+async function resolveOwnerEmail(): Promise<string | null> {
+  if (env.LAB_OWNER_EMAIL) return env.LAB_OWNER_EMAIL.toLowerCase();
+  const token = await findOwnerGmailToken();
+  return token?.email?.toLowerCase() || null;
+}
+
+/**
+ * 받은 이메일들의 thread를 batch fetch하여 사용자(PI)가 이미 답장한 thread를 표시.
+ *
+ * Gmail thread API:
+ *   users.threads.get(id=threadId) → thread의 모든 message 반환 (헤더 only로 충분 — format='metadata')
+ *
+ * 판정 룰:
+ *   - thread의 어떤 message의 From이 ownerEmail과 일치 AND
+ *   - 그 message가 받은 메일(internalDate) 이후 발신 (= 사용자가 답장한 것)
+ *
+ * 같은 thread 여러 이메일은 한 번만 fetch (dedupe).
+ *
+ * Cost: 받은 이메일 30개 ≈ thread 20개 → 20 API calls × ~200ms / 5 concurrency = ~1초 추가.
+ */
+async function enrichReplyStatus(gmail: gmail_v1.Gmail, emails: ParsedEmail[], ownerEmail: string | null): Promise<void> {
+  if (!ownerEmail) return; // owner 식별 안 되면 모든 메일 userReplied=false 유지
+
+  const uniqueThreadIds = [...new Set(emails.map(e => e.threadId))];
+  // threadId → { userReplied: bool, latestReplyAt?: Date }
+  const threadState = new Map<string, { userReplied: boolean; latestReplyAt?: Date }>();
+
+  const concurrency = 5;
+  for (let i = 0; i < uniqueThreadIds.length; i += concurrency) {
+    const batch = uniqueThreadIds.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(
+      // format='metadata' + metadataHeaders=['From','Date'] — body 미포함으로 light
+      batch.map(threadId =>
+        gmail.users.threads.get({
+          userId: 'me',
+          id: threadId,
+          format: 'metadata',
+          metadataHeaders: ['From', 'Date'],
+        }),
+      ),
+    );
+    for (let j = 0; j < settled.length; j++) {
+      const tid = batch[j];
+      const r = settled[j];
+      if (r.status !== 'fulfilled') {
+        // thread fetch 실패해도 cron 계속 — 그 email은 userReplied=false 그대로
+        threadState.set(tid, { userReplied: false });
+        continue;
+      }
+      const messages = r.value.data.messages || [];
+      let userReplied = false;
+      let latestReplyAt: Date | undefined;
+      for (const m of messages) {
+        const fromHeader = m.payload?.headers?.find(h => h.name?.toLowerCase() === 'from')?.value || '';
+        const fromAddr = extractEmailAddress(fromHeader);
+        if (fromAddr && fromAddr === ownerEmail) {
+          userReplied = true;
+          const internalMs = Number(m.internalDate);
+          if (internalMs && Number.isFinite(internalMs)) {
+            const d = new Date(internalMs);
+            if (!latestReplyAt || d > latestReplyAt) latestReplyAt = d;
+          }
+        }
+      }
+      threadState.set(tid, { userReplied, latestReplyAt });
+    }
+  }
+
+  // 받은 이메일에 thread state 반영. 단 사용자 답장이 메일 도착 이후일 때만 userReplied=true.
+  for (const email of emails) {
+    const state = threadState.get(email.threadId);
+    if (!state || !state.userReplied) continue;
+    // 사용자 답장이 메일 수신 시점 이후여야 "처리됨". 이전이면 같은 thread이지만 새 메일에는 아직 답 안 함.
+    if (state.latestReplyAt && state.latestReplyAt.getTime() >= email.receivedAt.getTime()) {
+      email.userReplied = true;
+      email.userRepliedAt = state.latestReplyAt;
+    }
+  }
 }
 
 async function fetchRecentEmails(gmail: gmail_v1.Gmail): Promise<ParsedEmail[]> {
@@ -403,6 +504,12 @@ ${groupList}
 - "info": 공지, 뉴스레터, 단순 CC, 처리 완료 보고
 - "promo": Call for Papers, 광고성 투고 초대, 프로모션
 
+## ⚠️ 답장 완료 처리 (가장 중요)
+- 각 이메일의 input에 "userReplied: true" 표시가 있으면 **교수가 이미 이 thread에 답장한 메일**입니다.
+- 답장 완료 메일은 **절대 "urgent" 또는 "action-needed"로 분류하지 마세요**. 후속 조치가 없는 한 "info" 또는 "schedule"로 분류.
+- 단, 답장 후에 상대가 또 새 요청을 보낸 경우(예: "감사합니다, 그럼 한 가지 더…" 같이 명시적 후속 요청)는 다시 action-needed 가능 — 본문에서 새 요청이 명확할 때만.
+- summary 첫 문장에 "(답장 완료)" 표시 후 핵심 요약. 예: "(답장 완료) 5/20 미팅 시간 확정 회신 마침. 추가 조치 없음."
+
 ## 중요도 조정 규칙${keywordSection}${rulesSection}
 
 ## 요약 (summary)
@@ -421,6 +528,8 @@ interface ClassifyInput {
   toCC: string;
   snippet: string;
   body: string;
+  userReplied: boolean;     // 사용자가 thread에 답장한 경우 true — prompt에서 강등 판단
+  userRepliedAt?: string;   // ISO — 표시용
 }
 
 interface ClassifyOutput {
@@ -432,10 +541,12 @@ interface ClassifyOutput {
 
 function buildUserPrompt(items: ClassifyInput[]): string {
   return items
-    .map(
-      e =>
-        `### Email ${e.index}\nFrom: ${e.from}\nTo/Cc: ${e.toCC}\nSubject: ${e.subject}\nSnippet: ${e.snippet}\nBody: ${e.body.slice(0, 1500)}`,
-    )
+    .map(e => {
+      const replyMarker = e.userReplied
+        ? `\n⚠️ userReplied: true (교수가 ${e.userRepliedAt ? new Date(e.userRepliedAt).toISOString().slice(0, 16) : '이미'} 이 thread에 답장함 — info/schedule로 강등 권장)`
+        : '';
+      return `### Email ${e.index}${replyMarker}\nFrom: ${e.from}\nTo/Cc: ${e.toCC}\nSubject: ${e.subject}\nSnippet: ${e.snippet}\nBody: ${e.body.slice(0, 1500)}`;
+    })
     .join('\n\n');
 }
 
@@ -533,7 +644,7 @@ async function classifyWithGemini(
 ): Promise<ClassifyOutput[]> {
   if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY 미설정');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
   // Gemini SDK는 native timeout 없음 → Promise.race로 강제 timeout
   const callPromise = model.generateContent({
@@ -653,11 +764,13 @@ function buildMarkdown(briefed: BriefedEmail[]): string {
     info: briefed.filter(b => b.urgency === 'info').length,
     promo: briefed.filter(b => b.urgency === 'promo').length,
   };
+  const repliedCount = briefed.filter(b => b.userReplied).length;
 
   const lines: string[] = [];
   lines.push(`*📧 일반 이메일 브리핑 — ${today}*`);
+  const headerSuffix = repliedCount > 0 ? ` · ✅ 답장완료 ${repliedCount}` : '';
   lines.push(
-    `총 ${total}건 신규 | ⚠️ ${counts.urgent} · 📝 ${counts.action} · 📅 ${counts.schedule} · 📰 ${counts.info} · 🛒 ${counts.promo}`,
+    `총 ${total}건 신규 | ⚠️ ${counts.urgent} · 📝 ${counts.action} · 📅 ${counts.schedule} · 📰 ${counts.info} · 🛒 ${counts.promo}${headerSuffix}`,
   );
   lines.push('');
 
@@ -683,7 +796,8 @@ function buildMarkdown(briefed: BriefedEmail[]): string {
       for (const e of items) {
         const time = formatTime(e.receivedAt);
         const subjectShort = e.subject.length > 80 ? e.subject.slice(0, 77) + '...' : e.subject;
-        lines.push(`  • *${subjectShort}* — _${e.senderName}_ (${time})`);
+        const repliedMark = e.userReplied ? '✅ ' : '';
+        lines.push(`  • ${repliedMark}*${subjectShort}* — _${e.senderName}_ (${time})`);
         lines.push(`    ${e.summary}`);
       }
     }
@@ -704,7 +818,8 @@ function buildMarkdown(briefed: BriefedEmail[]): string {
     for (const [orgName, { emoji, items }] of orgEntries) {
       lines.push(`  ${emoji} *${orgName}*`);
       for (const e of items) {
-        lines.push(`  • _${e.senderName}_ — ${e.summary.split('\n')[0].slice(0, 120)}`);
+        const repliedMark = e.userReplied ? '✅ ' : '';
+        lines.push(`  • ${repliedMark}_${e.senderName}_ — ${e.summary.split('\n')[0].slice(0, 120)}`);
       }
     }
     lines.push('');
@@ -761,6 +876,15 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
   }
   result.emailsScanned = parsed.length;
 
+  // 2.4. Thread 답장 상태 추적 — PI가 이미 답장한 thread의 메일은 후처리에서 강등 처리.
+  // 실패해도 cron 계속 진행 (모든 이메일 userReplied=false 유지).
+  try {
+    const ownerEmail = await resolveOwnerEmail();
+    await enrichReplyStatus(gmail, parsed, ownerEmail);
+  } catch (err: any) {
+    console.warn(`[general-email-briefing] enrichReplyStatus 실패 — 답장 추적 skip (${err?.message})`);
+  }
+
   // 2.5. EmailProfile (ResearchFlow /settings) 로드 — keywords/importanceRules/groups/excludePatterns
   let profile: BriefingProfile;
   try {
@@ -807,6 +931,8 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     toCC: e.toCC,
     snippet: e.snippet,
     body: e.body,
+    userReplied: e.userReplied,
+    userRepliedAt: e.userRepliedAt?.toISOString(),
   }));
 
   const { classified: totalClassified, batchErrors: allBatchErrors } = await classifyInBatches(classifyInputs, profile);
@@ -819,6 +945,7 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
   const classMap = new Map(totalClassified.map(c => [c.index, c]));
   const briefed: BriefedEmail[] = [];
   const unclassified: ParsedEmail[] = [];
+  let demotedCount = 0;
   for (let i = 0; i < filtered.length; i++) {
     const c = classMap.get(i);
     if (!c) {
@@ -828,15 +955,35 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     // LLM이 orgName 정확히 못 채운 경우 도메인 매칭으로 보정
     const orgName = orgEmojiMap.has(c.orgName) ? c.orgName : matchGroupByDomain(filtered[i].sender, profile.groups).name;
     const orgEmoji = orgEmojiMap.get(orgName) || FALLBACK_GROUP.emoji;
+
+    // ── 답장 완료 후처리 safety net ──
+    // prompt에서 LLM이 강등을 충분히 했는지 보장 못함 — 후처리로 명시적 강등.
+    // userReplied=true인데 LLM이 여전히 urgent/action-needed로 둔 경우 info로 강등.
+    // schedule은 유지 (날짜 정보 자체는 가치 있음).
+    let finalUrgency = c.urgency;
+    if (filtered[i].userReplied && (finalUrgency === 'urgent' || finalUrgency === 'action-needed')) {
+      finalUrgency = 'info';
+      demotedCount++;
+    }
+
+    // summary에 "(답장 완료)" prefix 보장 (LLM이 안 붙였으면 추가)
+    let finalSummary = c.summary;
+    if (filtered[i].userReplied && !/^\(답장 완료\)/.test(finalSummary)) {
+      finalSummary = `(답장 완료) ${finalSummary}`;
+    }
+
     briefed.push({
       ...filtered[i],
       orgName,
       orgEmoji,
-      urgency: c.urgency,
-      summary: c.summary,
+      urgency: finalUrgency,
+      summary: finalSummary,
     });
   }
   result.emailsBriefed = briefed.length;
+  if (demotedCount > 0) {
+    console.log(`[general-email-briefing] 답장 완료 후처리 강등: ${demotedCount}건 (urgent/action-needed → info)`);
+  }
 
   // 6. 마크다운 + Slack DM
   // 분류 성공 0건이면 fallback (raw 메타 정보), 1건 이상이면 정상 + 분류 실패는 별도 섹션
@@ -862,8 +1009,13 @@ export async function runGeneralEmailBriefing(): Promise<GeneralBriefingResult> 
     result.briefingMarkdown = markdown;
   }
 
-  const slack = await postSlackAdminDm(result.briefingMarkdown);
+  // 장기 미실행 후 backfill 또는 많은 이메일 누적 시 markdown이 길어 Slack truncate 가능 →
+  // chunked 발송으로 안전하게 여러 메시지로 분할 (3500자 cap, 섹션 경계 우선).
+  const slack = await postSlackAdminDmChunked(result.briefingMarkdown);
   result.slackDmSent = slack.ok;
+  if (slack.chunks && slack.chunks > 1) {
+    console.log(`[general-email-briefing] Slack DM 분할 발송: ${slack.chunks} chunks (총 markdown ${result.briefingMarkdown.length}자)`);
+  }
   if (!slack.ok && slack.error) {
     result.errors.push(`slack: ${slack.error}`);
     console.warn(`[general-email-briefing] Slack DM 실패 — ${slack.error}. Markdown은 manual trigger 응답에 포함됨.`);
