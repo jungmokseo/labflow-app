@@ -35,7 +35,7 @@ export function useChat(channelType: ChannelType) {
         content: result.reply,
         timestamp: new Date(),
         tags: result.sources?.map((s: any) => s.type || s.source).filter(Boolean) || [],
-        modelUsed: 'gemini-2.0-flash',
+        modelUsed: 'gemini-3.5-flash',
       };
 
       setMessages(prev => [...prev, aiMsg]);

@@ -12,19 +12,20 @@ import {
   X, Pencil, Trash2, ExternalLink, PlayCircle, Send,
 } from 'lucide-react';
 import { useToast } from '@/components/Toast';
+import { normalizeCaptureCategory, normalizeCapturePriority } from './state';
 
 type TabFilter = 'all' | 'TASK' | 'IDEA' | 'MEMO';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  task: <CheckCircle className="w-4 h-4 text-green-400" />,
-  idea: <Lightbulb className="w-4 h-4 text-amber-600" />,
-  memo: <FileText className="w-4 h-4 text-gray-400" />,
+  TASK: <CheckCircle className="w-4 h-4 text-green-400" />,
+  IDEA: <Lightbulb className="w-4 h-4 text-amber-600" />,
+  MEMO: <FileText className="w-4 h-4 text-gray-400" />,
 };
 
 const PRIORITY_INFO: Record<string, { label: string; color: string }> = {
-  high: { label: 'HIGH', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
-  medium: { label: 'MED', color: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
-  low: { label: 'LOW', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20' },
+  HIGH: { label: 'HIGH', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  MEDIUM: { label: 'MED', color: 'bg-orange-500/10 text-orange-400 border-orange-500/20' },
+  LOW: { label: 'LOW', color: 'bg-gray-500/10 text-gray-500 border-gray-500/20' },
 };
 
 const TABS: ReadonlyArray<readonly [TabFilter, string]> = [
@@ -468,7 +469,9 @@ function TaskCard({
   onCancelEdit,
   onEditContentChange,
 }: TaskCardProps) {
-  const pri = PRIORITY_INFO[c.priority] || PRIORITY_INFO.low;
+  const categoryKey = normalizeCaptureCategory(c.category);
+  const priorityKey = normalizeCapturePriority(c.priority);
+  const pri = PRIORITY_INFO[priorityKey];
   const dateLabel = c.actionDate
     ? c.actionDate.split('T')[0].slice(5)
     : new Date(c.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
@@ -510,7 +513,7 @@ function TaskCard({
 
         {/* Right: category icon + date */}
         <div className="flex items-center gap-1.5 md:gap-2 flex-shrink-0">
-          {CATEGORY_ICONS[c.category] || CATEGORY_ICONS.memo}
+          {CATEGORY_ICONS[categoryKey]}
           <span className="text-xs text-text-muted inline-flex items-center gap-0.5">
             {c.actionDate && <Calendar className="w-3 h-3" />}
             {dateLabel}
@@ -555,7 +558,7 @@ function TaskCard({
           {/* Meta: tags, priority */}
           {!editing && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              {c.category === 'task' && c.priority && (
+              {categoryKey === 'TASK' && c.priority && (
                 <span className={`text-xs px-2 py-0.5 rounded border ${pri.color}`}>
                   {pri.label}
                 </span>

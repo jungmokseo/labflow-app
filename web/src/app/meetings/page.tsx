@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, exportMeetingToGDocs, Meeting } from '@/lib/api';
+import { getMeetings, uploadMeetingAudio, deleteMeeting, updateMeeting, exportMeetingToGDocs, type Meeting, type MeetingOpsPacket } from '@/lib/api';
 import { useApiData } from '@/lib/use-api';
 import { useToast } from '@/components/Toast';
 import ReactMarkdown from 'react-markdown';
@@ -785,6 +785,128 @@ function ActionItemChecklist({ meetingId, items, onUpdate }: {
   );
 }
 
+function priorityLabel(priority: 'HIGH' | 'MEDIUM' | 'LOW') {
+  if (priority === 'HIGH') return '높음';
+  if (priority === 'LOW') return '낮음';
+  return '보통';
+}
+
+function reviewReasonLabel(reason: string) {
+  const labels: Record<string, string> = {
+    owner_missing: '담당자 확인',
+    owner_inferred: '담당자 추정',
+    due_date_missing: '기한 확인',
+  };
+  return labels[reason] || reason;
+}
+
+function MeetingOpsPanel({ opsPacket }: { opsPacket?: MeetingOpsPacket }) {
+  if (!opsPacket) return null;
+
+  const taskCandidates = opsPacket.taskCandidates || [];
+  const decisions = opsPacket.decisions || [];
+  const context = opsPacket.contextForAgents || [];
+  const score = opsPacket.readiness?.score ?? 0;
+
+  return (
+    <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="w-4 h-4 text-primary" />
+          <p className="text-sm font-semibold text-text-heading">운영 반영 패널</p>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="rounded-lg border border-border bg-bg-card px-2 py-1 text-text-main">
+            반영 준비도 {score}%
+          </span>
+          <span className="text-text-muted">{opsPacket.readiness?.summary}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.25fr] gap-3">
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-text-heading">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400" /> 결정 사항
+            </div>
+            {decisions.length > 0 ? (
+              <ul className="space-y-1.5">
+                {decisions.slice(0, 4).map((decision, idx) => (
+                  <li key={`${decision}-${idx}`} className="text-xs text-text-main leading-relaxed">
+                    - {decision}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-text-muted">확정된 결정사항이 아직 분리되지 않았습니다.</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-text-heading">
+              <FileText className="w-3.5 h-3.5 text-primary" /> 에이전트 컨텍스트
+            </div>
+            <ul className="space-y-1.5">
+              {context.slice(0, 4).map((line, idx) => (
+                <li key={`${line}-${idx}`} className="text-xs text-text-muted leading-relaxed">
+                  - {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-text-heading">
+              <ClipboardList className="w-3.5 h-3.5 text-primary" /> Tasks 검토 큐
+            </div>
+            <span className="text-xs text-text-muted">{taskCandidates.length}개 후보</span>
+          </div>
+
+          {taskCandidates.length > 0 ? (
+            <div className="space-y-2">
+              {taskCandidates.slice(0, 5).map((task) => (
+                <div key={task.id} className="rounded-lg border border-border/70 bg-bg-card/80 px-3 py-2">
+                  <p className="text-sm text-text-heading leading-relaxed">{task.title}</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span className="rounded-md bg-bg-input px-2 py-0.5 text-xs text-text-muted">
+                      우선순위 {priorityLabel(task.priority)}
+                    </span>
+                    <span className="rounded-md bg-bg-input px-2 py-0.5 text-xs text-text-muted">
+                      담당 {task.ownerName || '확인 필요'}
+                    </span>
+                    <span className="rounded-md bg-bg-input px-2 py-0.5 text-xs text-text-muted">
+                      기한 {task.dueDate || '확인 필요'}
+                    </span>
+                    {task.reviewReason.slice(0, 2).map(reason => (
+                      <span key={reason} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300">
+                        {reviewReasonLabel(reason)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-text-muted">회의에서 운영 태스크로 보낼 후보가 없습니다.</p>
+          )}
+        </div>
+      </div>
+
+      {opsPacket.integrationEvents?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border/40">
+          {opsPacket.integrationEvents.map(evt => (
+            <span key={`${evt.target}-${evt.label}`} className="rounded-md border border-border/70 bg-bg-card px-2 py-1 text-xs text-text-muted">
+              {evt.label}{typeof evt.count === 'number' ? ` · ${evt.count}` : ''}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 회의록 확장 뷰 (수정 가능) ──
 function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
   meeting: Meeting;
@@ -794,21 +916,37 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editSummary, setEditSummary] = useState(m.summary || '');
+  const [manualCorrections, setManualCorrections] = useState<Array<{ wrong: string; correct: string }>>([]);
+  const [correctionWrong, setCorrectionWrong] = useState('');
+  const [correctionCorrect, setCorrectionCorrect] = useState('');
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    setEditSummary(m.summary || '');
+    setManualCorrections([]);
+    setCorrectionWrong('');
+    setCorrectionCorrect('');
+  }, [m.id, m.summary]);
+
+  const addManualCorrection = () => {
+    const wrong = correctionWrong.trim();
+    const correct = correctionCorrect.trim();
+    if (!wrong || !correct || wrong.toLowerCase() === correct.toLowerCase()) return;
+    setManualCorrections(prev => {
+      const next = prev.filter(c => c.wrong.toLowerCase() !== wrong.toLowerCase());
+      return [...next, { wrong, correct }];
+    });
+    setCorrectionWrong('');
+    setCorrectionCorrect('');
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      // summary에서 수정된 용어를 원본과 비교하여 corrections 추출
-      const corrections: Array<{ wrong: string; correct: string }> = [];
-      if (m.summary && editSummary !== m.summary) {
-        // 간단한 diff: 원본에서 "안티데라인"이 수정본에서 "안티드라잉"으로 바뀐 경우 등
-        const oldWords = new Set(m.summary.match(/[가-힣A-Za-z]{2,}/g) || []);
-        const newWords = new Set(editSummary.match(/[가-힣A-Za-z]{2,}/g) || []);
-        // 신규 추가된 단어 중 기존에 없던 것은 교정일 가능성
-        // 서버 측 learnCorrectionPatterns가 백그라운드에서 더 정교하게 처리
-      }
+      const corrections = manualCorrections
+        .map(c => ({ wrong: c.wrong.trim(), correct: c.correct.trim() }))
+        .filter(c => c.wrong && c.correct && c.wrong.toLowerCase() !== c.correct.toLowerCase());
 
       // summary 첫 줄의 # 제목에서 title 자동 동기화
       const titleMatch = editSummary.match(/^#\s+(.+)/m);
@@ -819,8 +957,9 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
         ...(newTitle && newTitle !== m.title ? { title: newTitle } : {}),
       });
       setEditing(false);
+      setManualCorrections([]);
       onRefresh();
-      toast('저장됨', 'success');
+      toast(corrections.length > 0 ? `저장됨 · 교정 ${corrections.length}개 학습` : '저장됨', 'success');
     } catch (err: any) {
       console.error('Failed to save meeting:', err);
       toast(`저장 실패: ${err?.message || '알 수 없는 오류'}`, 'error');
@@ -835,7 +974,7 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
       <div className="flex items-center gap-2 mb-3">
         {!editing ? (
           <button
-            onClick={() => { setEditing(true); setEditSummary(m.summary || ''); }}
+            onClick={() => { setEditing(true); setEditSummary(m.summary || ''); setManualCorrections([]); }}
             className="text-xs text-text-muted hover:text-primary flex items-center gap-1 transition-colors"
           >
             <Pencil className="w-3 h-3" /> 수정
@@ -850,13 +989,13 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
               <Save className="w-3 h-3" /> {saving ? '저장 중...' : '저장'}
             </button>
             <button
-              onClick={() => { setEditing(false); setEditSummary(m.summary || ''); }}
+              onClick={() => { setEditing(false); setEditSummary(m.summary || ''); setManualCorrections([]); setCorrectionWrong(''); setCorrectionCorrect(''); }}
               className="text-xs text-text-muted hover:text-text-heading"
             >
               취소
             </button>
             <span className="text-xs text-text-muted ml-2">
-              수정하면 오탈자 교정 사전에 자동 학습됩니다
+              본문 수정은 자동 분석되고, 명시한 교정쌍은 즉시 사전에 반영됩니다
             </span>
           </div>
         )}
@@ -864,12 +1003,62 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
 
       {/* 요약 렌더링 또는 편집 */}
       {editing ? (
-        <textarea
-          value={editSummary}
-          onChange={(e) => setEditSummary(e.target.value)}
-          className="w-full min-h-[400px] bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-sm text-text-heading font-mono leading-relaxed focus:outline-none focus:border-primary resize-y"
-          placeholder="마크다운으로 회의록을 수정하세요..."
-        />
+        <div className="space-y-3">
+          <textarea
+            value={editSummary}
+            onChange={(e) => setEditSummary(e.target.value)}
+            className="w-full min-h-[400px] bg-bg-input/50 border border-border rounded-lg px-4 py-3 text-sm text-text-heading font-mono leading-relaxed focus:outline-none focus:border-primary resize-y"
+            placeholder="마크다운으로 회의록을 수정하세요..."
+          />
+
+          <div className="rounded-lg border border-border/60 bg-bg-input/25 p-3">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <p className="text-xs font-semibold text-text-heading">교정 사전 추가</p>
+              <p className="text-xs text-text-muted">예: 안티데라인 → 안티드라잉</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+              <input
+                value={correctionWrong}
+                onChange={(e) => setCorrectionWrong(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addManualCorrection(); }}
+                placeholder="잘못 인식된 표현"
+                className="min-w-0 bg-bg-card border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted/70 focus:outline-none focus:border-primary"
+              />
+              <input
+                value={correctionCorrect}
+                onChange={(e) => setCorrectionCorrect(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) addManualCorrection(); }}
+                placeholder="올바른 표현"
+                className="min-w-0 bg-bg-card border border-border rounded-lg px-3 py-2 text-sm text-text-heading placeholder:text-text-muted/70 focus:outline-none focus:border-primary"
+              />
+              <button
+                onClick={addManualCorrection}
+                disabled={!correctionWrong.trim() || !correctionCorrect.trim()}
+                className="inline-flex items-center justify-center gap-1 px-3 py-2 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4" /> 추가
+              </button>
+            </div>
+            {manualCorrections.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {manualCorrections.map((c, idx) => (
+                  <span key={`${c.wrong}-${idx}`} className="inline-flex items-center gap-2 rounded-lg border border-border bg-bg-card px-2.5 py-1.5 text-xs text-text-main">
+                    <span className="text-text-muted">{c.wrong}</span>
+                    <span className="text-primary">→</span>
+                    <span className="font-medium">{c.correct}</span>
+                    <button
+                      onClick={() => setManualCorrections(prev => prev.filter((_, i) => i !== idx))}
+                      className="text-text-muted hover:text-red-400"
+                      title="교정쌍 삭제"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         m.summary && (
           <div className="notion-note">
@@ -879,6 +1068,8 @@ function MeetingExpanded({ meeting: m, onDelete, onRefresh }: {
           </div>
         )
       )}
+
+      <MeetingOpsPanel opsPacket={m.metadata?.opsPacket} />
 
       {/* 액션 아이템 체크리스트 */}
       {m.actionItems.length > 0 && (

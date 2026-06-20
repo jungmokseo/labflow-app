@@ -268,7 +268,12 @@ export default function ManuscriptsPage() {
         <EditModal
           m={editTarget}
           onClose={() => setEditTarget(null)}
-          onSaved={() => { mutate(); kpi.mutate(); }}
+          onSaved={(stage) => {
+            setTab(stageToTab(stage));
+            mutate();
+            kpi.mutate();
+            globalMutate(SIDEBAR_COUNT_KEYS.manuscripts);
+          }}
           onDeleted={() => { mutate(); kpi.mutate(); unmatched.mutate(); }}
         />
       )}

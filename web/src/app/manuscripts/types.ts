@@ -5,9 +5,9 @@ export type TabKey = 'preparing' | 'submitted' | 'revision' | 'published';
 // 단계 → 탭 매핑 (단계 5종을 4 탭에 분배)
 export const TAB_TO_STAGES: Record<TabKey, Manuscript['stage'][]> = {
   preparing: ['작성'],
-  submitted: ['심사 중', '억셉'],
+  submitted: ['심사 중'],
   revision: ['대응 중'],
-  published: ['게재 완료'],
+  published: ['억셉', '게재 완료'],
 };
 
 export const TAB_LABEL: Record<TabKey, string> = {

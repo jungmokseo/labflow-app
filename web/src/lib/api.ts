@@ -5,7 +5,9 @@
  * Vercel rewrites가 /api/* → Railway로 프록시하므로 브라우저에서는 같은 origin 사용 (CORS 불필요)
  */
 
-const API_BASE = typeof window !== 'undefined' ? '' : (typeof window !== 'undefined' ? '' : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app'));
+const API_BASE = typeof window !== 'undefined'
+  ? ''
+  : (process.env.NEXT_PUBLIC_API_URL || 'https://labflow-app-production.up.railway.app');
 
 // ── 토큰 getter (클라이언트 사이드용) ───────────────
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -17,6 +19,32 @@ export function setAuthTokenGetter(fn: () => Promise<string | null>) {
 // ── Auth token cache — avoid repeated async lookups ──
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
+let tokenRefreshPromise: Promise<{ token: string; expiresAt: number } | null> | null = null;
+
+async function loadAuthToken(): Promise<{ token: string; expiresAt: number } | null> {
+  // tokenGetter가 설정되어 있으면 사용
+  if (tokenGetter) {
+    const token = await tokenGetter();
+    if (token) return { token, expiresAt: Date.now() + 3600000 };
+  }
+
+  // fallback: Supabase 클라이언트에서 직접 토큰 가져오기
+  if (typeof window !== 'undefined') {
+    try {
+      const { createClient } = await import('./supabase');
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        return {
+          token: session.access_token,
+          expiresAt: session.expires_at ? session.expires_at * 1000 : Date.now() + 3600000,
+        };
+      }
+    } catch { /* ignore */ }
+  }
+
+  return null;
+}
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -29,30 +57,14 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     return headers;
   }
 
-  // tokenGetter가 설정되어 있으면 사용
-  if (tokenGetter) {
-    const token = await tokenGetter();
-    if (token) {
-      cachedToken = token;
-      tokenExpiresAt = Date.now() + 3600000; // 1 hour default
-      headers['Authorization'] = `Bearer ${token}`;
-      return headers;
-    }
-  }
-
-  // fallback: Supabase 클라이언트에서 직접 토큰 가져오기
-  if (typeof window !== 'undefined') {
-    try {
-      const { createClient } = await import('./supabase');
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        cachedToken = session.access_token;
-        // Use actual expiry if available
-        tokenExpiresAt = session.expires_at ? session.expires_at * 1000 : Date.now() + 3600000;
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-    } catch { /* ignore */ }
+  tokenRefreshPromise ??= loadAuthToken().finally(() => {
+    tokenRefreshPromise = null;
+  });
+  const loaded = await tokenRefreshPromise;
+  if (loaded?.token) {
+    cachedToken = loaded.token;
+    tokenExpiresAt = loaded.expiresAt;
+    headers['Authorization'] = `Bearer ${loaded.token}`;
   }
 
   return headers;
@@ -62,6 +74,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 export function clearTokenCache() {
   cachedToken = null;
   tokenExpiresAt = 0;
+  tokenRefreshPromise = null;
 }
 
 // Offline queue replay가 사용할 최신 헤더 생성기 (Authorization 포함)
@@ -139,9 +152,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, retri
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      timeout = setTimeout(() => controller.abort(), timeoutMs);
 
       const res = await fetch(url, {
         ...options,
@@ -149,15 +163,14 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, retri
         signal: controller.signal,
       });
 
-      clearTimeout(timeout);
-
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        const err = await res.json().catch(() => ({ error: `API Error: ${res.status}` }));
         const details = err.details ? ` (${JSON.stringify(err.details).slice(0, 200)})` : '';
         throw new Error((err.error || `API Error: ${res.status}`) + details);
       }
 
-      return res.json();
+      const text = await res.text();
+      return (text ? JSON.parse(text) : {}) as T;
     } catch (err: any) {
       lastError = err;
       // Don't retry POST/PATCH/DELETE (non-idempotent) or 4xx client errors
@@ -166,6 +179,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, retri
       if (method !== 'GET' || isClientError || attempt === retries) break;
       // Exponential backoff: 1s, 3s
       await new Promise(r => setTimeout(r, (attempt + 1) * 1500));
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -1901,7 +1916,7 @@ export interface ModelTestResult {
 
 /**
  * 현재 코드에서 사용 중인 모든 AI 모델 ID로 minimal API call하여 production 작동 검증.
- * Anthropic Sonnet/Opus + Gemini Flash-Lite/Pro/CustomTools + OpenAI Realtime 2/Embedding.
+ * Anthropic Sonnet/Opus + Gemini Flash 3.5/Pro/CustomTools + OpenAI Realtime 2/Embedding.
  *
  * 모델 변경/deprecation 후 끝까지 검증 용도. settings → 시스템 상태 탭 button.
  * Provider 별로 그룹핑된 응답 (providers[]) — UI 카드 표시용.

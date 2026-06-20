@@ -13,6 +13,7 @@ import {
   BookOpen, Star, FlaskConical, TestTube2, Link2, Shield, Brain, FileText,
   Settings, Loader2, RefreshCw, X, Calendar, ChevronDown, ChevronRight, Sparkles,
 } from 'lucide-react';
+import { countThemePapers } from './state';
 
 /**
  * AI 생성 시사점 텍스트를 문장 단위 bullet으로 분리.
@@ -643,14 +644,14 @@ export default function PapersPage() {
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 md:p-4">
                   <p className="text-xs font-medium text-primary">관련</p>
                   <p className="text-2xl md:text-3xl font-bold text-primary mt-0.5 leading-none">
-                    {week.papers.length + week.otherPapers.length}
+                    {week.papers.length}
                   </p>
                   <p className="text-xs text-text-muted mt-1.5">키워드 매칭</p>
                 </div>
                 <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 md:p-4">
                   <p className="text-xs font-medium text-emerald-600">핵심</p>
                   <p className="text-2xl md:text-3xl font-bold text-emerald-600 mt-0.5 leading-none">
-                    {week.papers.length}
+                    {countThemePapers(week.themes)}
                   </p>
                   <p className="text-xs text-text-muted mt-1.5">★★ 이상</p>
                 </div>

@@ -15,7 +15,7 @@ function FormField({ label, children }: { label: string; children: React.ReactNo
 interface EditModalProps {
   m: Manuscript;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (stage: Manuscript['stage']) => void;
   onDeleted?: () => void;  // 삭제 후 호출 (목록에서 제거 + KPI 갱신)
 }
 
@@ -94,7 +94,7 @@ export function EditModal({ m, onClose, onSaved, onDeleted }: EditModalProps) {
       };
       const r = await updateManuscript(m.id, payload);
       toast(r.notionUpdated ? '저장 완료 · 노션 갱신' : '저장 완료 (노션 갱신 실패 — 다음 sync에서 재시도)', 'success');
-      onSaved();
+      onSaved(payload.stage!);
       onClose();
     } catch (e: any) {
       toast(`저장 실패: ${e.message}`, 'error');

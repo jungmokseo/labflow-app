@@ -440,7 +440,7 @@ function ModelValidationSection() {
       envVar: 'GEMINI_API_KEY',
       envSet: true,
       models: [
-        { id: 'gemini-3.1-flash-lite', displayName: 'Flash-Lite (stable)', usage: '경량 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat lite', ok: false },
+        { id: 'gemini-3.5-flash', displayName: 'Flash 3.5 (stable)', usage: 'Flash 계열 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat', ok: false },
         { id: 'gemini-3.1-pro-preview', displayName: 'Pro Preview', usage: 'labflow-member RAG engine (rag-engine.ts)', ok: false },
         { id: 'gemini-3.1-pro-preview-customtools', displayName: 'Pro Custom Tools', usage: 'labflow-member FAQ tool-use (chat.ts·slack-command.ts /질문)', ok: false },
       ],

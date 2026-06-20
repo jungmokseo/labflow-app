@@ -74,10 +74,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <KeyboardShortcuts />
             <AuthInit />
             <ServiceWorkerRegister />
-            <DataPrefetch />
             <TokenHealthCheck />
             {showAuthenticatedUI ? (
               <div className="flex h-dvh">
+                <DataPrefetch />
                 <Sidebar />
                 <main
                   className="flex-1 overflow-auto pt-14 md:pt-0 bg-bg"

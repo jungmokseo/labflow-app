@@ -11,6 +11,7 @@ import {
   getBlissTaskReviewQueue,
   getLabMembers,
   holdBlissTask,
+  type BlissTaskAttachment,
   type BlissTaskActiveItem,
   type BlissTaskMetadata,
   type BlissTaskPriority,
@@ -28,6 +29,7 @@ import {
   Clock,
   ExternalLink,
   Loader2,
+  Paperclip,
   Pause,
   Plus,
   Send,
@@ -115,6 +117,14 @@ function sourceFromMetadata(metadata: BlissTaskMetadata | null) {
   return metadata?.blissSource || {};
 }
 
+function meetingActionFromMetadata(metadata: BlissTaskMetadata | null) {
+  return metadata?.meetingAction || null;
+}
+
+function attachmentsFromMetadata(metadata: BlissTaskMetadata | null) {
+  return metadata?.blissSource?.attachments || [];
+}
+
 function isHeld(task: BlissTaskReviewItem): boolean {
   return Boolean(task.metadata?.heldAt);
 }
@@ -136,6 +146,16 @@ function defaultForm(): ReviewFormState {
     actionDate: defaultActionDate(),
     ownerName: '',
     priority: 'AUTO',
+    memo: '',
+  };
+}
+
+function defaultFormForTask(task: BlissTaskReviewItem): ReviewFormState {
+  const meetingAction = meetingActionFromMetadata(task.metadata);
+  return {
+    actionDate: task.metadata?.dueDateHint || meetingAction?.dueDate || defaultActionDate(),
+    ownerName: task.metadata?.ownerNameHint || meetingAction?.ownerName || '',
+    priority: meetingAction?.priority || 'AUTO',
     memo: '',
   };
 }
@@ -185,7 +205,7 @@ export default function BlissTaskReviewPage() {
     setForms(prev => {
       const next = { ...prev };
       for (const task of sorted) {
-        if (!next[task.id]) next[task.id] = defaultForm();
+        if (!next[task.id]) next[task.id] = defaultFormForTask(task);
       }
       return next;
     });
@@ -564,6 +584,57 @@ function DirectAddForm({ form, members, busy, onChange, onCancel, onSubmit }: Di
   );
 }
 
+function formatAttachmentSize(bytes: number | undefined): string {
+  const value = bytes || 0;
+  if (value < 1024) return `${value}B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)}KB`;
+  return `${(value / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function AttachmentCard({ attachment }: { attachment: BlissTaskAttachment }) {
+  const link = attachment.slackPermalink || attachment.slackUrl;
+  return (
+    <div className="rounded-lg border border-border bg-bg-input/30 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 flex items-center gap-2">
+          <Paperclip className="w-4 h-4 text-primary flex-shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-text-heading truncate">{attachment.name}</p>
+            <p className="text-xs text-text-muted">
+              {attachment.mimeType} · {formatAttachmentSize(attachment.sizeBytes)}
+            </p>
+          </div>
+        </div>
+        {link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            원본 열기 <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+      {attachment.imageDataUrl && (
+        <img
+          src={attachment.imageDataUrl}
+          alt={attachment.name}
+          className="mt-3 max-h-64 rounded-lg border border-border object-contain bg-bg-card"
+        />
+      )}
+      {attachment.textPreview && (
+        <p className="mt-3 text-xs text-text-main whitespace-pre-wrap break-words leading-relaxed">
+          {attachment.textPreview}
+        </p>
+      )}
+      {attachment.error && (
+        <p className="mt-2 text-xs text-red-400">처리 오류: {attachment.error}</p>
+      )}
+    </div>
+  );
+}
+
 // ── 검토 카드 ─────────────────────────────────────────────
 
 interface ReviewCardProps {
@@ -594,6 +665,8 @@ function ReviewCard({
   onConfirm,
 }: ReviewCardProps) {
   const source = sourceFromMetadata(task.metadata);
+  const meetingAction = meetingActionFromMetadata(task.metadata);
+  const attachments = attachmentsFromMetadata(task.metadata);
   const held = isHeld(task);
   const shortcuts = dateShortcuts();
   const busyAny = Boolean(taskBusy);
@@ -629,6 +702,12 @@ function ReviewCard({
             {source.sourceChannel && (
               <span className="text-text-muted">#{source.sourceChannel}</span>
             )}
+            {(task.metadata?.meetingTitle || meetingAction?.meetingTitle) && (
+              <span className="inline-flex items-center gap-1 text-primary">
+                <ClipboardList className="w-3.5 h-3.5" />
+                회의: {String(task.metadata?.meetingTitle || meetingAction?.meetingTitle)}
+              </span>
+            )}
             {source.slackPermalink && (
               <a
                 href={source.slackPermalink}
@@ -654,6 +733,14 @@ function ReviewCard({
             </button>
           )}
         </div>
+
+        {attachments.length > 0 && (
+          <div className="mt-3 grid gap-2">
+            {attachments.map((attachment, idx) => (
+              <AttachmentCard key={`${attachment.memoId || attachment.name}-${idx}`} attachment={attachment} />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 폼 영역 */}
