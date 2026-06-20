@@ -124,9 +124,15 @@ export function flushOfflineQueue(
           if (res.status >= 400 && res.status < 500) {
             // 클라이언트 오류(인증 제외) — 재시도 무의미, 드롭
             if (res.status === 401 || res.status === 403) {
-              // 인증 오류 — 토큰 갱신 후 다음 flush에서 재시도
+              // 인증 오류 — 토큰 갱신 후 다음 flush에서 재시도. 단 MAX_ATTEMPTS 가드 필수.
+              // 이전엔 가드가 없어 토큰이 끝내 유효해지지 않으면 큐에 영구 잔류했음.
               entry.attempts++;
               entry.lastError = `HTTP ${res.status}`;
+              if (entry.attempts >= MAX_ATTEMPTS) {
+                console.warn('[offline-queue] dropping after max auth-retry attempts:', entry.url);
+                await removeFromQueue(entry.id);
+                continue;
+              }
               await set(`${QUEUE_KEY_PREFIX}${entry.id}`, entry, getStore());
               break;
             }

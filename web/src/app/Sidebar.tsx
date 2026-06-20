@@ -23,7 +23,11 @@ import { useBackgroundTasks } from '@/store/background-tasks';
 import { useBrainSessionsStore } from '@/store/brain-sessions';
 import { useConversationsStore } from '@/store/conversations';
 
-// Prefetch data on hover — warms SWR cache before navigation
+// Prefetch data on hover — warms SWR cache before navigation.
+// Guard with a small TTL so moving the mouse through the nav does not fire
+// the same Railway request repeatedly.
+const PREFETCH_TTL_MS = 30_000;
+const prefetchTimestamps = new Map<string, number>();
 const PREFETCH_MAP: Record<string, () => void> = {
   '/tasks': () => {
     mutate('captures-all-active', () => getCaptures({ completed: 'false', sort: 'newest', limit: 100 }), { revalidate: false });
@@ -38,6 +42,16 @@ const PREFETCH_MAP: Record<string, () => void> = {
   '/manuscripts': () => mutate('manuscripts', () => getManuscripts().catch(() => null), { revalidate: false }),
   '/grants': () => mutate('grants', () => getGrants().catch(() => null), { revalidate: false }),
 };
+
+function prefetchRoute(href: string) {
+  const fn = PREFETCH_MAP[href];
+  if (!fn) return;
+  const now = Date.now();
+  const last = prefetchTimestamps.get(href) || 0;
+  if (now - last < PREFETCH_TTL_MS) return;
+  prefetchTimestamps.set(href, now);
+  fn();
+}
 
 // Sidebar 우측 뱃지 카운트 — SWR 기반으로 전환.
 // 페이지에서 액션(답변·sync·편집) 후 globalMutate(SIDEBAR_COUNT_KEYS.xxx)로 즉시 갱신 가능.
@@ -93,6 +107,14 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/graph', icon: Network, label: '지식 그래프' },
   { href: '/settings', icon: Settings, label: '설정' },
 ];
+
+// nav 항목 active 판정 공통 헬퍼 — 확장/축소 사이드바가 같은 규칙 사용.
+// '/' 와 '/tasks'는 정확히 일치할 때만 (그렇지 않으면 startsWith가 /tasks/review에서도 /tasks를 활성화).
+function isNavActive(href: string, pathname: string): boolean {
+  if (href === '/') return pathname === '/';
+  if (href === '/tasks') return pathname === '/tasks'; // /tasks/review가 /tasks를 활성화하지 않도록
+  return pathname === href || pathname.startsWith(href + '/') || pathname.startsWith(href);
+}
 
 function useTheme() {
   const [dark, setDark] = useState(false);
@@ -227,11 +249,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
 
       <nav className="px-3 space-y-0.5">
         {NAV_ITEMS.map((item) => {
-          const active = item.href === '/'
-            ? pathname === '/'
-            : item.href === '/tasks'
-              ? pathname === '/tasks'
-              : pathname.startsWith(item.href);
+          const active = isNavActive(item.href, pathname);
           const badgeCount = item.badgeKey ? counts[item.badgeKey] : 0;
           const showBadge = badgeCount > 0;
           const badgeBg = item.urgent ? 'bg-red-500' : 'bg-amber-500';
@@ -240,7 +258,7 @@ function NavContent({ pathname, onNavigate, user, onSignOut, collapsed, onToggle
               key={item.href}
               href={item.href}
               onClick={onNavigate}
-              onMouseEnter={() => PREFETCH_MAP[item.href]?.()}
+              onMouseEnter={() => prefetchRoute(item.href)}
               aria-current={active ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2 md:py-2 rounded-lg text-sm min-h-[40px] transition-all duration-150 focus-ring ${
                 active
@@ -496,7 +514,7 @@ export function Sidebar() {
               <PanelLeft className="w-5 h-5" />
             </button>
             {NAV_ITEMS.map((item) => {
-              const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+              const active = isNavActive(item.href, pathname);
               const badgeCount = item.badgeKey ? counts[item.badgeKey] : 0;
               const showBadge = badgeCount > 0;
               const badgeBg = item.urgent ? 'bg-red-500' : 'bg-amber-500';
