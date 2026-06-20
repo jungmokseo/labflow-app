@@ -537,7 +537,7 @@ ${ctx}제목: ${title}
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const result = await model.generateContent(prompt);
     return result.response.text().trim();
   } catch { return ''; }
@@ -625,10 +625,10 @@ ${paperList}
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const result = await model.generateContent(prompt);
     const usage = result.response.usageMetadata;
-    if (usage) logApiCost('system', 'gemini-3.1-flash-lite', usage.promptTokenCount ?? 0, usage.candidatesTokenCount ?? 0, 'weekly_insight_fallback').catch(() => {});
+    if (usage) logApiCost('system', 'gemini-3.5-flash', usage.promptTokenCount ?? 0, usage.candidatesTokenCount ?? 0, 'weekly_insight_fallback').catch(() => {});
     return result.response.text().trim();
   } catch { return ''; }
 }
@@ -1152,8 +1152,14 @@ export async function paperAlertRoutes(app: FastifyInstance) {
   });
 
   // ── 읽음 표시 ────────────────────────────────────
-  app.patch('/api/papers/alerts/results/:id', async (request: FastifyRequest<{ Params: { id: string } }>) => {
-    await prisma.paperAlertResult.update({ where: { id: request.params.id }, data: { read: true } });
+  app.patch('/api/papers/alerts/results/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+    // IDOR 방지: 본인 lab의 alert 결과만 읽음 표시 (이전엔 id만으로 타 lab result도 수정 가능).
+    const lab = await prisma.lab.findUnique({ where: { ownerId: request.userId! }, select: { id: true } });
+    const r = await prisma.paperAlertResult.updateMany({
+      where: { id: request.params.id, alert: { labId: lab?.id ?? '__no_lab__' } },
+      data: { read: true },
+    });
+    if (r.count === 0) return reply.code(404).send({ error: '결과를 찾을 수 없습니다' });
     return { success: true };
   });
 

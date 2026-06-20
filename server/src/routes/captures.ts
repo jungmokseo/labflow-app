@@ -21,6 +21,17 @@ import { CaptureCategory, Priority, Prisma } from '@prisma/client';
 import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
 
+/**
+ * 안전한 날짜 파싱 — LLM이 'ASAP'·'내일'·'2026-13-99' 같은 비표준 값을 dueDate로 줄 수 있다.
+ * new Date(invalid)는 Invalid Date 객체를 반환하고, 그대로 Prisma에 넣으면 throw → 부분 생성 후 500.
+ * 파싱 불가 시 null 반환.
+ */
+function safeDate(v: string | null | undefined): Date | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ── Zod 스키마 ──────────────────────────────────────
 const createCaptureSchema = z.object({
   content: z.string().min(1).max(5000),
@@ -104,7 +115,7 @@ export async function captureRoutes(app: FastifyInstance) {
         tags: classification.tags,
         priority: classification.priority as Priority,
         confidence: classification.confidence,
-        actionDate: classification.actionDate ? new Date(classification.actionDate) : null,
+        actionDate: safeDate(classification.actionDate),
         modelUsed: classification.modelUsed,
       },
     });
@@ -244,7 +255,7 @@ export async function captureRoutes(app: FastifyInstance) {
     if (body.tags !== undefined) updateData.tags = body.tags;
     if (body.priority !== undefined) updateData.priority = body.priority as Priority;
     if (body.actionDate !== undefined) {
-      updateData.actionDate = body.actionDate ? new Date(body.actionDate) : null;
+      updateData.actionDate = safeDate(body.actionDate);
     }
     if (body.completed !== undefined) {
       updateData.completed = body.completed;
@@ -270,7 +281,7 @@ export async function captureRoutes(app: FastifyInstance) {
       where: { userId: user.id, completed: true },
     });
 
-    return reply.send({ success: true, deleted: result.count });
+    return reply.send({ success: true, deleted: result.count, deletedCount: result.count });
   });
 
   // ── DELETE /api/captures/:id — 단일 삭제 ───────────
@@ -351,7 +362,7 @@ export async function captureRoutes(app: FastifyInstance) {
           tags: result.tags,
           priority: result.priority as Priority,
           confidence: result.confidence,
-          actionDate: result.actionDate ? new Date(result.actionDate) : null,
+          actionDate: safeDate(result.actionDate),
           modelUsed: result.modelUsed,
         },
       });

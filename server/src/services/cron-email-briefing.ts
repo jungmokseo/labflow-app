@@ -59,7 +59,7 @@ const STUDENT_MEMBERS: MemberSpec[] = [
   { name: '강민경', email: 'mkkang@yonsei.ac.kr' },
   { name: '정윤민', email: 'yunminj@yonsei.ac.kr' },
   { name: '김찬수', email: 'nce9080@yonsei.ac.kr' },
-  { name: '김미도', email: 'kmd08@yonsei.ac.kr' },
+  { name: '김미도', email: 'mido.kim@yonsei.ac.kr' },
   { name: '장한빛', email: 'hanbit1jang@gmail.com' },
   { name: '박지민', matchPattern: 'yonsei.ac.kr' },
   { name: '홍승완', matchPattern: 'yonsei.ac.kr' },
@@ -280,7 +280,7 @@ async function summarizeReport(memberName: string, body: string, scope: 'student
   if (env.GEMINI_API_KEY) {
     try {
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
       const r = await model.generateContent(`${systemPrompt}\n\n${userMessage}`);
       const text = r.response.text();
       if (text.trim()) return text.trim();

@@ -15,7 +15,7 @@ import { createHash } from 'crypto';
 import { logApiCost } from './cost-logger.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
 // ── 타입 정의 ──────────────────────────────────────────
 export interface ExtractedRelation {
@@ -222,7 +222,7 @@ export async function buildGraphFromText(
 ): Promise<void> {
   try {
     const relations = await extractRelationsFromText(text, source);
-    logApiCost(userId, 'gemini-3.1-flash-lite', 0, 0, 'knowledge_graph_extract').catch(() => {});
+    logApiCost(userId, 'gemini-3.5-flash', 0, 0, 'knowledge_graph_extract').catch(() => {});
     if (relations.length === 0) return;
 
     // entityId 자동 매칭을 위해 Lab 데이터 캐시 (1회 조회)
@@ -700,7 +700,7 @@ JSON 배열로만 응답:
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const insightUsage = result.response.usageMetadata;
-    if (insightUsage) logApiCost(userId, 'gemini-3.1-flash-lite', insightUsage.promptTokenCount ?? 0, insightUsage.candidatesTokenCount ?? 0, 'graph_insights').catch(() => {});
+    if (insightUsage) logApiCost(userId, 'gemini-3.5-flash', insightUsage.promptTokenCount ?? 0, insightUsage.candidatesTokenCount ?? 0, 'graph_insights').catch(() => {});
 
     const text = result.response.text().trim();
     const jsonMatch = text.match(/\[[\s\S]*\]/);
@@ -852,7 +852,7 @@ ${briefingData}` }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const dailyUsage = result.response.usageMetadata;
-    if (dailyUsage) logApiCost(userId, 'gemini-3.1-flash-lite', dailyUsage.promptTokenCount ?? 0, dailyUsage.candidatesTokenCount ?? 0, 'daily_brief').catch(() => {});
+    if (dailyUsage) logApiCost(userId, 'gemini-3.5-flash', dailyUsage.promptTokenCount ?? 0, dailyUsage.candidatesTokenCount ?? 0, 'daily_brief').catch(() => {});
     return sanitizeLlmOutput(result.response.text());
   } catch {
     // fallback: raw data 반환
@@ -967,7 +967,7 @@ ${analysisData}` }] }],
       generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
     });
     const emergeUsage = result.response.usageMetadata;
-    if (emergeUsage) logApiCost(userId, 'gemini-3.1-flash-lite', emergeUsage.promptTokenCount ?? 0, emergeUsage.candidatesTokenCount ?? 0, 'emerge_insights').catch(() => {});
+    if (emergeUsage) logApiCost(userId, 'gemini-3.5-flash', emergeUsage.promptTokenCount ?? 0, emergeUsage.candidatesTokenCount ?? 0, 'emerge_insights').catch(() => {});
     return `🔮 **Emerge — 숨겨진 연결 발견**\n\n${sanitizeLlmOutput(result.response.text())}`;
   } catch {
     if (weakTies.length === 0 && isolatedRecent.length === 0) {
@@ -1109,7 +1109,7 @@ ${weekData}`;
       generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
     });
     const weeklyUsage = result.response.usageMetadata;
-    if (weeklyUsage) logApiCost(userId, 'gemini-3.1-flash-lite', weeklyUsage.promptTokenCount ?? 0, weeklyUsage.candidatesTokenCount ?? 0, 'weekly_review_fallback').catch(() => {});
+    if (weeklyUsage) logApiCost(userId, 'gemini-3.5-flash', weeklyUsage.promptTokenCount ?? 0, weeklyUsage.candidatesTokenCount ?? 0, 'weekly_review_fallback').catch(() => {});
     return sanitizeLlmOutput(result.response.text());
   } catch {
     return `**주간 리뷰 (${weekAgo.toLocaleDateString('ko-KR')} ~ 오늘)**\n\n` +
@@ -1184,6 +1184,24 @@ export async function seedGraphFromExistingData(userId: string): Promise<{ nodes
  * 2. 기존 지식그래프 노드 중 이름이 매칭되는 것 탐색
  * 3. 매칭된 노드와 새 소스 간 엣지 생성 (related_to, mentioned_in)
  */
+
+/**
+ * 노드 이름이 텍스트에 '단어로' 언급됐는지 판정.
+ * - ASCII(영문/숫자) 이름: 단어 경계(\b) 필요 — 'ion'∈'station', 'AI'∈'rain' 같은 substring 오탐 방지.
+ * - CJK 등 비-ASCII: substring 허용 (한국어 조사 결합 '센서를' 때문에 엄격 경계는 과탐). 최소 2글자는 호출부에서 보장.
+ */
+function mentionsNode(textLower: string, nodeName: string): boolean {
+  if (/^[\x00-\x7f]+$/.test(nodeName)) {
+    const escaped = nodeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      return new RegExp(`\\b${escaped}\\b`, 'i').test(textLower);
+    } catch {
+      return textLower.includes(nodeName);
+    }
+  }
+  return textLower.includes(nodeName);
+}
+
 export async function crossLinkSources(
   userId: string,
   sourceText: string,
@@ -1216,7 +1234,7 @@ export async function crossLinkSources(
       // 2글자 이상의 노드명만 매칭 (너무 짧으면 오탐)
       if (nodeName.length < 2) continue;
 
-      if (textLower.includes(nodeName)) {
+      if (mentionsNode(textLower, nodeName)) {
         const relation = sourceType === 'meeting' ? 'discussed_in' :
                          sourceType === 'email' ? 'mentioned_in' : 'related_to';
         try {

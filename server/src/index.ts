@@ -9,6 +9,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
+import type { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { healthRoutes } from './routes/health.js';
 import { captureRoutes } from './routes/captures.js';
@@ -50,6 +51,7 @@ import { prisma } from './config/prisma.js';
 
 async function buildApp() {
     const app = Fastify({
+          bodyLimit: 128 * 1024 * 1024, // Slack relay JSON 첨부(base64, 최대 4개) + 일반 API payload 대응
           logger: {
                   level: env.NODE_ENV === 'development' ? 'info' : 'warn',
                   transport: env.NODE_ENV === 'development'
@@ -77,7 +79,7 @@ async function buildApp() {
                           if (error.name === 'ZodError') {
                                   return reply.code(400).send({
                                             error: '입력값이 올바르지 않습니다',
-                                            details: JSON.parse(error.message),
+                                            details: (error as unknown as ZodError).issues,
                                   });
                           }
 

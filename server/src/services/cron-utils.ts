@@ -171,7 +171,16 @@ async function backfillIfMissed(fn: () => Promise<void>, label: string, periodMs
   }
 }
 
+// label별 실행 중 플래그 — backfill(startup 5s)과 정시 setTimeout이 거의 동시에 같은 cron을
+// 중복 실행하거나, manual trigger가 정시 실행과 겹치는 것을 방지.
+const inFlightCrons = new Set<string>();
+
 async function runOnce(fn: () => Promise<void>, label: string, periodMs?: number): Promise<void> {
+  if (inFlightCrons.has(label)) {
+    console.log(`[${label}] 이미 실행 중 — 중복 실행 skip`);
+    return;
+  }
+  inFlightCrons.add(label);
   const status = CRON_STATUS.get(label);
   const startedAt = new Date();
   const startedAtIso = startedAt.toISOString();
@@ -228,6 +237,8 @@ async function runOnce(fn: () => Promise<void>, label: string, periodMs?: number
         data: { completedAt, success: false, durationMs, errorMessage: msg.slice(0, 2000) },
       }).catch(() => {});
     }
+  } finally {
+    inFlightCrons.delete(label);
   }
 }
 

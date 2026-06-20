@@ -20,6 +20,7 @@ import {
 import { authMiddleware } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 import { buildGraphFromText } from '../services/knowledge-graph.js';
+import { logError } from '../services/error-logger.js';
 
 // ── 스키마 ───────────────────────────────────────────
 
@@ -247,7 +248,7 @@ export async function paperRoutes(app: FastifyInstance) {
       // 1. Gemini로 논문 메타데이터 + 전문 추출
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const metaResult = await model.generateContent({
         contents: [{
@@ -330,7 +331,11 @@ export async function paperRoutes(app: FastifyInstance) {
           await buildGraphFromText(userId, graphText, 'paper_alert');
           console.log(`[paper] Knowledge graph updated: ${meta.title}`);
         } catch (err) {
+          // fire-and-forget 실패 시: indexed=false로 정체되고 무통지되던 것 → 영속 로깅(에러 대시보드 노출)
+          // + 부분 저장된 청크 정리 (다음 재인덱싱이 오염되지 않도록).
           console.error('Paper indexing failed:', err);
+          logError('background', `논문 인덱싱 실패: ${meta.title || paperId}`, { userId, paperId })(err as Error);
+          try { await deletePaperEmbeddings(prisma, paperId); } catch { /* 정리 실패는 무시 */ }
         }
       })();
 
@@ -425,7 +430,7 @@ export async function paperRoutes(app: FastifyInstance) {
     // Gemini로 자연어 쿼리 → 매칭
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const pubList = pubs.map((p, i) => `[${i}] "${p.title}" (${p.journal || '?'}, ${p.year || '?'})${p.nickname ? ` 별칭: ${p.nickname}` : ''} ${p.indexed ? '[indexed]' : '[pending]'}`).join('\n');
 

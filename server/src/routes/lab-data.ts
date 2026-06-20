@@ -69,7 +69,7 @@ export async function labDataRoutes(app: FastifyInstance) {
   // 휴가 → BLISS Lab Google Calendar 수동 sync (즉시 등록 + 결과 확인용)
   app.post('/api/lab-data/vacations/sync-calendar', { preHandler: authMiddleware }, async (request, reply) => {
     try {
-      const userId = (request as any).user?.id as string | undefined;
+      const userId = request.userId;
       const r = await syncVacationsToCalendar({ userId });
       return reply.send({ ok: true, ...r });
     } catch (err: any) {

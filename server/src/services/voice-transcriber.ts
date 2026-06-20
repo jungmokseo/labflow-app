@@ -1,7 +1,7 @@
 /**
  * 음성 전사 + AI 분류 통합 서비스
  *
- * Gemini 2.5 Flash의 멀티모달(오디오) 입력을 활용하여
+ * Gemini 3.5 Flash의 멀티모달(오디오) 입력을 활용하여
  * 한 번의 API 호출로 전사(STT) + 분류(카테고리/태그/우선순위)를 수행
  */
 
@@ -11,7 +11,7 @@ import { ClassificationResult, classifyLocal } from './gemini-classifier.js';
 import { logApiCost } from './cost-logger.js';
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
 export interface VoiceTranscriptionResult extends ClassificationResult {
   transcription: string;  // 전사된 원본 텍스트
@@ -70,7 +70,7 @@ export async function transcribeAndClassify(
   });
 
   const voiceUsage = result.response.usageMetadata;
-  if (voiceUsage) logApiCost('system', 'gemini-3.1-flash-lite', voiceUsage.promptTokenCount ?? 0, voiceUsage.candidatesTokenCount ?? 0, 'voice_classify').catch(() => {});
+  if (voiceUsage) logApiCost('system', 'gemini-3.5-flash', voiceUsage.promptTokenCount ?? 0, voiceUsage.candidatesTokenCount ?? 0, 'voice_classify').catch(() => {});
   const response = result.response.text().trim();
   const jsonMatch = response.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in Gemini voice response');
@@ -120,6 +120,6 @@ export async function transcribeOnly(
   });
 
   const transcribeUsage = result.response.usageMetadata;
-  if (transcribeUsage) logApiCost('system', 'gemini-3.1-flash-lite', transcribeUsage.promptTokenCount ?? 0, transcribeUsage.candidatesTokenCount ?? 0, 'voice_transcribe').catch(() => {});
+  if (transcribeUsage) logApiCost('system', 'gemini-3.5-flash', transcribeUsage.promptTokenCount ?? 0, transcribeUsage.candidatesTokenCount ?? 0, 'voice_transcribe').catch(() => {});
   return result.response.text().trim();
 }

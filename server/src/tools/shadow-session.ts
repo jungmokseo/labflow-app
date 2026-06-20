@@ -38,9 +38,19 @@ export async function getOrCreateShadow(userId: string, shadowType: ShadowType):
     where: { userId, shadow: true, shadowType, archived: false },
   });
   if (!channel) {
-    channel = await prisma.channel.create({
-      data: { userId, type: 'BRAIN', shadow: true, shadowType, name: SHADOW_NAMES[shadowType] },
-    });
+    try {
+      channel = await prisma.channel.create({
+        data: { userId, type: 'BRAIN', shadow: true, shadowType, name: SHADOW_NAMES[shadowType] },
+      });
+    } catch (e: any) {
+      // @@unique([userId, shadowType]) 위반(P2002) — 동시 요청이 먼저 생성한 경우. 재조회로 복구.
+      if (e?.code === 'P2002') {
+        channel = await prisma.channel.findFirst({
+          where: { userId, shadow: true, shadowType, archived: false },
+        });
+      }
+      if (!channel) throw e;
+    }
   }
   return channel.id;
 }
@@ -76,7 +86,7 @@ export async function compressForShadow(fullResponse: string, type: ShadowType):
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: fullResponse }] }],
@@ -88,7 +98,7 @@ export async function compressForShadow(fullResponse: string, type: ShadowType):
     });
 
     const shadowUsage = result.response.usageMetadata;
-    if (shadowUsage) logApiCost('system', 'gemini-3.1-flash-lite', shadowUsage.promptTokenCount ?? 0, shadowUsage.candidatesTokenCount ?? 0, 'shadow_compress').catch(() => {});
+    if (shadowUsage) logApiCost('system', 'gemini-3.5-flash', shadowUsage.promptTokenCount ?? 0, shadowUsage.candidatesTokenCount ?? 0, 'shadow_compress').catch(() => {});
     return result.response.text().trim();
   } catch {
     return fullResponse.slice(0, 1000);

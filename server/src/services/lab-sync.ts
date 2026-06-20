@@ -235,7 +235,7 @@ async function syncLabToDomainDict(labId: string) {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const { env } = await import('../config/env.js');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const tasks: Promise<void>[] = [];
 
@@ -262,7 +262,7 @@ JSON 배열로만 응답:
           generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json' },
         });
         const abbrUsage = result.response.usageMetadata;
-        if (abbrUsage) logApiCost('system', 'gemini-3.1-flash-lite', abbrUsage.promptTokenCount ?? 0, abbrUsage.candidatesTokenCount ?? 0, 'lab_domain_dict_abbr').catch(() => {});
+        if (abbrUsage) logApiCost('system', 'gemini-3.5-flash', abbrUsage.promptTokenCount ?? 0, abbrUsage.candidatesTokenCount ?? 0, 'lab_domain_dict_abbr').catch(() => {});
         const parsed = parseJsonArray(result.response.text());
         let added = 0;
         for (const t of parsed) {
@@ -302,7 +302,7 @@ JSON 배열로만 응답:
           generationConfig: { temperature: 0.3, maxOutputTokens: 4096, responseMimeType: 'application/json' },
         });
         const ttsUsage = result.response.usageMetadata;
-        if (ttsUsage) logApiCost('system', 'gemini-3.1-flash-lite', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'lab_domain_dict_tts').catch(() => {});
+        if (ttsUsage) logApiCost('system', 'gemini-3.5-flash', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'lab_domain_dict_tts').catch(() => {});
         const parsed = parseJsonArray(result.response.text());
         let added = 0;
         for (const t of parsed) {

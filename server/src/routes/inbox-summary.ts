@@ -16,14 +16,24 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 
+/** 길이가 다르면 false. 같으면 timingSafeEqual로 상수시간 비교 (timing attack 방지). */
+function safeSecretEqual(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
 function requireSyncToken(token: string | undefined) {
   const expected = env.LABFLOW_SYNC_TOKEN;
   if (!expected) return { ok: false as const, status: 503, error: 'LABFLOW_SYNC_TOKEN not configured' };
-  if (!token || token !== expected) return { ok: false as const, status: 401, error: 'invalid sync token' };
+  if (!safeSecretEqual(token, expected)) return { ok: false as const, status: 401, error: 'invalid sync token' };
   return { ok: true as const };
 }
 

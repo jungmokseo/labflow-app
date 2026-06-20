@@ -15,6 +15,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { timingSafeEqual } from 'node:crypto';
 import { env } from '../config/env.js';
 import { runGeneralEmailBriefing } from '../services/cron-general-email-briefing.js';
 import { runDeadlineReminders } from '../services/cron-deadline-reminders.js';
@@ -24,10 +25,22 @@ import { runIrisMonitoring } from '../services/cron-iris-monitoring.js';
 import { runProcessSlackInbox } from '../services/cron-process-slack-inbox.js';
 import { CRON_STATUS, manualRunCron } from '../services/cron-utils.js';
 
+// 서버 부팅 시각 — cron-status 핸들러에서 참조하므로 라우트 등록 전에 선언.
+const SERVER_STARTED_AT = new Date().toISOString();
+
+/** 길이가 다르면 false. 같으면 timingSafeEqual로 상수시간 비교 (timing attack 방지). */
+function safeSecretEqual(a: string | undefined, b: string | undefined): boolean {
+  if (!a || !b) return false;
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
 function requireSyncToken(token: string | undefined) {
   const expected = env.LABFLOW_SYNC_TOKEN;
   if (!expected) return { ok: false as const, status: 503, error: 'LABFLOW_SYNC_TOKEN not configured on server' };
-  if (!token || token !== expected) return { ok: false as const, status: 401, error: 'invalid sync token' };
+  if (!safeSecretEqual(token, expected)) return { ok: false as const, status: 401, error: 'invalid sync token' };
   return { ok: true as const };
 }
 
@@ -183,5 +196,3 @@ export async function internalTriggerRoutes(app: FastifyInstance) {
     },
   );
 }
-
-const SERVER_STARTED_AT = new Date().toISOString();

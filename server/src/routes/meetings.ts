@@ -1,7 +1,7 @@
 /**
  * 회의 노트 API 라우트 — 2단계 AI 파이프라인
  *
- * Step 1: Gemini 2.5 Flash — 오디오 → 정제된 텍스트 전사 (STT)
+ * Step 1: Gemini 3.5 Flash — 오디오 → 정제된 텍스트 전사 (STT)
  * Step 2: Claude Sonnet — 오탈자 교정 + 구조화 요약 (안건 / 논의 / 액션 / 다음)
  *
  * POST   /api/meetings              — 음성 녹음으로 회의 생성
@@ -31,12 +31,17 @@ import { embedAndStore } from '../services/rag-engine.js';
 import { basePrismaClient } from '../config/prisma.js';
 import { logError } from '../services/error-logger.js';
 import { Prisma } from '@prisma/client';
+import {
+  buildMeetingOpsPacket,
+  type MeetingOpsPacket,
+  type MeetingTaskCandidate,
+} from '../services/meeting-ops.js';
 
 /**
- * 회의 actionItems → Capture 자동 동기화 (idempotent).
- * 같은 meetingId의 기존 active capture를 archive 후, 현재 actionItems로 재생성.
+ * 회의 actionItems/nextSteps → Capture 자동 동기화 (idempotent).
+ * 같은 meetingId의 기존 미검토 active capture를 archive 후, 현재 taskCandidates로 재생성.
  *
- * 회의 후 follow-up이 흩어지지 않도록 모든 액션 아이템을 /tasks 탭에 자동 노출.
+ * 회의 후 follow-up이 흩어지지 않도록 후속 작업 후보를 /tasks 탭에 자동 노출.
  */
 async function syncActionItemCaptures(
   userId: string,
@@ -44,8 +49,23 @@ async function syncActionItemCaptures(
   meetingId: string,
   meetingTitle: string,
   actionItems: string[],
+  opsPacket?: MeetingOpsPacket,
 ): Promise<{ created: number; archived: number }> {
   const filtered = (actionItems ?? []).map(s => String(s).trim()).filter(s => s.length > 0);
+  const taskCandidates = opsPacket?.taskCandidates
+    ?? filtered.map((item, idx): MeetingTaskCandidate => ({
+      id: `legacy-${idx}`,
+      title: item,
+      evidence: item,
+      source: 'action_item',
+      sourceIndex: idx,
+      ownerName: null,
+      dueDate: null,
+      dueText: null,
+      priority: 'MEDIUM',
+      reviewReason: ['owner_missing', 'due_date_missing'],
+      status: 'queued_for_review',
+    }));
 
   // 1. 기존 (meetingId 기반) active Capture 모두 archive
   const archived = await basePrismaClient.capture.updateMany({
@@ -53,27 +73,35 @@ async function syncActionItemCaptures(
       userId,
       sourceType: 'meeting',
       status: 'active',
+      reviewed: false,
       metadata: { path: ['meetingId'], equals: meetingId },
     },
     data: { status: 'archived' },
   });
 
-  if (filtered.length === 0) return { created: 0, archived: archived.count };
+  if (taskCandidates.length === 0) return { created: 0, archived: archived.count };
 
   // 2. 새 actionItems로 Capture 생성
   let created = 0;
-  for (let idx = 0; idx < filtered.length; idx++) {
-    const item = filtered[idx];
+  for (let idx = 0; idx < taskCandidates.length; idx++) {
+    const task = taskCandidates[idx];
+    const actionDate = task.dueDate ? new Date(`${task.dueDate}T00:00:00.000Z`) : undefined;
     try {
       await basePrismaClient.capture.create({
         data: {
           userId,
           labId,
-          content: `[회의 액션] ${item}\n\n출처: ${meetingTitle}`,
-          summary: item.slice(0, 200),
+          content: [
+            `[회의 액션] ${task.title}`,
+            task.ownerName ? `담당자 후보: ${task.ownerName}` : null,
+            task.dueDate ? `기한 후보: ${task.dueDate}` : null,
+            `출처: ${meetingTitle}`,
+          ].filter(Boolean).join('\n\n'),
+          summary: task.title.slice(0, 200),
           category: 'TASK',
-          tags: ['meeting', 'action-item'],
-          priority: 'MEDIUM',
+          tags: ['meeting', 'action-item', 'needs-review'],
+          priority: task.priority,
+          actionDate,
           confidence: 1.0,
           modelUsed: 'meeting-action-sync',
           sourceType: 'meeting',
@@ -83,6 +111,12 @@ async function syncActionItemCaptures(
             meetingId,
             meetingTitle,
             actionItemIndex: idx,
+            meetingTaskSource: task.source,
+            meetingTaskIndex: task.sourceIndex,
+            meetingAction: task,
+            ownerNameHint: task.ownerName,
+            dueDateHint: task.dueDate,
+            reviewReason: task.reviewReason,
             syncedAt: new Date().toISOString(),
           } as Prisma.InputJsonValue,
         },
@@ -97,7 +131,7 @@ async function syncActionItemCaptures(
 
 // ── AI 클라이언트 ──────────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 const fileManager = new GoogleAIFileManager(env.GEMINI_API_KEY);
 
 const FILE_API_THRESHOLD = 15 * 1024 * 1024; // 15MB 이상이면 File API 사용
@@ -116,7 +150,14 @@ const updateMeetingSchema = z.object({
   summary: z.string().optional(),
   transcription: z.string().optional(),
   agenda: z.array(z.string()).optional(),
-  discussions: z.string().optional(), // JSON string of Array<{ topic: string; bullets: string[] }>
+  discussions: z.union([
+    z.string(),
+    z.array(z.object({
+      topic: z.string(),
+      bullets: z.array(z.string()).optional(),
+      content: z.string().optional(),
+    })),
+  ]).optional(),
   actionItems: z.array(z.string()).optional(),
   nextSteps: z.array(z.string()).optional(),
   // 수정 시 DomainDict 학습 트리거
@@ -130,6 +171,47 @@ const listQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(50).default(20),
 });
+
+function getMultipartField(fields: Record<string, unknown> | undefined, key: string): string | undefined {
+  const field = fields?.[key] as { value?: unknown } | Array<{ value?: unknown }> | string | undefined;
+  const value = Array.isArray(field) ? field[0]?.value : typeof field === 'string' ? field : field?.value;
+  return typeof value === 'string' ? value.trim() : undefined;
+}
+
+function replaceSummaryTitle(summary: string, title: string): string {
+  const safeTitle = title.trim();
+  if (!safeTitle) return summary;
+  return summary.match(/^#\s+.+/m)
+    ? summary.replace(/^#\s+.+/m, `# ${safeTitle}`)
+    : `# ${safeTitle}\n\n${summary}`;
+}
+
+function serializeDiscussions(discussions: z.infer<typeof updateMeetingSchema>['discussions']): string | undefined {
+  if (discussions === undefined) return undefined;
+  return typeof discussions === 'string' ? discussions : JSON.stringify(discussions);
+}
+
+function jsonObject(value: Prisma.JsonValue | null | undefined): Prisma.JsonObject {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Prisma.JsonObject;
+  }
+  return {};
+}
+
+function jsonStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function parseDiscussionValue(value: unknown): Array<{ topic: string; bullets?: string[]; content?: string }> {
+  if (!value) return [];
+  try {
+    if (typeof value === 'string') return JSON.parse(value);
+    if (Array.isArray(value)) return value as Array<{ topic: string; bullets?: string[]; content?: string }>;
+  } catch {
+    return [];
+  }
+  return [];
+}
 
 // ── 교정 사전 (180+ 전문 용어) ─────────────────────────
 // Lab DomainDict에서 동적으로 로드 + 기본 사전 병합
@@ -306,7 +388,7 @@ JSON: [{"wrong": "...", "correct": "..."}]`;
 
     trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
     const ttsUsage = result.response.usageMetadata;
-    if (ttsUsage) logApiCost(userId, 'gemini-3.1-flash-lite', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'meeting_tts_learn').catch(() => {});
+    if (ttsUsage) logApiCost(userId, 'gemini-3.5-flash', ttsUsage.promptTokenCount ?? 0, ttsUsage.candidatesTokenCount ?? 0, 'meeting_tts_learn').catch(() => {});
 
     let parsed: Array<{ wrong: string; correct: string }>;
     try { parsed = JSON.parse(result.response.text().trim()); } catch { return; }
@@ -453,10 +535,12 @@ interface MeetingSummaryResult {
   date: string;
   participants: string[];
   team: string;
+  decisions: string[];
   agenda: string[];
   discussions: Array<{ topic: string; bullets: string[] }>;
   actionItems: string[];
   nextSteps: string[];
+  openQuestions: string[];
   correctedTranscription: string;
 }
 
@@ -492,6 +576,9 @@ ${correctionDict}
   "date": "${dateStr} ${timeStr}",
   "participants": ["참석자1 직함", "참석자2 직함"],
   "team": "해당 팀명 (전체, 연구팀 등)",
+  "decisions": [
+    "회의에서 명시적으로 확정·승인·채택된 결정사항"
+  ],
   "agenda": ["안건1", "안건2", "안건3"],
   "discussions": [
     {
@@ -504,10 +591,13 @@ ${correctionDict}
     }
   ],
   "actionItems": [
-    "구체적인 할 일 내용 (담당자/기한 있으면 포함)"
+    "구체적인 할 일 내용 (담당자/기한이 실제로 언급된 경우에만 포함)"
   ],
   "nextSteps": [
     "다음 미팅까지 해야 할 일"
+  ],
+  "openQuestions": [
+    "아직 미정이거나 확인이 필요한 쟁점"
   ],
   "correctedTranscription": "교정된 전사 텍스트 전문"
 }
@@ -515,6 +605,8 @@ ${correctionDict}
 ## 중요: discussions의 bullets는 최소 3개 이상, 가능하면 5개 이상 작성하세요. 단순 요약이 아니라 회의에서 나온 구체적인 내용(기술 결정, 수치, 근거, 이슈)을 모두 포함해야 합니다.
 
 ## 중요: discussions에 액션 아이템이나 할 일을 넣지 마라. 액션 아이템은 반드시 "actionItems" 필드에만 넣어라. discussions는 순수하게 논의된 내용만 기록한다.
+
+## 중요: decisions는 후속 에이전트와 운영 시스템이 바로 쓸 수 있는 확정 사항만 넣어라. 애매한 의견, 아이디어, 질문은 openQuestions에 넣어라.
 
 응답에 이모지를 절대 사용하지 마라. 이모지 대신 마크다운 서식으로 구조를 표현하라.`;
 
@@ -549,6 +641,7 @@ ${correctionDict}
       date: String(parsed.date || ''),
       participants: Array.isArray(parsed.participants) ? parsed.participants.map(String) : [],
       team: String(parsed.team || ''),
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions.map(String) : [],
       agenda: Array.isArray(parsed.agenda) ? parsed.agenda.map(String) : [],
       discussions: Array.isArray(parsed.discussions)
         ? parsed.discussions.map((d: any) => ({
@@ -558,6 +651,7 @@ ${correctionDict}
         : [],
       actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems.map(String) : [],
       nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.map(String) : [],
+      openQuestions: Array.isArray(parsed.openQuestions) ? parsed.openQuestions.map(String) : [],
       correctedTranscription: String(parsed.correctedTranscription || rawTranscription),
     };
   } catch (error) {
@@ -573,10 +667,12 @@ async function fallbackSummarize(transcription: string): Promise<MeetingSummaryR
 반드시 아래 JSON 형식으로만 응답하세요:
 {
   "title": "회의 제목 (20자 이내)",
+  "decisions": ["결정사항"],
   "agenda": ["안건1", "안건2"],
   "discussions": [{ "topic": "소주제", "content": "요약" }],
   "actionItems": ["액션 아이템"],
-  "nextSteps": ["다음 할 일"]
+  "nextSteps": ["다음 할 일"],
+  "openQuestions": ["확인 필요 사항"]
 }
 
 전사록:
@@ -588,7 +684,7 @@ ${transcription}`;
       generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
     });
     const fallbackUsage = result.response.usageMetadata;
-    if (fallbackUsage) logApiCost('system', 'gemini-3.1-flash-lite', fallbackUsage.promptTokenCount ?? 0, fallbackUsage.candidatesTokenCount ?? 0, 'meeting_summary_fallback').catch(() => {});
+    if (fallbackUsage) logApiCost('system', 'gemini-3.5-flash', fallbackUsage.promptTokenCount ?? 0, fallbackUsage.candidatesTokenCount ?? 0, 'meeting_summary_fallback').catch(() => {});
 
     const response = result.response.text().trim();
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -600,12 +696,14 @@ ${transcription}`;
       date: '',
       participants: [],
       team: '',
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions.map(String) : [],
       agenda: Array.isArray(parsed.agenda) ? parsed.agenda.map(String) : [],
       discussions: Array.isArray(parsed.discussions)
         ? parsed.discussions.map((d: any) => ({ topic: String(d.topic || ''), bullets: Array.isArray(d.bullets) ? d.bullets.map(String) : [String(d.content || '')] }))
         : [],
       actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems.map(String) : [],
       nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps.map(String) : [],
+      openQuestions: Array.isArray(parsed.openQuestions) ? parsed.openQuestions.map(String) : [],
       correctedTranscription: transcription,
     };
   } catch {
@@ -614,10 +712,12 @@ ${transcription}`;
       date: '',
       participants: [],
       team: '',
+      decisions: [],
       agenda: [],
       discussions: [],
       actionItems: [],
       nextSteps: [],
+      openQuestions: [],
       correctedTranscription: transcription,
     };
   }
@@ -630,10 +730,13 @@ interface MeetingPipelineResult {
   summary: string;        // 구조화 요약 (마크다운)
   agenda: string[];
   discussions: Array<{ topic: string; bullets: string[] }>;
+  decisions: string[];
   actionItems: string[];
   nextSteps: string[];
+  openQuestions: string[];
   participants: string[];
   team: string;
+  opsPacket: MeetingOpsPacket;
   modelUsed: string;
 }
 
@@ -647,7 +750,7 @@ async function processMeetingAudio(
   if (userId) {
     trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
     // Note: Gemini STT doesn't return usageMetadata for audio; log flat estimate
-    logApiCost(userId, 'gemini-3.1-flash-lite', 0, 0, 'meeting_stt').catch(() => {});
+    logApiCost(userId, 'gemini-3.5-flash', 0, 0, 'meeting_stt').catch(() => {});
   }
 
   if (!rawTranscription || rawTranscription.length < 10) {
@@ -675,6 +778,18 @@ async function processMeetingAudio(
   // Step 3: 이름 제거 없음 — 교수님 양식에서는 참석자 이름을 유지
 
   const summaryText = formatSummaryText(summary);
+  const opsPacket = buildMeetingOpsPacket({
+    title: summary.title,
+    summary: summaryText,
+    agenda: summary.agenda,
+    discussions: summary.discussions,
+    actionItems: summary.actionItems,
+    nextSteps: summary.nextSteps,
+    decisions: summary.decisions,
+    openQuestions: summary.openQuestions,
+    participants: summary.participants,
+    team: summary.team,
+  });
 
   return {
     transcription: summary.correctedTranscription,
@@ -682,10 +797,13 @@ async function processMeetingAudio(
     summary: summaryText,
     agenda: summary.agenda,
     discussions: summary.discussions,
+    decisions: summary.decisions,
     actionItems: summary.actionItems,
     nextSteps: summary.nextSteps,
+    openQuestions: summary.openQuestions,
     participants: summary.participants,
     team: summary.team,
+    opsPacket,
     modelUsed: env.ANTHROPIC_API_KEY ? 'gemini-stt+sonnet-summary' : 'gemini-stt+gemini-summary',
   };
 }
@@ -711,6 +829,16 @@ function formatSummaryText(s: MeetingSummaryResult): string {
     }
   }
 
+  // 결정 사항
+  if (s.decisions.length > 0) {
+    parts.push('');
+    parts.push('## 결정 사항');
+    parts.push('');
+    for (const decision of s.decisions) {
+      parts.push(`- ${decision}`);
+    }
+  }
+
   // 논의 내용 (상세 bullet points)
   if (s.discussions.length > 0) {
     parts.push('');
@@ -732,6 +860,15 @@ function formatSummaryText(s: MeetingSummaryResult): string {
     parts.push('');
     for (const n of s.nextSteps) {
       parts.push(`- ${n}`);
+    }
+  }
+
+  if (s.openQuestions.length > 0) {
+    parts.push('');
+    parts.push('## 확인 필요 사항');
+    parts.push('');
+    for (const q of s.openQuestions) {
+      parts.push(`- ${q}`);
     }
   }
 
@@ -773,46 +910,58 @@ export async function meetingRoutes(app: FastifyInstance) {
     }
 
     const mimeType = data.mimetype || 'audio/webm';
+    const requestedTitle = getMultipartField(data.fields as Record<string, unknown>, 'title')?.slice(0, 200);
 
     let duration: number | null = null;
-    const durationField = (data.fields as any)?.duration;
-    if (durationField?.value) {
-      duration = parseInt(durationField.value, 10) || null;
+    const durationValue = getMultipartField(data.fields as Record<string, unknown>, 'duration');
+    if (durationValue) {
+      duration = parseInt(durationValue, 10) || null;
     }
 
     try {
       const result = await processMeetingAudio(audioBuffer, mimeType, user.id);
+      const meetingTitle = requestedTitle || result.title;
+      const meetingSummary = requestedTitle ? replaceSummaryTitle(result.summary, meetingTitle) : result.summary;
 
       const meeting = await prisma.meeting.create({
         data: {
           userId: user.id,
-          title: result.title,
+          title: meetingTitle,
           transcription: result.transcription,
-          summary: result.summary,
+          summary: meetingSummary,
           agenda: result.agenda,
           discussions: JSON.stringify(result.discussions),
           actionItems: result.actionItems,
           nextSteps: result.nextSteps,
           duration,
           modelUsed: result.modelUsed,
+          metadata: {
+            aiTitle: result.title,
+            requestedTitle: requestedTitle || null,
+            participants: result.participants,
+            team: result.team,
+            decisions: result.decisions,
+            openQuestions: result.openQuestions,
+            opsPacket: result.opsPacket,
+          } as Prisma.InputJsonValue,
         },
       });
 
       // actionItems → Capture 자동 동기화 (이메일·회의 follow-up이 /tasks에 자동 노출)
-      syncActionItemCaptures(user.id, request.labId ?? null, meeting.id, result.title, result.actionItems)
+      syncActionItemCaptures(user.id, request.labId ?? null, meeting.id, meetingTitle, result.actionItems, result.opsPacket)
         .then(r => { if (r.created > 0) console.log(`[meeting] action-item Capture ${r.created}개 자동 등록 (archived ${r.archived})`); })
         .catch((err: any) => console.warn('[background] syncActionItemCaptures:', err?.message));
 
       // 비동기 임베딩 (LightRAG 연동)
-      const embText = [result.title, result.summary || '', ...result.agenda, ...result.actionItems].filter(Boolean).join('\n');
+      const embText = [meetingTitle, meetingSummary || '', ...result.agenda, ...result.actionItems].filter(Boolean).join('\n');
       embedAndStore(basePrismaClient, {
         sourceType: 'meeting' as any, sourceId: meeting.id, userId: user.id,
-        title: result.title, content: embText, source: 'meeting',
+        title: meetingTitle, content: embText, source: 'meeting',
       }).catch((err: any) => console.error('[background] meeting embedAndStore:', err.message || err));
 
       // 비동기 지식 그래프 관계 추출
       const graphText = [
-        result.title,
+        meetingTitle,
         ...result.agenda,
         ...(result.discussions?.map((d: { topic: string; bullets: string[] }) => `${d.topic}: ${d.bullets.join('; ')}`) || []),
         ...result.actionItems,
@@ -821,7 +970,7 @@ export async function meetingRoutes(app: FastifyInstance) {
         .catch((err: any) => console.error('[background] meeting buildGraphFromText:', err.message || err));
 
       // 교차 연결: 회의에서 언급된 논문/이메일/프로젝트를 기존 지식그래프 노드와 연결
-      crossLinkSources(userId, graphText, 'meeting', result.title)
+      crossLinkSources(userId, graphText, 'meeting', meetingTitle)
         .catch((err: any) => console.warn('[background] meeting crossLink:', err.message || err));
 
       // 일정 감지 → pending events (비동기, 응답 지연 없음)
@@ -921,9 +1070,40 @@ export async function meetingRoutes(app: FastifyInstance) {
     if (body.summary !== undefined) updateData.summary = body.summary;
     if (body.transcription !== undefined) updateData.transcription = body.transcription;
     if (body.agenda !== undefined) updateData.agenda = body.agenda;
-    if (body.discussions !== undefined) updateData.discussions = body.discussions;
+    if (body.discussions !== undefined) updateData.discussions = serializeDiscussions(body.discussions);
     if (body.actionItems !== undefined) updateData.actionItems = body.actionItems;
     if (body.nextSteps !== undefined) updateData.nextSteps = body.nextSteps;
+
+    const shouldRefreshOpsPacket = body.title !== undefined
+      || body.summary !== undefined
+      || body.agenda !== undefined
+      || body.discussions !== undefined
+      || body.actionItems !== undefined
+      || body.nextSteps !== undefined;
+    let refreshedOpsPacket: MeetingOpsPacket | undefined;
+    if (shouldRefreshOpsPacket) {
+      const existingMetadata = jsonObject(existing.metadata);
+      const nextDiscussions = body.discussions !== undefined
+        ? parseDiscussionValue(body.discussions)
+        : parseDiscussionValue(existing.discussions);
+      refreshedOpsPacket = buildMeetingOpsPacket({
+        title: body.title ?? existing.title,
+        summary: body.summary ?? existing.summary,
+        agenda: body.agenda ?? existing.agenda ?? [],
+        discussions: nextDiscussions,
+        actionItems: body.actionItems ?? existing.actionItems ?? [],
+        nextSteps: body.nextSteps ?? existing.nextSteps ?? [],
+        participants: jsonStringArray(existingMetadata.participants),
+        team: typeof existingMetadata.team === 'string' ? existingMetadata.team : undefined,
+        decisions: jsonStringArray(existingMetadata.decisions),
+        openQuestions: jsonStringArray(existingMetadata.openQuestions),
+        createdAt: existing.createdAt,
+      });
+      updateData.metadata = {
+        ...existingMetadata,
+        opsPacket: refreshedOpsPacket,
+      } as Prisma.InputJsonValue;
+    }
 
     const meeting = await prisma.meeting.update({
       where: { id },
@@ -931,12 +1111,16 @@ export async function meetingRoutes(app: FastifyInstance) {
     });
 
     // 수정에서 교정 패턴이 포함된 경우 DomainDict에 학습
-    if (body.corrections && body.corrections.length > 0) {
+    const manualCorrections = (body.corrections ?? [])
+      .map(c => ({ wrong: c.wrong.trim(), correct: c.correct.trim() }))
+      .filter(c => c.wrong && c.correct && c.wrong.toLowerCase() !== c.correct.toLowerCase());
+
+    if (manualCorrections.length > 0) {
       try {
         const lab = await prisma.lab.findUnique({ where: { ownerId: user.id } });
         if (lab) {
           let added = 0;
-          for (const c of body.corrections) {
+          for (const c of manualCorrections) {
             await prisma.domainDict.upsert({
               where: { labId_wrongForm: { labId: lab.id, wrongForm: c.wrong.toLowerCase() } },
               create: {
@@ -959,6 +1143,9 @@ export async function meetingRoutes(app: FastifyInstance) {
     if (body.transcription && existing.transcription && body.transcription !== existing.transcription) {
       learnCorrectionPatterns(existing.transcription, body.transcription, user.id).catch(logError('meeting', '수정 시 교정 패턴 학습 실패', { userId: user.id }));
     }
+    if (body.summary && existing.summary && body.summary !== existing.summary) {
+      learnCorrectionPatterns(existing.summary, body.summary, user.id).catch(logError('meeting', 'summary 수정 시 교정 패턴 학습 실패', { userId: user.id }));
+    }
 
     // actionItems가 수정된 경우 Capture 재동기화
     if (body.actionItems !== undefined) {
@@ -968,6 +1155,7 @@ export async function meetingRoutes(app: FastifyInstance) {
         meeting.id,
         meeting.title || existing.title || '',
         meeting.actionItems as string[],
+        refreshedOpsPacket,
       )
         .then(r => { if (r.created > 0 || r.archived > 0) console.log(`[meeting-edit] action-item Capture sync — created ${r.created}, archived ${r.archived}`); })
         .catch((err: any) => console.warn('[background] syncActionItemCaptures (edit):', err?.message));
@@ -1059,6 +1247,7 @@ export async function meetingRoutes(app: FastifyInstance) {
 
   // ── POST /api/meetings/transcribe — 전사만 (저장 없이) ─
   app.post('/api/meetings/transcribe', async (request, reply) => {
+    const userId = request.userId!;
     const data = await request.file();
     if (!data) {
       return reply.code(400).send({ error: '오디오 파일이 필요합니다' });
@@ -1072,14 +1261,33 @@ export async function meetingRoutes(app: FastifyInstance) {
     const mimeType = data.mimetype || 'audio/webm';
 
     try {
-      const result = await processMeetingAudio(audioBuffer, mimeType);
+      const rawTranscription = await transcribeAudio(audioBuffer, mimeType);
+      if (userId) {
+        trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
+        logApiCost(userId, 'gemini-3.5-flash', 0, 0, 'meeting_transcribe_only').catch(() => {});
+      }
+
+      if (!rawTranscription || rawTranscription.length < 10) {
+        throw new Error('음성을 인식할 수 없습니다. 다시 시도해주세요.');
+      }
+      const promptLeakPatterns = ['전사하는 전문 전사자', '필러 단어 제거', '반복 발언 정리', '순수 텍스트만'];
+      const leakCount = promptLeakPatterns.filter(p => rawTranscription.includes(p)).length;
+      if (leakCount >= 2) {
+        throw new Error('오디오 전사에 실패했습니다. 파일이 너무 길거나 형식이 지원되지 않을 수 있습니다. 더 짧은 구간으로 나누어 시도해주세요.');
+      }
+
+      const transcription = await applyPreCorrection(rawTranscription, userId);
       return reply.send({
         success: true,
-        data: result,
+        data: {
+          transcription,
+          rawTranscription,
+          modelUsed: 'gemini-stt',
+        },
       });
     } catch (error: any) {
       console.error('[meeting] 회의 전사 실패:', error);
-      return reply.code(500).send({ error: '회의 전사 중 오류가 발생했습니다' });
+      return reply.code(500).send({ error: error.message || '회의 전사 중 오류가 발생했습니다' });
     }
   });
 }
@@ -1109,6 +1317,7 @@ function formatMeeting(meeting: any) {
     nextSteps: meeting.nextSteps || [],
     duration: meeting.duration,
     modelUsed: meeting.modelUsed,
+    metadata: meeting.metadata || {},
     createdAt: meeting.createdAt.toISOString(),
     updatedAt: meeting.updatedAt.toISOString(),
   };

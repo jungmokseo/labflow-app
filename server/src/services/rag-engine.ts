@@ -616,14 +616,20 @@ export async function findSimilarDocuments(
     const { embedding } = await generateEmbedding(sampleText);
     const vectorStr = `[${embedding.join(',')}]`;
 
+    // DISTINCT ON으로 doc별 최고 유사도 chunk를 고른 뒤, *외부에서* similarity DESC로 정렬 후 LIMIT.
+    // 이전: 단일 쿼리의 LIMIT이 ORDER BY source_id(DISTINCT ON 필수) 순서에 걸려, 유사도 상위가 아닌
+    //       source_id 값 순(임의)으로 N개를 잘라 반환하던 버그.
     const results = await prisma.$queryRawUnsafe(`
-      SELECT DISTINCT ON (source_id)
-        source_id, source_type, title, chunk_text,
-        1 - (embedding <=> $1::vector) as similarity
-      FROM memo_embeddings
-      WHERE (user_id = $2 OR lab_id = $3)
-        AND 1 - (embedding <=> $1::vector) > $4
-      ORDER BY source_id, similarity DESC
+      SELECT * FROM (
+        SELECT DISTINCT ON (source_id)
+          source_id, source_type, title, chunk_text,
+          1 - (embedding <=> $1::vector) as similarity
+        FROM memo_embeddings
+        WHERE (user_id = $2 OR lab_id = $3)
+          AND 1 - (embedding <=> $1::vector) > $4
+        ORDER BY source_id, similarity DESC
+      ) sub
+      ORDER BY similarity DESC
       LIMIT $5
     `, vectorStr, userId, labId, threshold, limit);
 

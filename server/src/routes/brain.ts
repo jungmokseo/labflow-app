@@ -533,7 +533,7 @@ export async function brainRoutes(app: FastifyInstance) {
       // Gemini fallback (tool-use 없이 기본 대화)
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const chatHistory = sortedMessages.map(m => ({
         role: m.role === 'user' ? 'user' as const : 'model' as const,
@@ -572,6 +572,13 @@ export async function brainRoutes(app: FastifyInstance) {
       for (const action of pendingActions) {
         try { reply.raw.write(`data: ${JSON.stringify({ type: 'action', action })}\n\n`); } catch {}
       }
+    }
+
+    // 빈 응답 가드 — tool-use 라운드가 MAX_TOOL_ROUNDS까지 소진되거나 모델이 텍스트 없이
+    // tool만 호출하고 끝나면 responseText가 빈 문자열 → 사용자에게 빈 메시지가 저장/표시됨.
+    // 폴백 문구로 대체 (스트리밍 안 된 경우 토큰으로도 전송).
+    if (!responseText.trim()) {
+      responseText = '요청을 처리했지만 표시할 응답을 생성하지 못했습니다. 질문을 조금 더 구체적으로 다시 말씀해 주세요.';
     }
 
     // 이미 실시간 스트리밍된 경우 재전송 방지 (이중 출력 버그 수정)
@@ -736,7 +743,7 @@ export async function brainRoutes(app: FastifyInstance) {
       try {
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-        const m = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+        const m = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
         const r = await m.generateContent(
           `다음 메모에 적절한 태그를 3~5개 생성하세요. JSON 배열로만 응답: "${body.content}"`
         );

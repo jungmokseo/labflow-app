@@ -2,7 +2,7 @@
  * Gemini Flash AI 분류 서비스
  *
  * 프론트의 ai-classifier.ts 로직을 서버사이드로 이관
- * - Gemini 2.0 Flash (무료 티어) 사용
+ * - Gemini 3.5 Flash (무료 티어) 사용
  * - 로컬 분류 fallback 포함
  */
 
@@ -23,7 +23,7 @@ export interface ClassificationResult {
 
 // ── Gemini 클라이언트 ────────────────────────────────
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
 // ── 분류 프롬프트 ────────────────────────────────────
 const SYSTEM_PROMPT = `당신은 연구자의 빠른 메모를 자동 분류하는 AI입니다.
@@ -64,7 +64,7 @@ export async function classifyWithGemini(text: string): Promise<ClassificationRe
   });
 
   const geminiClassUsage = result.response.usageMetadata;
-  if (geminiClassUsage) logApiCost('system', 'gemini-3.1-flash-lite', geminiClassUsage.promptTokenCount ?? 0, geminiClassUsage.candidatesTokenCount ?? 0, 'gemini_classify').catch(() => {});
+  if (geminiClassUsage) logApiCost('system', 'gemini-3.5-flash', geminiClassUsage.promptTokenCount ?? 0, geminiClassUsage.candidatesTokenCount ?? 0, 'gemini_classify').catch(() => {});
   const response = result.response.text().trim();
   // Extract JSON from response (may contain thinking text before/after)
   const jsonMatch = response.match(/\{[\s\S]*\}/);

@@ -21,20 +21,26 @@ function slackMessage(input: {
   taskTitle: string;
   actionDate: Date | null;
   slackPermalink?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   memo?: string;
 }): string {
+  const sourceUrl = input.sourceUrl || input.slackPermalink;
   const lines = [
-    '📌 *새 할 일 배정됨*',
+    '📌 *새 할 일 배정 안내*',
     '',
     `*${input.taskTitle}*`,
     `• 마감일: ${formatDate(input.actionDate)}`,
   ];
 
+  if (input.sourceLabel?.trim()) {
+    lines.push(`• 출처: ${input.sourceLabel.trim()}`);
+  }
   if (input.memo?.trim()) {
     lines.push(`• 메모: ${input.memo.trim()}`);
   }
 
-  lines.push('', `원본: ${input.slackPermalink || '없음'}`);
+  lines.push('', sourceUrl ? `원본: ${sourceUrl}` : 'ResearchFlow에서 세부 내용을 확인해 주세요.');
   return lines.join('\n');
 }
 
@@ -60,6 +66,8 @@ export async function notifyStudentTaskAssigned(input: {
   taskTitle: string;
   actionDate: Date | null;
   slackPermalink?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
   memo?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const token = env.SLACK_BOT_TOKEN;

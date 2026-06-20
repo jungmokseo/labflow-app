@@ -344,7 +344,7 @@ JSON 배열만 출력 (코드블록 OK).`;
   // 2) Gemini fallback
   try {
     const gemini = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = gemini.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-3.5-flash' });
     const res = await model.generateContent(prompt);
     const text = res.response.text();
     const arr = parseJsonArray(text);

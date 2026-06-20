@@ -184,9 +184,9 @@ export async function automationRoutes(app: FastifyInstance) {
     // ── Google Gemini ──
     const geminiModels: Array<{ id: string; displayName: string; usage: string }> = [
       {
-        id: 'gemini-3.1-flash-lite',
-        displayName: 'Flash-Lite (stable)',
-        usage: '경량 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat lite',
+        id: 'gemini-3.5-flash',
+        displayName: 'Flash 3.5 (stable)',
+        usage: 'Flash 계열 작업 — 이메일 stage1·capture classify·calendar 추출·STT·번역·labflow-member chat',
       },
       {
         id: 'gemini-3.1-pro-preview',

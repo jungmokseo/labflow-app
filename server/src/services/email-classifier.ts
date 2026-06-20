@@ -74,7 +74,7 @@ export interface UserProfileForClassification {
 // ── Stage 1: Gemini Flash 배치 라우팅 ────────────────
 
 const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-const flashModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+const flashModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
 function buildStage1Prompt(
   profile: UserProfileForClassification | null,
@@ -157,7 +157,7 @@ export async function classifyEmailBatchStage1(
     });
 
     const s1Usage = result.response.usageMetadata;
-    if (s1Usage && userId) logApiCost(userId, 'gemini-3.1-flash-lite', s1Usage.promptTokenCount ?? 0, s1Usage.candidatesTokenCount ?? 0, 'email_classify_stage1').catch(() => {});
+    if (s1Usage && userId) logApiCost(userId, 'gemini-3.5-flash', s1Usage.promptTokenCount ?? 0, s1Usage.candidatesTokenCount ?? 0, 'email_classify_stage1').catch(() => {});
     const responseText = result.response.text().trim();
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('No JSON array found in Gemini response');

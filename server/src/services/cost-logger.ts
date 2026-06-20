@@ -9,9 +9,10 @@ const PRICING: Record<string, { input: number; output: number }> = {
   'claude-opus-4-6':                { input: 15.00, output: 75.00 }, // legacy — 옛 데이터 호환
   'claude-haiku-4-5':               { input: 0.80,  output: 4.00  },
   // ── Google Gemini (2026-05) ──
-  'gemini-3.1-flash-lite':                  { input: 0.075, output: 0.30  },
-  'gemini-3.1-flash-lite-preview-04-17':    { input: 0.075, output: 0.30  }, // legacy
-  'gemini-3.1-flash-lite-preview':          { input: 0.075, output: 0.30  }, // legacy
+  'gemini-3.5-flash':                       { input: 1.50,  output: 9.00  },
+  'gemini-3.1-flash-lite':                  { input: 0.25,  output: 1.50  }, // legacy
+  'gemini-3.1-flash-lite-preview-04-17':    { input: 0.25,  output: 1.50  }, // legacy
+  'gemini-3.1-flash-lite-preview':          { input: 0.25,  output: 1.50  }, // legacy
   'gemini-3.1-pro-preview':                 { input: 1.25,  output: 10.00 },
   'gemini-3.1-pro-preview-customtools':     { input: 1.25,  output: 10.00 },
   'gemini-2.5-pro-preview-03-25':           { input: 1.25,  output: 10.00 }, // legacy

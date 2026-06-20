@@ -61,8 +61,11 @@ export function createIsolatedPrisma(basePrisma: PrismaClient) {
             if (isUserModel) {
               args.where = { ...args.where, userId: ctx.userId };
             }
-            if (isLabModel && ctx.labId) {
-              args.where = { ...args.where, labId: ctx.labId };
+            if (isLabModel) {
+              // labId가 없으면 전체 노출을 막기 위해 매칭 불가능한 필터로 DENY.
+              args.where = ctx.labId
+                ? { ...args.where, labId: ctx.labId }
+                : { ...args.where, labId: '__no_lab_context__' };
             }
           }
 
