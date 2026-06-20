@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getPaperAlerts, savePaperAlert, runPaperCrawl, getPaperAlertResults,
   getJournalFields, searchJournals, addCustomJournal,
@@ -130,6 +130,9 @@ export default function PapersPage() {
   const [keywords, setKeywords] = useState('');
   const [selectedJournals, setSelectedJournals] = useState<string[]>([]);
   const [customFeeds, setCustomFeeds] = useState<Array<{ name: string; rssUrl: string }>>([]);
+  // 사용자가 폼을 편집하기 시작하면 true — loadAlerts(마운트 fetch)가 입력을 덮어쓰거나
+  // 기본값을 자동 저장하지 못하게 가드 (입력 도중 fetch가 늦게 resolve되는 경합 방지).
+  const formDirtyRef = useRef(false);
   const [crawling, setCrawling] = useState(false);
   const [crawlStep, setCrawlStep] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -175,6 +178,8 @@ export default function PapersPage() {
     ];
     try {
       const data = await getPaperAlerts();
+      // 사용자가 이미 폼을 편집 중이면 fetch 결과로 덮어쓰지 않음 (경합 방지).
+      if (formDirtyRef.current) return;
       const alertList = data.alerts || data.data || [];
       const themeKws: string[] = (data as any).researchThemes?.flatMap((t: any) => t.keywords || []) || [];
 
@@ -359,6 +364,7 @@ export default function PapersPage() {
 
   // Settings panel functions
   function toggleJournal(name: string) {
+    formDirtyRef.current = true; // 사용자 편집 — loadAlerts 덮어쓰기 방지
     if (selectedJournals.includes(name)) {
       setSelectedJournals(prev => prev.filter(j => j !== name));
     } else if (totalJournals < MAX_JOURNALS) {
@@ -555,7 +561,7 @@ export default function PapersPage() {
               <p className="text-xs text-text-muted mb-2">연구 키워드 (쉼표 구분)</p>
               <textarea
                 value={keywords}
-                onChange={e => setKeywords(e.target.value)}
+                onChange={e => { formDirtyRef.current = true; setKeywords(e.target.value); }}
                 rows={2}
                 placeholder="biosensor, flexible electronics, hydrogel..."
                 className="w-full bg-bg-input text-text-heading px-4 py-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"

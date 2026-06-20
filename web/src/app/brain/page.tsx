@@ -935,6 +935,30 @@ export default function BrainPage() {
           setThinkingSteps([]);
           setStreamingContent('');
           setIsTokenStreaming(false);
+          // 새 세션 steering: 서버가 이미 채널을 만들고 첫 응답을 저장했을 수 있다.
+          // 그 채널을 입양해야 finally의 queued 재전송이 같은 채널에서 이어진다.
+          // (이전: activeChannelId 미설정 → 재전송이 또 새 채널 생성 → 중복 채널 + 첫 교환 유실)
+          if (isNewSession && !channelIdAtSend) {
+            await new Promise(r => setTimeout(r, 600)); // 서버 채널 커밋 대기
+            try {
+              const channels = await getBrainChannels();
+              const list = (channels as any).data || [];
+              const newest = Array.isArray(list) && list.length > 0 ? list[0] : null;
+              // 최근성 가드 — 방금(15초 내) 만들어진 채널만 입양 (abort가 너무 일러 채널 미생성 시 옛 채널 오입양 방지)
+              const ts = newest?.createdAt || newest?.lastMessageAt || newest?.updatedAt;
+              const freshlyCreated = ts && (Date.now() - new Date(ts).getTime() < 15000);
+              if (newest && freshlyCreated) {
+                try {
+                  const res = await getChannelMessages(newest.id);
+                  const serverMsgs = res.data || res || [];
+                  if (Array.isArray(serverMsgs) && serverMsgs.length > 0) storeMessages(newest.id, serverMsgs);
+                } catch {}
+                setLocalNewMessages([]);
+                setActiveChannelId(newest.id);
+                refreshChannels();
+              }
+            } catch { /* 입양 실패 시 재전송이 새 세션으로 — 기존 동작 (회귀 없음) */ }
+          }
           return;
         }
         // SSE 끊김 (모바일 화면 sleep 등) → polling으로 복구 시도
@@ -1102,7 +1126,11 @@ export default function BrainPage() {
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) return;
+        // 너무 짧은 녹음(녹음 데이터 없음)은 silent return하던 것 → 사용자에게 피드백.
+        if (blob.size === 0) {
+          toast('녹음이 너무 짧습니다. 버튼을 누른 채로 말씀해 주세요.', 'info');
+          return;
+        }
 
         // Transcribe via API
         const formData = new FormData();
