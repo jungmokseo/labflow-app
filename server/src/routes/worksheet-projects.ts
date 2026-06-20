@@ -9,6 +9,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
 import { env } from '../config/env.js';
 import { syncWorksheetProjects, getWorksheetProjects } from '../services/worksheet-sync.js';
 import {
@@ -21,9 +22,13 @@ import { logError } from '../services/error-logger.js';
 
 export async function worksheetProjectRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware);
+  // env.LAB_ID 단일 lab 배포에서도 권한 미들웨어 작동하도록 request.labId 채움.
+  app.addHook('preHandler', async (request) => {
+    if (!request.labId && env.LAB_ID) request.labId = env.LAB_ID;
+  });
 
   // ── GET 목록 ─────────────────────────────────────
-  app.get('/api/worksheet-projects', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/worksheet-projects', { preHandler: requirePermission('VIEWER') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const includeArchived = (request.query as any)?.archived === 'true';
       const items = await getWorksheetProjects({ archived: includeArchived });
@@ -74,18 +79,18 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
         },
       });
     } catch (err: any) {
-      logError('background', 'GET /api/worksheet-projects 실패', { userId: (request as any).user?.id })(err);
+      logError('background', 'GET /api/worksheet-projects 실패', { userId: request.userId })(err);
       return reply.code(500).send({ error: '목록 조회 실패' });
     }
   });
 
   // ── POST 수동 sync ──────────────────────────────
-  app.post('/api/worksheet-projects/sync', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/worksheet-projects/sync', { preHandler: requirePermission('OWNER') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const result = await syncWorksheetProjects();
       return reply.send({ ok: true, ...result });
     } catch (err: any) {
-      logError('background', 'POST /api/worksheet-projects/sync 실패', { userId: (request as any).user?.id })(err);
+      logError('background', 'POST /api/worksheet-projects/sync 실패', { userId: request.userId })(err);
       return reply.code(500).send({ error: 'sync 실패', message: err.message });
     }
   });
@@ -96,7 +101,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
     customMessage: z.string().optional(),
   });
 
-  app.post('/api/worksheet-projects/:id/remind', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/worksheet-projects/:id/remind', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = remindSchema.parse(request.body || {});
@@ -119,7 +124,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
 
       const message = body.customMessage || buildDefaultRemindMessage(project, targets);
       const purpose: 'PI_TURN' | 'STUDENT_TURN' = project.whoseTurn === 'PI' ? 'STUDENT_TURN' : 'PI_TURN';
-      const sentBy = (request as any).user?.id as string | undefined;
+      const sentBy = request.userId as string | undefined;
       const results: Array<{ student: string; ok: boolean; error?: string; reminderId?: string }> = [];
 
       for (const studentName of targets) {
@@ -184,7 +189,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
       if (err instanceof z.ZodError) {
         return reply.code(400).send({ error: 'Invalid input', details: err.errors });
       }
-      logError('background', 'POST /api/worksheet-projects/:id/remind 실패', { userId: (request as any).user?.id })(err);
+      logError('background', 'POST /api/worksheet-projects/:id/remind 실패', { userId: request.userId })(err);
       return reply.code(500).send({ error: '리마인드 실패', message: err.message });
     }
   });
@@ -192,7 +197,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
   // ── POST 보류로 변경 (UI "무시" 토글) ─────────────
   // DB에서 archived=true + 노션 "🔬 워크시트 추적" property를 "⏸ 보류"로 갱신.
   // 다음 sync에서 ⏸ 보류 property 보존되어 자동으로 활성 목록에서 제외.
-  app.post('/api/worksheet-projects/:id/dismiss', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/worksheet-projects/:id/dismiss', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const project = await prisma.worksheetProject.findUnique({ where: { id } });
@@ -229,7 +234,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
 
       return reply.send({ ok: true, notionUpdated });
     } catch (err: any) {
-      logError('background', 'POST /api/worksheet-projects/:id/dismiss 실패', { userId: (request as any).user?.id })(err);
+      logError('background', 'POST /api/worksheet-projects/:id/dismiss 실패', { userId: request.userId })(err);
       return reply.code(500).send({ error: 'dismiss 실패', message: err.message });
     }
   });
@@ -240,7 +245,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
   const turnSchema = z.object({
     whoseTurn: z.enum(['PI', 'STUDENT']),
   });
-  app.post('/api/worksheet-projects/:id/turn', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/api/worksheet-projects/:id/turn', { preHandler: requirePermission('EDITOR') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const { id } = request.params as { id: string };
       const body = turnSchema.parse(request.body || {});
@@ -263,13 +268,13 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
       if (err instanceof z.ZodError) {
         return reply.code(400).send({ error: 'Invalid input', details: err.errors });
       }
-      logError('background', 'POST /api/worksheet-projects/:id/turn 실패', { userId: (request as any).user?.id })(err);
+      logError('background', 'POST /api/worksheet-projects/:id/turn 실패', { userId: request.userId })(err);
       return reply.code(500).send({ error: '차례 전환 실패', message: err.message });
     }
   });
 
   // ── GET 프로젝트별 reminder 목록 ─────────────────
-  app.get('/api/worksheet-projects/:id/reminders', async (request, reply) => {
+  app.get('/api/worksheet-projects/:id/reminders', { preHandler: requirePermission('VIEWER') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const items = await getRemindersByProject(id);
@@ -280,7 +285,7 @@ export async function worksheetProjectRoutes(app: FastifyInstance) {
   });
 
   // ── POST reactions 폴링 — 발송된 reminder 중 ✅ 반응 받은 것 ackedAt 갱신 ─
-  app.post('/api/worksheet-projects/check-acks', async (_request, reply) => {
+  app.post('/api/worksheet-projects/check-acks', { preHandler: requirePermission('OWNER') }, async (_request, reply) => {
     try {
       const result = await checkPendingReminders();
       return reply.send(result);

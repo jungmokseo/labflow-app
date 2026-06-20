@@ -306,10 +306,25 @@ const SYNONYM_MAP: Record<string, string[]> = {
   '휴가': ['연차', '출장', '부재', 'vacation'],
 };
 
+// 명령/filler 토큰 (질의에서 통째로 제거) — 단어 내부 글자는 건드리지 않는다.
+const QUERY_FILLER = new Set([
+  '해줘', '해주세요', '알려줘', '알려주세요', '보여줘', '보여주세요',
+  '뭐', '뭐야', '뭔지', '있어', '있나', '있는지', '좀', '해줄래', '알려줄래',
+]);
+// 토큰 끝의 1~2글자 조사만 제거 (stem이 2글자 이상 남을 때만).
+const TRAILING_JOSA = /(으로|에서|에게|까지|부터|을|를|이|가|은|는|의|로|에|와|과|도|만)$/;
+
 export function expandQuery(query: string): ExpandedQuery {
-  // Extract meaningful keywords
-  const cleaned = query.replace(/[?？！!을를이가에서의로는은해줘줘요알려정보보여뭐있어내]/g, ' ');
-  const words = cleaned.split(/\s+/).filter(w => w.length > 1);
+  // 이전 버그: 문자 클래스 /[...정보보여알려...]/g 가 단어 내부 글자까지 전역 제거 →
+  // '정보보안 규정' → '안 규' 처럼 의미 단어 파괴. 단어 단위로 filler 제거 + 끝 조사만 절단.
+  const rawTokens = query.replace(/[?？!！.,()[\]]/g, ' ').split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const tok of rawTokens) {
+    if (QUERY_FILLER.has(tok)) continue;
+    const stem = tok.replace(TRAILING_JOSA, '');
+    const finalTok = stem.length >= 2 ? stem : tok; // 조사 떼서 1글자만 남으면 원형 유지
+    if (finalTok.length > 1 && !QUERY_FILLER.has(finalTok)) words.push(finalTok);
+  }
 
   // Find synonyms
   const expanded = new Set(words);
@@ -447,7 +462,7 @@ export async function rerank(
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const candidates = results.slice(0, 15).map((r, i) =>
         `[${i}] ${r.title || ''}: ${r.chunkText.substring(0, 200)}`

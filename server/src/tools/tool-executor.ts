@@ -829,7 +829,7 @@ async function executeDraftEmailReply(
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const draftModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const draftModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     ctx.sendProgress('답장 초안을 작성하고 있습니다...');
     const draftPrompt = `다음 이메일에 대한 답장 초안을 작성해주세요.
@@ -851,7 +851,7 @@ async function executeDraftEmailReply(
       generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
     });
     const draftUsage = draftResult.response.usageMetadata;
-    if (draftUsage) logApiCost(ctx.userId, 'gemini-3.1-flash-lite', draftUsage.promptTokenCount ?? 0, draftUsage.candidatesTokenCount ?? 0, 'email_draft').catch(() => {});
+    if (draftUsage) logApiCost(ctx.userId, 'gemini-3.5-flash', draftUsage.promptTokenCount ?? 0, draftUsage.candidatesTokenCount ?? 0, 'email_draft').catch(() => {});
 
     const draftText = draftResult.response.text().trim();
     const jsonMatch = draftText.match(/\{[\s\S]*\}/);
@@ -984,9 +984,21 @@ async function executeGetCalendar(
     const calendar = await getCalendarClient(ctx.userId);
     if (!calendar) return 'Google Calendar가 연동되지 않았습니다. 설정에서 Gmail 연동을 해주세요.';
 
-    // RFC3339 형식 필수 — timeZone 파라미터는 응답 포맷에만 영향
-    const timeMin = new Date(`${startDate}T00:00:00`).toISOString();
-    const timeMax = new Date(`${endDate}T23:59:59`).toISOString();
+    // RFC3339 + 사용자 시간대 자정/끝 기준으로 변환.
+    // 이전 버그: new Date('YYYY-MM-DDT00:00:00')은 서버 로컬(Railway=UTC) 기준 파싱이라
+    // 보스턴(EDT)·서울(KST) 사용자의 '오늘' 창이 4~9h 어긋나 경계 일정 누락/혼입.
+    // toLocaleString 오프셋 트릭으로 wall-clock 자정을 정확한 UTC instant로 변환.
+    const zonedToUtcIso = (dateStr: string, endOfDay: boolean): string => {
+      const time = endOfDay ? '23:59:59' : '00:00:00';
+      const naiveUtc = new Date(`${dateStr}T${time}Z`);
+      if (isNaN(naiveUtc.getTime())) return new Date().toISOString();
+      const asTz = new Date(naiveUtc.toLocaleString('en-US', { timeZone: userTimezone }));
+      const asUtc = new Date(naiveUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const offsetMs = asTz.getTime() - asUtc.getTime();
+      return new Date(naiveUtc.getTime() - offsetMs).toISOString();
+    };
+    const timeMin = zonedToUtcIso(startDate, false);
+    const timeMax = zonedToUtcIso(endDate, true);
 
     const res = await calendar.events.list({
       calendarId: 'primary',
@@ -1524,7 +1536,7 @@ async function executeRegisterUploadedPapers(
 
   const { GoogleGenerativeAI } = await import('@google/generative-ai');
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
   const { chunkText, generateEmbedding, storePaperEmbeddings } = await import('../services/embedding-service.js');
   const { buildGraphFromText } = await import('../services/knowledge-graph.js');
 
@@ -1547,7 +1559,7 @@ async function executeRegisterUploadedPapers(
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048 },
       });
       const metaUsage = metaResult.response.usageMetadata;
-      if (metaUsage) logApiCost(ctx.userId, 'gemini-3.1-flash-lite', metaUsage.promptTokenCount ?? 0, metaUsage.candidatesTokenCount ?? 0, 'paper_meta_extract').catch(() => {});
+      if (metaUsage) logApiCost(ctx.userId, 'gemini-3.5-flash', metaUsage.promptTokenCount ?? 0, metaUsage.candidatesTokenCount ?? 0, 'paper_meta_extract').catch(() => {});
       const metaText = metaResult.response.text().trim();
       const metaMatch = metaText.match(/\{[\s\S]*\}/);
       const meta = metaMatch ? JSON.parse(metaMatch[0]) : {};
@@ -2121,7 +2133,7 @@ async function executeGetPendingSummary(ctx: ExecutorContext): Promise<string> {
       basePrismaClient.capture.count({ where: { reviewed: false, status: 'active' } }),
     ]);
 
-    const msPiTurn = manuscripts.filter(m => m.whoseTurn === 'PI' && m.stage !== '게재 완료');
+    const msPiTurn = manuscripts.filter(m => m.whoseTurn === 'PI' && m.stage !== '억셉' && m.stage !== '게재 완료');
     const msRevisionDueSoon = manuscripts.filter(m =>
       m.revisionDueAt && m.revisionDueAt.getTime() - Date.now() < 7 * 86400000 && m.revisionDueAt.getTime() > Date.now() - 86400000,
     );

@@ -512,6 +512,10 @@ export async function blissTasksRoutes(app: FastifyInstance) {
     const capture = await findReviewCapture(id, request.userId!);
     if (!capture) return reply.code(404).send({ error: '검토 대기 항목을 찾을 수 없습니다' });
 
+    // 멱등성: 이미 확정(reviewed=true)된 항목을 다시 confirm하면 학생에게 DM이 재발송되던 문제.
+    // findReviewCapture는 reviewed 필터가 없어 확정된 항목도 잡힌다. 재확정 시 DM은 1회만.
+    const alreadyConfirmed = capture.reviewed === true;
+
     const currentMetadata = jsonObject(capture.metadata);
     const blissSource = getBlissSource(capture.metadata);
     const meetingAction = getMeetingAction(capture.metadata);
@@ -545,20 +549,24 @@ export async function blissTasksRoutes(app: FastifyInstance) {
       },
     });
 
-    const notifyResult = await notifyStudentTaskAssigned({
-      ownerName: body.ownerName,
-      taskTitle: capture.summary,
-      actionDate,
-      slackPermalink: blissSource.slackPermalink,
-      sourceLabel,
-      sourceUrl,
-      memo: body.memo,
-    });
+    // 최초 확정일 때만 학생에게 DM (재확정 시 중복 알림 방지)
+    const notifyResult = alreadyConfirmed
+      ? { ok: true as const }
+      : await notifyStudentTaskAssigned({
+          ownerName: body.ownerName,
+          taskTitle: capture.summary,
+          actionDate,
+          slackPermalink: blissSource.slackPermalink,
+          sourceLabel,
+          sourceUrl,
+          memo: body.memo,
+        });
 
     return {
       success: true,
       notified: notifyResult.ok,
-      ...(notifyResult.ok ? {} : { error: notifyResult.error }),
+      alreadyConfirmed,
+      ...(notifyResult.ok ? {} : { error: (notifyResult as any).error }),
     };
   });
 

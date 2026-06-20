@@ -343,7 +343,7 @@ async function generateFallbackNarrative(emailData: string[], timezone: string):
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const { env: envConfig } = await import('../config/env.js');
     const genAI = new GoogleGenerativeAI(envConfig.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: `다음 이메일 ${emailData.length}건을 중요도 순으로 브리핑하라.
@@ -459,14 +459,14 @@ async function classifyEmailsWithSonnet(
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const { env: envCfg } = await import('../config/env.js');
       const genAI = new GoogleGenerativeAI(envCfg.GEMINI_API_KEY);
-      const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const geminiModel = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
       const emailTexts = emails.map(e => `[${e.index}] From: "${e.sender}"\n제목: "${e.subject}"\n미리보기: "${e.snippet}"`).join('\n\n');
       const geminiResp = await geminiModel.generateContent({
         contents: [{ role: 'user', parts: [{ text: `다음 이메일들을 분류하세요. JSON 배열만 응답:\n${emailTexts}\n\n형식: [{"index":0,"category":"urgent"|"action-needed"|"schedule"|"info"|"ads","confidence":0.0~1.0,"summary":"요약","needsBody":true/false}]` }] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 2048, responseMimeType: 'application/json' },
       });
       const geminiUsage = geminiResp.response.usageMetadata;
-      if (geminiUsage && userId) logApiCost(userId, 'gemini-3.1-flash-lite', geminiUsage.promptTokenCount ?? 0, geminiUsage.candidatesTokenCount ?? 0, 'email_classify_gemini').catch(() => {});
+      if (geminiUsage && userId) logApiCost(userId, 'gemini-3.5-flash', geminiUsage.promptTokenCount ?? 0, geminiUsage.candidatesTokenCount ?? 0, 'email_classify_gemini').catch(() => {});
       const parsed: Array<any> = JSON.parse(geminiResp.response.text().trim());
       for (const item of parsed) {
         results.set(String(item.index), {
@@ -1099,21 +1099,27 @@ export async function emailRoutes(app: FastifyInstance) {
           const bodyPromises = needsBodyIds.map(({ messageId }) =>
             gmail.users.messages.get({ userId: 'me', id: messageId, format: 'full' }),
           );
-          const bodyMessages = await Promise.all(bodyPromises);
+          // allSettled — 한 메시지 fetch 실패해도 브리핑 전체가 500나지 않게 (이전 Promise.all은 1건 실패 시 전체 실패).
+          const bodyResults = await Promise.allSettled(bodyPromises);
 
-          // 본문 포함하여 재분류
-          const enrichedEmails = needsBodyIds.map((item, i) => {
-            const email = rawEmails.find(e => e.index === item.idx)!;
-            const body = extractBody(bodyMessages[i].data.payload);
-            return {
-              index: email.index,
-              subject: email.subject,
-              snippet: email.snippet,
-              sender: email.sender,
-              toCC: email.toCC,
-              body,
-            };
-          });
+          // 본문 포함하여 재분류 (성공분만)
+          const enrichedEmails = needsBodyIds
+            .map((item, i) => {
+              const r = bodyResults[i];
+              if (r.status !== 'fulfilled') return null; // fetch 실패분은 본문 없이 1차 분류 유지
+              const email = rawEmails.find(e => e.index === item.idx);
+              if (!email) return null;
+              const body = extractBody(r.value.data.payload);
+              return {
+                index: email.index,
+                subject: email.subject,
+                snippet: email.snippet,
+                sender: email.sender,
+                toCC: email.toCC,
+                body,
+              };
+            })
+            .filter((e): e is NonNullable<typeof e> => e !== null);
 
           if (enrichedEmails.length > 0) {
             const reClassifications = await classifyEmailsWithSonnet(enrichedEmails, profile, userId);
@@ -2026,14 +2032,14 @@ ${emailDataForPrompt.join('\n\n')}`,
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const result = await model.generateContent(
         `다음 이메일 본문을 ${targetLang === 'ko' ? '한국어' : targetLang}로 자연스럽게 번역하세요. 번역문만 출력하세요.\n\n${text}`
       );
       trackAICost(request.userId!, 'gemini-flash', COST_PER_CALL['gemini-flash']);
       const translateUsage = result.response.usageMetadata;
-      if (translateUsage) logApiCost(request.userId!, 'gemini-3.1-flash-lite', translateUsage.promptTokenCount ?? 0, translateUsage.candidatesTokenCount ?? 0, 'email_translate').catch(() => {});
+      if (translateUsage) logApiCost(request.userId!, 'gemini-3.5-flash', translateUsage.promptTokenCount ?? 0, translateUsage.candidatesTokenCount ?? 0, 'email_translate').catch(() => {});
 
       return reply.send({
         success: true,
@@ -2058,7 +2064,7 @@ ${emailDataForPrompt.join('\n\n')}`,
     try {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
       const result = await model.generateContent(`다음 이메일에서 할일(tasks)과 일정(events)을 추출하세요. JSON으로만 응답:
 
@@ -2075,7 +2081,7 @@ ${emailDataForPrompt.join('\n\n')}`,
 없으면 빈 배열로.`);
       trackAICost(userId, 'gemini-flash', COST_PER_CALL['gemini-flash']);
       const extractUsage = result.response.usageMetadata;
-      if (extractUsage) logApiCost(userId, 'gemini-3.1-flash-lite', extractUsage.promptTokenCount ?? 0, extractUsage.candidatesTokenCount ?? 0, 'email_extract_actions').catch(() => {});
+      if (extractUsage) logApiCost(userId, 'gemini-3.5-flash', extractUsage.promptTokenCount ?? 0, extractUsage.candidatesTokenCount ?? 0, 'email_extract_actions').catch(() => {});
 
       const text = result.response.text().trim();
       const match = text.match(/\{[\s\S]*\}/);

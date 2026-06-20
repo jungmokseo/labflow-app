@@ -36,7 +36,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const result = await model.generateContent({
       contents: [{
@@ -56,6 +56,21 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
 }
 
 /**
+ * .docx (Word) 텍스트 추출 — mammoth (pure JS, OOXML 파서).
+ * .docx는 ZIP이라 Gemini PDF inlineData로는 추출 불가 → 전용 파서 필요.
+ */
+async function extractDocxText(buffer: Buffer): Promise<string> {
+  try {
+    const mammoth = await import('mammoth');
+    const result = await mammoth.extractRawText({ buffer });
+    return (result.value || '').trim();
+  } catch (err) {
+    console.warn('DOCX extraction failed:', err);
+    return '';
+  }
+}
+
+/**
  * Excel 파싱 (CSV 변환 후 구조 인식)
  */
 async function parseExcel(buffer: Buffer): Promise<{ text: string; structured: any }> {
@@ -63,7 +78,7 @@ async function parseExcel(buffer: Buffer): Promise<{ text: string; structured: a
     // Gemini에게 Excel 바이너리를 직접 분석하게 함
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const result = await model.generateContent({
       contents: [{
@@ -112,7 +127,7 @@ async function processImage(buffer: Buffer, mimetype: string): Promise<string> {
   try {
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const result = await model.generateContent({
       contents: [{
@@ -183,8 +198,9 @@ export async function processUploadedFile(
     }
 
     case 'word': {
-      // Word도 Gemini에게 직접 처리
-      const text = await extractPdfText(buffer); // PDF와 같은 방식
+      // .docx는 ZIP(OOXML)이라 PDF처럼 Gemini inlineData(application/pdf)로 보내면 파싱 불가 → text=''.
+      // mammoth로 정식 추출. 실패 시에만 빈 문자열.
+      const text = await extractDocxText(buffer);
       return {
         type, filename, text,
         suggestedAction: 'document_review',

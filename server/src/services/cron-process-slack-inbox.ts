@@ -587,6 +587,10 @@ export async function runProcessSlackInbox(): Promise<ProcessSlackInboxResult> {
     }
 
     let maxTsSec = oldest;
+    // 일시 실패(분류/capture) 메시지의 가장 이른 ts. watermark를 그 직전까지만 전진시켜
+    // 다음 run에서 재처리 보장 (dedup이 중복 capture 방지). 이전엔 실패해도 watermark가
+    // 전진해 일시 장애 메시지가 영구 누락(데이터 손실)됐음.
+    let earliestFailTs = Infinity;
     for (const m of messages) {
       result.messagesScanned++;
       const ts = m.ts ? Number(m.ts) : 0;
@@ -613,6 +617,7 @@ export async function runProcessSlackInbox(): Promise<ProcessSlackInboxResult> {
         classified = await classifyMessage(text, ch.name);
       } catch (e: any) {
         result.errors.push(`${ch.name} classify 실패: ${e?.message || e}`);
+        earliestFailTs = Math.min(earliestFailTs, ts); // 일시 실패 — watermark 전진 막아 재처리
         continue;
       }
       if (!classified) continue;
@@ -633,10 +638,22 @@ export async function runProcessSlackInbox(): Promise<ProcessSlackInboxResult> {
         else result.skippedDup++;
       } catch (e: any) {
         result.errors.push(`${ch.name} capture 실패: ${e?.message || e}`);
+        earliestFailTs = Math.min(earliestFailTs, ts); // 일시 실패 — watermark 전진 막아 재처리
       }
     }
 
-    newChannelTs[ch.id] = maxTsSec;
+    // watermark: 일시 실패가 있으면 그 직전(가장 이른 실패 ts 미만)까지만 전진.
+    // 실패 메시지 + 그 이후는 다음 run에서 재fetch (oldest 파라미터는 exclusive, dedup이 중복 차단).
+    if (Number.isFinite(earliestFailTs)) {
+      let wm = oldest;
+      for (const m of messages) {
+        const ts = m.ts ? Number(m.ts) : 0;
+        if (ts < earliestFailTs && ts > wm) wm = ts;
+      }
+      newChannelTs[ch.id] = wm;
+    } else {
+      newChannelTs[ch.id] = maxTsSec;
+    }
   }
 
   // state 저장 — 한 번에 모든 채널의 마지막 ts 갱신.

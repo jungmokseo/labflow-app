@@ -15,6 +15,8 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
+import { requirePermission } from '../middleware/permissions.js';
+import { env } from '../config/env.js';
 import {
   syncManuscripts,
   getManuscripts,
@@ -136,9 +138,13 @@ async function applyUpdate(id: string, body: UpdatePayload): Promise<{ notionUpd
 
 export async function manuscriptRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authMiddleware);
+  // env.LAB_ID 단일 lab 배포에서도 권한 미들웨어 작동하도록 request.labId 채움 (grants.ts와 동일 패턴).
+  app.addHook('preHandler', async (request) => {
+    if (!request.labId && env.LAB_ID) request.labId = env.LAB_ID;
+  });
 
   // GET 목록 + 카운트
-  app.get('/api/manuscripts', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.get('/api/manuscripts', { preHandler: requirePermission('VIEWER') }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const items = await getManuscripts({ archived: false });
       const counts = {
@@ -150,17 +156,21 @@ export async function manuscriptRoutes(app: FastifyInstance) {
         responding: items.filter(m => m.stage === '대응 중').length,
         accepted: items.filter(m => m.stage === '억셉').length,
         published: items.filter(m => m.stage === '게재 완료').length,
-        revisionDueSoon: items.filter(m => m.revisionDueAt && m.revisionDueAt.getTime() - Date.now() < 7 * 86400000).length,
+        revisionDueSoon: items.filter(m => {
+          if (!m.revisionDueAt) return false;
+          const diff = m.revisionDueAt.getTime() - Date.now();
+          return diff >= 0 && diff < 7 * 86400000; // 하한 추가 — overdue(음수)는 '곧 마감'에서 제외
+        }).length,
       };
       return reply.send({ items, counts });
     } catch (err) {
-      logError('background', 'GET /api/manuscripts 실패', { userId: (request as any).user?.id })(err as Error);
+      logError('background', 'GET /api/manuscripts 실패', { userId: request.userId })(err as Error);
       return failWith(reply, 500, '목록 조회 실패', err);
     }
   });
 
   // GET 게재 완료 KPI
-  app.get('/api/manuscripts/published-kpi', async (_request, reply) => {
+  app.get('/api/manuscripts/published-kpi', { preHandler: requirePermission('VIEWER') }, async (_request, reply) => {
     try {
       return reply.send(await getPublishedKpi());
     } catch (err) {
@@ -169,7 +179,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
   });
 
   // POST 수동 sync
-  app.post('/api/manuscripts/sync', async (_request, reply) => {
+  app.post('/api/manuscripts/sync', { preHandler: requirePermission('OWNER') }, async (_request, reply) => {
     try {
       return reply.send({ ok: true, ...(await syncManuscripts()) });
     } catch (err) {
@@ -179,10 +189,10 @@ export async function manuscriptRoutes(app: FastifyInstance) {
 
   // POST Gmail 스캔
   const scanSchema = z.object({ daysAgo: z.number().int().min(1).max(365).optional() });
-  app.post('/api/manuscripts/scan-mail', async (request, reply) => {
+  app.post('/api/manuscripts/scan-mail', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
     try {
       const body = scanSchema.parse(request.body || {});
-      const userId = (request as any).user?.id as string | undefined;
+      const userId = request.userId;
       if (!userId) return reply.code(401).send({ error: 'user 없음' });
       const r = await monitorManuscriptMail({ userId, daysAgo: body.daysAgo ?? 90 });
       return reply.send({ ok: true, ...r });
@@ -192,7 +202,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
   });
 
   // GET 미매칭 이벤트
-  app.get('/api/manuscripts/unmatched-events', async (_request, reply) => {
+  app.get('/api/manuscripts/unmatched-events', { preHandler: requirePermission('VIEWER') }, async (_request, reply) => {
     try {
       return reply.send({ items: await getUnmatchedEvents() });
     } catch (err) {
@@ -202,7 +212,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
 
   // POST 미매칭 이벤트 → manuscript 연결
   const linkSchema = z.object({ manuscriptId: z.string().min(1) });
-  app.post('/api/manuscripts/events/:id/link', async (request, reply) => {
+  app.post('/api/manuscripts/events/:id/link', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = linkSchema.parse(request.body || {});
@@ -213,7 +223,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
   });
 
   // PATCH /:id — 종합 편집
-  app.patch('/api/manuscripts/:id', async (request, reply) => {
+  app.patch('/api/manuscripts/:id', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = updateSchema.parse(request.body || {});
@@ -226,7 +236,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
 
   // PATCH /:id/turn — whoseTurn 토글 (web 호환 endpoint, 종합 PATCH로 위임)
   const turnSchema = z.object({ whoseTurn: z.enum(TURN_VALUES).nullable() });
-  app.patch('/api/manuscripts/:id/turn', async (request, reply) => {
+  app.patch('/api/manuscripts/:id/turn', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = turnSchema.parse(request.body || {});
@@ -239,7 +249,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
 
   // PATCH /:id/stage — 단계 변경 (web 호환 endpoint, 종합 PATCH로 위임)
   const stageSchema = z.object({ stage: z.enum(STAGE_VALUES) });
-  app.patch('/api/manuscripts/:id/stage', async (request, reply) => {
+  app.patch('/api/manuscripts/:id/stage', { preHandler: requirePermission('EDITOR') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const body = stageSchema.parse(request.body || {});
@@ -251,7 +261,7 @@ export async function manuscriptRoutes(app: FastifyInstance) {
   });
 
   // DELETE /:id — 노션 page를 trash로 + DB archived=true (실수 시 노션 trash에서 복구 가능)
-  app.delete('/api/manuscripts/:id', async (request, reply) => {
+  app.delete('/api/manuscripts/:id', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const exists = await prisma.manuscript.findUnique({ where: { id }, select: { id: true } });

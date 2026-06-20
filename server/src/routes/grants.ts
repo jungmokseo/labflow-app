@@ -52,20 +52,21 @@ function failWith(reply: FastifyReply, status: number, label: string, err: unkno
 /** 과제 기간에서 종료일 추출 — '2024-03-01 ~ 2027-02-28', '25.08.25 ~ 30.02.28', 등 다양 */
 function extractEndDate(period: string | null): Date | null {
   if (!period) return null;
-  const parts = period.split(/~|–|—|-(?=\s)/).map(s => s.trim());
-  const endStr = parts[parts.length - 1];
-  if (!endStr) return null;
-
-  // ISO: 2027-02-28
-  const iso = endStr.match(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/);
-  if (iso) return new Date(`${iso[1]}-${iso[2].padStart(2, '0')}-${iso[3].padStart(2, '0')}`);
-
-  // 짧은 연도: 30.02.28 → 2030-02-28
-  const short = endStr.match(/(\d{2})\.(\d{1,2})\.(\d{1,2})/);
-  if (short) {
-    const yr = Number(short[1]);
+  // 구분자 split에 의존하지 않고 기간 내 모든 날짜를 찾아 *마지막*(종료일)을 사용한다.
+  // 이전: split(~/-) 후 마지막 조각 → 공백 없는 하이픈 구분('2024.03.01-2027.02.28')은 split 실패 →
+  //       전체에서 첫 날짜(시작일)를 종료일로 오인 → 진행 중 과제가 '종료됨'으로 오분류됐음.
+  const isoMatches = [...period.matchAll(/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/g)];
+  if (isoMatches.length > 0) {
+    const m = isoMatches[isoMatches.length - 1];
+    return new Date(`${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`);
+  }
+  // 짧은 연도: 30.02.28 → 2030-02-28 (4자리 연도가 없을 때만)
+  const shortMatches = [...period.matchAll(/(\d{2})\.(\d{1,2})\.(\d{1,2})/g)];
+  if (shortMatches.length > 0) {
+    const m = shortMatches[shortMatches.length - 1];
+    const yr = Number(m[1]);
     const fullYear = yr < 50 ? 2000 + yr : 1900 + yr;
-    return new Date(`${fullYear}-${short[2].padStart(2, '0')}-${short[3].padStart(2, '0')}`);
+    return new Date(`${fullYear}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`);
   }
   return null;
 }
