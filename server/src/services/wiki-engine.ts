@@ -1067,7 +1067,7 @@ ${articlesText}
   let updatedArticles: any[] = [];
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-opus-4-7',
       max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
     });

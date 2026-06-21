@@ -32,31 +32,32 @@
 ### 5. saveShadowMessage userId
 - `saveShadowMessage()`: channel에서 userId를 조회하여 createMany에 포함. userId 누락 금지.
 
-## AI 모델 사용 규칙 (2026-05-07 update)
+## AI 모델 사용 규칙 (2026-06-20 update)
 
 ### 모델 ID (최신)
 - **Sonnet 4.6** (`claude-sonnet-4-6`) — 기본 LLM, 1M context, temperature OK
 - **Opus 4.7** (`claude-opus-4-7`) — 1M context 기본, ⚠️ `temperature`/`top_p`/`top_k` 미지원 (400 에러)
-- **Gemini 3.1 Flash-Lite** (`gemini-3.1-flash-lite`) — light task + fallback, stable
+- **Gemini 3.5 Flash** (`gemini-3.5-flash`) — light task + fallback, 현행 Flash 모델 (stable). ⚠️ 구 `gemini-3.1-flash-lite`(lite variant)는 **legacy** — cost-logger 단가표에 과거 기록 호환용으로만 잔존, 신규 호출 금지. 현행 모델 카탈로그 source of truth = `services/cost-logger.ts` PRICING(non-legacy) + `routes/automations.ts` test-models
 - **OpenAI Realtime 2** (`gpt-realtime-2`) — voice chatbot 전용 (2026-05-07 이전 `gpt-4o-realtime-preview-2025-06-03` deprecated 후 교체)
 - **OpenAI Embedding** (`text-embedding-3-small`) — labflow-member RAG embedding 전용
 
 ### 영역별 모델 (코드 ↔ 규칙 일치)
-- 이메일 분류 stage 1 (대량/빠른 필터): Gemini 3.1 Flash-Lite
+- 이메일 분류 stage 1 (대량/빠른 필터): Gemini 3.5 Flash
 - 이메일 분류 stage 2 (LLM 정밀): Sonnet 4.6
 - 이메일 narrative briefing: Sonnet 4.6 → Gemini fallback (Sonnet 결과 직접 passthrough — 위 4번 규칙 참조)
 - 주간 리뷰 (weeklyReview, weekly-briefing.ts): Sonnet 4.6
-- **Brain 채팅: Sonnet 4.6** (tool-use 루프 + 최종 응답 스트리밍 모두) → Gemini 3.1 Flash-Lite fallback (Sonnet API 실패 시만)
-- 논문 토론 / 핵심 논문 비교 (papers tool, paper-alerts paper_summary): **Opus 4.7** → Sonnet 4.6 fallback → Gemini 3.1 Flash-Lite fallback
+- **Brain 채팅: Sonnet 4.6** (tool-use 루프 + 최종 응답 스트리밍 모두) → Gemini 3.5 Flash fallback (Sonnet API 실패 시만)
+- 논문 토론 / 핵심 논문 비교 (papers tool, paper-alerts paper_summary): **Opus 4.7** → Sonnet 4.6 fallback → Gemini 3.5 Flash fallback
 - 논문 관련도 score / weekly insight: Sonnet 4.6 → Gemini fallback
-- 회의 요약 (meeting_summary): Sonnet 4.6 → Gemini 3.1 Flash-Lite fallback
-- 음성 전사 (meeting STT): Gemini 3.1 Flash-Lite (audio input)
-- Capture classifier / 메모 자동 태그 / Calendar 추출 / Email translate / action items 추출: Gemini 3.1 Flash-Lite
-- 자동화 cron AI (paper-monitoring 한글 요약, email-briefing 학생 보고 요약, general-email-briefing 분류, process-slack-inbox 분류): Sonnet 4.6 → Gemini 3.1 Flash-Lite fallback
+- 회의 요약 (meeting_summary): Sonnet 4.6 → Gemini 3.5 Flash fallback
+- 음성 전사 (meeting STT): Gemini 3.5 Flash (audio input)
+- Capture classifier / 메모 자동 태그 / Calendar 추출 / Email translate / action items 추출: Gemini 3.5 Flash
+- 자동화 cron AI (paper-monitoring 한글 요약, email-briefing 학생 보고 요약, general-email-briefing 분류, process-slack-inbox 분류): Sonnet 4.6 → Gemini 3.5 Flash fallback
 
 ### 모델 변경 시 주의
 - Opus 4.7 호출 site에서 `temperature` 등 sampling 파라미터 추가 금지 (400 에러)
-- Gemini Flash-Lite는 lite variant — quality 민감 task에서 quality 저하 느끼면 `gemini-3-flash-preview` (frontier preview)로 switch 검토
+- 현행 Flash는 `gemini-3.5-flash` (full Flash — 구 `gemini-3.1-flash-lite` lite variant에서 업그레이드됨, 단가 1.50/9.00). quality가 더 필요한 task는 Pro tier `gemini-3.1-pro-preview`(단가 1.25/10.00) 검토 (현재 labflow-member RAG에서 사용)
+- 모델 ID 마이그레이션 시 cost-logger.ts PRICING(legacy 마커) + automations.ts test-models + web settings 카탈로그 + 본 CLAUDE.md 4곳을 함께 갱신
 - 모델 ID 변경 시 `services/cron-*.ts` + `routes/*.ts` 일괄 sed 권장 (이전 사례: `claude-sonnet-4-20250514` 1년 deprecation 도래로 일괄 교체)
 
 ## 이메일 브리핑 포맷 규칙

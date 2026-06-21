@@ -5,7 +5,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
-import { trackAICost, COST_PER_CALL } from '../middleware/rate-limiter.js';
 import { getOrCreateShadow, saveShadowMessage, compressForShadow } from './shadow-session.js';
 import { logError } from '../services/error-logger.js';
 import { logApiCost } from '../services/cost-logger.js';
@@ -287,79 +286,6 @@ ${draft.body}`;
   } catch (err: any) {
     console.error('[brain] email_reply_draft error:', err.message);
     return `답장 초안 생성 실패: ${err.message}`;
-  }
-}
-
-/**
- * 이메일 분류 설정 변경
- */
-export async function handleEmailPreference(
-  message: string,
-  userId: string,
-): Promise<string> {
-  try {
-    const user = await prisma.user.findFirst({ where: { id: userId } });
-    const profile = user ? await prisma.emailProfile.findUnique({ where: { userId: user.id } }) : null;
-
-    const { GoogleGenerativeAI } = await import('@google/generative-ai');
-    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
-
-    const currentRules = profile ? JSON.stringify({
-      keywords: profile.keywords,
-      excludePatterns: profile.excludePatterns,
-      importanceRules: profile.importanceRules,
-    }) : '{}';
-
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: `사용자가 이메일 브리핑 설정을 변경하고 싶어합니다.
-
-사용자 요청: "${message}"
-
-현재 설정:
-${currentRules}
-
-다음 JSON으로 응답하세요:
-{
-  "action": "add_keyword" | "remove_keyword" | "add_exclude" | "remove_exclude" | "add_importance_rule" | "remove_importance_rule",
-  "field": "keywords" | "excludePatterns" | "importanceRules",
-  "value": (추가/제거할 값 — keyword는 문자열, excludePattern은 {field, pattern}, importanceRule은 {condition, action, description}),
-  "explanation": "사용자에게 보여줄 설명 (한국어)"
-}` }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 512, responseMimeType: 'application/json' },
-    });
-    const prefUsage = result.response.usageMetadata;
-    if (prefUsage) logApiCost(userId, 'gemini-3.5-flash', prefUsage.promptTokenCount ?? 0, prefUsage.candidatesTokenCount ?? 0, 'email_preference').catch(() => {});
-
-    const parsed = JSON.parse(result.response.text().trim());
-
-    if (user && profile && parsed.field && parsed.value) {
-      const current = (profile as any)[parsed.field] || [];
-      const currentArr = Array.isArray(current) ? current : JSON.parse(current as string);
-      let updated;
-
-      if (parsed.action?.startsWith('add')) {
-        updated = [...currentArr, parsed.value];
-      } else if (parsed.action?.startsWith('remove')) {
-        updated = currentArr.filter((item: any) =>
-          typeof item === 'string' ? item !== parsed.value : JSON.stringify(item) !== JSON.stringify(parsed.value)
-        );
-      } else {
-        updated = [...currentArr, parsed.value];
-      }
-
-      await prisma.emailProfile.update({
-        where: { userId: user.id },
-        data: { [parsed.field]: updated },
-      });
-
-      return parsed.explanation || `이메일 설정이 업데이트되었습니다: ${parsed.action}`;
-    } else {
-      return parsed.explanation || '이메일 설정 변경 요청을 처리했습니다.';
-    }
-  } catch (err: any) {
-    console.error('[brain] email_preference error:', err.message);
-    return '이메일 설정 변경 중 오류가 발생했습니다. 설정 페이지에서 직접 변경해주세요.';
   }
 }
 
