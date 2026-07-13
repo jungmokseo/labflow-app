@@ -23,6 +23,8 @@ import { runPaperMonitoring } from '../services/cron-paper-monitoring.js';
 import { runEmailBriefing } from '../services/cron-email-briefing.js';
 import { runIrisMonitoring } from '../services/cron-iris-monitoring.js';
 import { runProcessSlackInbox } from '../services/cron-process-slack-inbox.js';
+import { monitorManuscriptMail, reprocessUnmatchedEvents } from '../services/manuscript-mail-monitor.js';
+import { syncManuscripts } from '../services/manuscript-sync.js';
 import { CRON_STATUS, manualRunCron } from '../services/cron-utils.js';
 
 // 서버 부팅 시각 — cron-status 핸들러에서 참조하므로 라우트 등록 전에 선언.
@@ -52,7 +54,21 @@ const CRON_RUNNERS: Record<string, () => Promise<unknown>> = {
   'iris-monitoring-cron': runIrisMonitoring,
   'general-email-briefing-cron': runGeneralEmailBriefing,
   'process-slack-inbox-cron': runProcessSlackInbox,
+  // 논문 파이프라인 — run-all-crons에는 포함되지 않음 (run-cron/:label로 개별 트리거)
+  'manuscript-notion-sync': () => syncManuscripts(),
+  'manuscript-mail-scan-full': () => monitorManuscriptMail({ userId: '', daysAgo: 120 }),
+  'manuscript-reprocess': async () => {
+    const user = await (await import('../config/prisma.js')).basePrismaClient.user.findFirst({ where: { email: 'jungmok.seo@gmail.com' }, select: { id: true } });
+    if (!user) throw new Error('PI user 없음');
+    return reprocessUnmatchedEvents(user.id);
+  },
 };
+
+// run-all-crons 대상 — 정기 cron 6종만 (manuscript 트리거는 개별 실행 전용)
+const DAILY_CRON_LABELS = [
+  'deadline-reminder-cron', 'paper-monitoring-cron', 'email-briefing-cron',
+  'iris-monitoring-cron', 'general-email-briefing-cron', 'process-slack-inbox-cron',
+];
 
 export async function internalTriggerRoutes(app: FastifyInstance) {
   // POST /api/internal/run-general-email-briefing — 일반 이메일 브리핑 즉시 실행
@@ -181,7 +197,9 @@ export async function internalTriggerRoutes(app: FastifyInstance) {
       if (!auth.ok) return reply.code(auth.status).send({ error: auth.error });
 
       const summary: Array<{ label: string; ok: boolean; error?: string; ms: number }> = [];
-      for (const [label, runner] of Object.entries(CRON_RUNNERS)) {
+      for (const label of DAILY_CRON_LABELS) {
+        const runner = CRON_RUNNERS[label];
+        if (!runner) continue;
         const t0 = Date.now();
         try {
           await manualRunCron(label, async () => {
