@@ -175,6 +175,12 @@ function isReviewerCorrespondence(subject: string, snippet: string, body: string
 function classifyEvent(subject: string, snippet: string, body: string): EventType | null {
   if (isReviewerCorrespondence(subject, snippet, body)) return null;
 
+  // 게재 확정 후 행정 메일(저작권 양식·출판 계약·OA 비용 청구·교정쇄 안내)은 결정 신호가 아님.
+  // 실제 accept 메일은 별도로 도착하므로 무시해도 손실 없음(2026-07-13: MTBIO_103405 폼 메일 오분류 대응).
+  if (/rights and access form|publishing agreement (completed|for)|licen[sc]e to publish|article publication charge|open access[^.]{0,30}(charge|invoice|payment)/i.test(subject)) {
+    return null;
+  }
+
   const subj = stripSubjectPrefixes(subject).toLowerCase();
   const all = (subj + ' ' + snippet + ' ' + body.slice(0, 3000)).toLowerCase();
 
@@ -470,6 +476,16 @@ function normalizeTitle(t: string): string {
   return t.toLowerCase().replace(/[^a-z0-9가-힣]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** 저널명 정규화 — "&"↔"and", 구두점·콜론 제거. "Materials Science & Engineering R"과
+ *  "Materials Science and Engineering: R"이 같게 취급되도록(2026-07-13 MSR 매칭 갭 대응). */
+function normalizeJournal(j: string): string {
+  return j.toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Manuscript 매칭 — 3단계 fallback:
  *  1. manuscriptNum 정확/기저(baseId) 일치
@@ -534,12 +550,17 @@ async function matchManuscript(
 
   // 3) 저널 단독 — 유일 활성 후보일 때만 (오매칭이 미매칭보다 나쁘므로 보수적)
   if (journal) {
-    const nj = journal.toLowerCase();
-    const active = candidates.filter(c =>
-      (c.stage === '심사 중' || c.stage === '대응 중') &&
-      (c.currentJournal || '').toLowerCase().includes(nj.slice(0, 20)),
-    );
-    if (active.length === 1) return active[0].id;
+    const nj = normalizeJournal(journal);
+    if (nj.length >= 6) {
+      const active = candidates.filter(c => {
+        if (c.stage !== '심사 중' && c.stage !== '대응 중') return false;
+        const cj = normalizeJournal(c.currentJournal || '');
+        if (cj.length < 6) return false;
+        // 정규화 후 양방향 포함관계 — "…engineering r" ⊆/⊇ "…engineering r"
+        return cj.includes(nj) || nj.includes(cj);
+      });
+      if (active.length === 1) return active[0].id;
+    }
   }
 
   return null;
