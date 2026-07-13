@@ -139,7 +139,8 @@ function deriveJournal(msg: GmailMsg, idMatch: ManuscriptIdMatch | null): string
 
   const subject = stripSubjectPrefixes(msg.subject);
   // "submitted to X" / "Decision on submission to X" / "Your submission to X"
-  const m1 = subject.match(/(?:submitted to|submission to|decision on submission to|your submission to)\s+([A-Z][A-Za-z&\-.\s]{2,60})/);
+  // 저널명 첫 글자 소문자 허용 (npj Flexible Electronics, eLife, mBio 등)
+  const m1 = subject.match(/(?:submitted to|submission to|decision on submission to|your submission to)\s+([A-Za-z][A-Za-z&\-.\s]{2,60})/);
   if (m1) {
     const j = m1[1].replace(/\s*[-–—:|].*$/, '').trim();
     if (j.length >= 3) return j;
@@ -712,20 +713,45 @@ async function processOneMessage(msg: GmailMsg): Promise<{ matched: boolean; eve
  *  - 분류/저널/ID가 개선되면 이벤트 row 갱신 (사용자 수동 매칭 UI 품질 향상)
  */
 export async function reprocessUnmatchedEvents(userId: string): Promise<{
-  scanned: number; relinked: number; reclassified: number; ignored: number;
+  scanned: number; relinked: number; reclassified: number; ignored: number; reapplied: number;
 }> {
-  const zero = { scanned: 0, relinked: 0, reclassified: 0, ignored: 0 };
+  const zero = { scanned: 0, relinked: 0, reclassified: 0, ignored: 0, reapplied: 0 };
   const events = await prisma.manuscriptMailEvent.findMany({
     where: { manuscriptId: null, applied: false, eventType: { not: 'ignored' } },
     orderBy: { receivedAt: 'desc' },
     take: 60,
   });
-  if (events.length === 0) return zero;
+
+  // 매칭됐지만 Notion 반영이 실패했던 이벤트 재시도 (patch 일시 실패 — rate limit 등)
+  const linkedUnapplied = await prisma.manuscriptMailEvent.findMany({
+    where: { manuscriptId: { not: null }, applied: false, eventType: { not: 'ignored' } },
+    orderBy: { receivedAt: 'desc' },
+    take: 20,
+  });
+
+  if (events.length === 0 && linkedUnapplied.length === 0) return zero;
 
   const gmail = await buildGmailClient(userId);
   if (!gmail) return zero;
 
-  const result = { ...zero };
+  const result0 = { ...zero };
+  for (const evt of linkedUnapplied) {
+    try {
+      const data = await gmail.users.messages.get({ userId: 'me', id: evt.gmailMessageId, format: 'full' }).catch(() => null);
+      if (!data || !evt.manuscriptId) continue;
+      const msg = parseGmailMessage(data.data);
+      const eventType = (['submitted', 'decision', 'reject', 'revision_request', 'accept'] as EventType[])
+        .includes(evt.eventType as EventType) ? (evt.eventType as EventType) : 'decision';
+      const idMatch: ManuscriptIdMatch | null = evt.manuscriptNum ? { id: evt.manuscriptNum, journal: evt.journal } : null;
+      const plan = planNotionPatch(eventType, evt.journal, msg.body);
+      const ok = await applyMatchedEvent(evt.id, evt.manuscriptId, msg, eventType, plan, idMatch, extractTitleFromBody(msg.body, msg.subject));
+      if (ok) result0.reapplied++;
+    } catch (e) {
+      console.warn(`[mail-monitor] re-apply 실패 ${evt.id}: ${(e as Error).message?.slice(0, 80)}`);
+    }
+  }
+
+  const result = result0; // re-apply 카운트(reapplied) 포함해 누적
   for (const evt of events) {
     try {
       const data = await gmail.users.messages.get({ userId: 'me', id: evt.gmailMessageId, format: 'full' }).catch(() => null);
@@ -774,7 +800,7 @@ export async function reprocessUnmatchedEvents(userId: string): Promise<{
       console.warn(`[mail-monitor] reprocess 실패 ${evt.id}: ${(e as Error).message?.slice(0, 80)}`);
     }
   }
-  console.log(`[mail-monitor] reprocess: scanned=${result.scanned} relinked=${result.relinked} reclassified=${result.reclassified} ignored=${result.ignored}`);
+  console.log(`[mail-monitor] reprocess: scanned=${result.scanned} relinked=${result.relinked} reclassified=${result.reclassified} ignored=${result.ignored} reapplied=${result.reapplied}`);
   return result;
 }
 
