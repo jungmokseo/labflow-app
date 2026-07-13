@@ -267,7 +267,7 @@ async function resolveOwnerEmail(): Promise<string | null> {
  * Cost: 받은 이메일 30개 ≈ thread 20개 → 20 API calls × ~200ms / 5 concurrency = ~1초 추가.
  */
 async function enrichReplyStatus(gmail: gmail_v1.Gmail, emails: ParsedEmail[], ownerEmail: string | null): Promise<void> {
-  if (!ownerEmail) return; // owner 식별 안 되면 모든 메일 userReplied=false 유지
+  // ownerEmail이 없어도 진행 — 본인 발신 판정의 1차 기준이 SENT 라벨이라 주소 없이도 동작.
 
   const uniqueThreadIds = [...new Set(emails.map(e => e.threadId))];
   // threadId → { userReplied: bool, latestReplyAt?: Date }
@@ -299,9 +299,13 @@ async function enrichReplyStatus(gmail: gmail_v1.Gmail, emails: ParsedEmail[], o
       let userReplied = false;
       let latestReplyAt: Date | undefined;
       for (const m of messages) {
+        // 본인 발신 판정: SENT 라벨 우선 (alias 무관 — PI는 yonsei/lynksolutec alias로 답장하므로
+        // From 주소를 gmail.com과 비교하던 이전 방식은 production에서 단 한 번도 매치된 적 없었음),
+        // From 주소 일치는 보조.
+        const isSent = (m.labelIds || []).includes('SENT');
         const fromHeader = m.payload?.headers?.find(h => h.name?.toLowerCase() === 'from')?.value || '';
         const fromAddr = extractEmailAddress(fromHeader);
-        if (fromAddr && fromAddr === ownerEmail) {
+        if (isSent || (fromAddr && ownerEmail && fromAddr === ownerEmail)) {
           userReplied = true;
           const internalMs = Number(m.internalDate);
           if (internalMs && Number.isFinite(internalMs)) {
@@ -365,26 +369,31 @@ async function fetchRecentEmails(gmail: gmail_v1.Gmail): Promise<ParsedEmail[]> 
  * - LAB_OWNER_EMAIL → LAB_OWNER_CLERK_ID → Lab.ownerId 순으로 PI userId 식별 (findOwnerGmailToken과 동일 패턴).
  */
 async function loadBriefingProfile(): Promise<BriefingProfile> {
-  let userId: string | null = null;
+  // 후보 userId를 우선순위대로 모두 수집한 뒤, EmailProfile이 실제로 있는 첫 유저를 사용.
+  // 이전엔 '유저 발견 = 확정'이라 clerkId='dev-user-seo'(프로필 없는 dev 유저)에 걸리면
+  // Lab.ownerId(실제 PI, importanceRules 8건·keywords 38건 보유)로 넘어가지 못하고
+  // 매일 기본 분류로만 브리핑이 생성됐음 (2026-07-13 검증에서 production 실증).
+  const candidateIds: string[] = [];
   if (env.LAB_OWNER_EMAIL) {
     const u = await prisma.user.findFirst({ where: { email: env.LAB_OWNER_EMAIL }, select: { id: true } });
-    if (u) userId = u.id;
+    if (u) candidateIds.push(u.id);
   }
-  if (!userId && env.LAB_OWNER_CLERK_ID) {
+  if (env.LAB_OWNER_CLERK_ID) {
     const u = await prisma.user.findFirst({ where: { clerkId: env.LAB_OWNER_CLERK_ID }, select: { id: true } });
-    if (u) userId = u.id;
+    if (u) candidateIds.push(u.id);
   }
-  if (!userId && env.LAB_ID) {
+  if (env.LAB_ID) {
     const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID }, select: { ownerId: true } });
-    if (lab?.ownerId) userId = lab.ownerId;
+    if (lab?.ownerId) candidateIds.push(lab.ownerId);
   }
 
-  // profile 없으면 default groups + 빈 rules
-  if (!userId) {
-    return { groups: DEFAULT_GROUPS, keywords: [], importanceRules: [], excludePatterns: [] };
+  let profile: Awaited<ReturnType<typeof prisma.emailProfile.findUnique>> = null;
+  for (const userId of candidateIds) {
+    profile = await prisma.emailProfile.findUnique({ where: { userId } });
+    if (profile) break; // 프로필 보유 유저 발견 — 확정
   }
 
-  const profile = await prisma.emailProfile.findUnique({ where: { userId } });
+  // 어느 후보도 profile 없으면 default groups + 빈 rules
   if (!profile) {
     return { groups: DEFAULT_GROUPS, keywords: [], importanceRules: [], excludePatterns: [] };
   }

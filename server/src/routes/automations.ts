@@ -19,10 +19,29 @@ import { runEmailBriefing } from '../services/cron-email-briefing.js';
 import { runIrisMonitoring } from '../services/cron-iris-monitoring.js';
 import { runGeneralEmailBriefing } from '../services/cron-general-email-briefing.js';
 import { runProcessSlackInbox } from '../services/cron-process-slack-inbox.js';
+import { manualRunCron } from '../services/cron-utils.js';
 
+// manualRunCron 경유 — inFlight 락(정시 실행과 중복 방지) + cron_runs 기록 + CRON_STATUS 갱신.
+// label은 internal-trigger.ts CRON_RUNNERS와 동일한 cron label 사용.
 async function runWith(reply: FastifyReply, label: string, fn: () => Promise<unknown>) {
   try {
-    const result = await fn();
+    let result: unknown;
+    let started = false;
+    let innerError: unknown;
+    await manualRunCron(label, async () => {
+      started = true;
+      try {
+        result = await fn();
+      } catch (e) {
+        innerError = e;
+        throw e; // cron_runs에도 실패로 기록
+      }
+    });
+    if (!started) {
+      // inFlight 락에 걸림 — 정시 cron 또는 다른 manual trigger가 실행 중
+      return reply.code(409).send({ ok: false, error: `${label} 이미 실행 중 — 중복 실행 skip` });
+    }
+    if (innerError) throw innerError; // runOnce는 에러를 삼키므로 여기서 500으로 표면화
     return reply.send({ ok: true, result });
   } catch (e: any) {
     console.error(`[automation:${label}] 실패:`, e?.message || e);
@@ -39,12 +58,12 @@ export async function automationRoutes(app: FastifyInstance) {
 
   // POST /api/automations/run/deadline-reminders — 마감일 리마인더 즉시 실행
   app.post('/api/automations/run/deadline-reminders', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    return runWith(reply, 'deadline-reminders', () => runDeadlineReminders());
+    return runWith(reply, 'deadline-reminder-cron', () => runDeadlineReminders());
   });
 
   // POST /api/automations/run/paper-monitoring — 논문 모니터링 즉시 실행
   app.post('/api/automations/run/paper-monitoring', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    return runWith(reply, 'paper-monitoring', () => runPaperMonitoring());
+    return runWith(reply, 'paper-monitoring-cron', () => runPaperMonitoring());
   });
 
   // POST /api/automations/run/email-briefing — 학생/회사 주간보고 즉시 실행
@@ -54,22 +73,22 @@ export async function automationRoutes(app: FastifyInstance) {
   });
   app.post('/api/automations/run/email-briefing', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
     const body = emailBriefingSchema.parse(request.body || {});
-    return runWith(reply, 'email-briefing', () => runEmailBriefing(body.scope ?? 'both'));
+    return runWith(reply, 'email-briefing-cron', () => runEmailBriefing(body.scope ?? 'both'));
   });
 
   // POST /api/automations/run/iris-monitoring — IRIS R&D 공고 즉시 실행
   app.post('/api/automations/run/iris-monitoring', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    return runWith(reply, 'iris-monitoring', () => runIrisMonitoring());
+    return runWith(reply, 'iris-monitoring-cron', () => runIrisMonitoring());
   });
 
   // POST /api/automations/run/general-email-briefing — 일반 이메일 브리핑 즉시 실행
   app.post('/api/automations/run/general-email-briefing', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    return runWith(reply, 'general-email-briefing', () => runGeneralEmailBriefing());
+    return runWith(reply, 'general-email-briefing-cron', () => runGeneralEmailBriefing());
   });
 
   // POST /api/automations/run/process-slack-inbox — Slack inbox 처리 즉시 실행
   app.post('/api/automations/run/process-slack-inbox', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    return runWith(reply, 'process-slack-inbox', () => runProcessSlackInbox());
+    return runWith(reply, 'process-slack-inbox-cron', () => runProcessSlackInbox());
   });
 
   // POST /api/automations/test-models — 현재 코드에서 사용 중인 모든 모델 ID로 minimal API call.
@@ -532,7 +551,6 @@ export async function automationRoutes(app: FastifyInstance) {
 
   // POST /api/automations/run-all — 6개 cron 즉시 실행 + 결과 요약 (OWNER)
   app.post('/api/automations/run-all', { preHandler: requirePermission('OWNER') }, async (_req, reply) => {
-    const { manualRunCron } = await import('../services/cron-utils.js');
     const runners: Record<string, () => Promise<unknown>> = {
       'deadline-reminder-cron': runDeadlineReminders,
       'paper-monitoring-cron': runPaperMonitoring,

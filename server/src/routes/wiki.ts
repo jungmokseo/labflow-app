@@ -17,12 +17,12 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../config/prisma.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { logError } from '../services/error-logger.js';
-import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus, diagnoseNotion, logIngestEvent, getIngestLogs, clearIngestLogs } from '../services/wiki-engine.js';
+import { enqueueNewData, ingestAndCompile, deepSynthesis, getWikiStatus, diagnoseNotion, logIngestEvent, getIngestLogs, clearIngestLogs, ingestLocks, refreshWikiEmbeddings } from '../services/wiki-engine.js';
+import { deleteWikiEmbeddings } from '../services/embedding-service.js';
 import { generateWeeklyBriefing } from '../services/weekly-briefing.js';
 
-// labId별 ingest 실행 락 — 동일 lab 중복 실행 방지
-// (Railway는 단일 컨테이너 기준. 멀티 인스턴스면 DB 락 필요)
-const ingestLocks = new Set<string>();
+// ingestLocks: wiki-engine.ts로 이동 — cron(index.ts)과 수동 트리거가 같은 락을 공유해
+// 동일 큐 항목의 중복 처리를 방지 (import로 사용)
 
 /** userId로 lab을 조회 (owner 우선, 그 다음 member) */
 async function resolveLabId(userId: string): Promise<string | null> {
@@ -300,6 +300,15 @@ export async function wikiRoutes(app: FastifyInstance) {
           version: { increment: 1 },
         },
       });
+
+      // 임베딩 재생성 — 기존에는 수정 후에도 옛 임베딩이 남아 벡터 검색(search_wiki)이
+      // stale 내용으로 매칭되던 버그 수정. fire-and-forget (헬퍼 내부에서 에러 처리)
+      setImmediate(() => {
+        refreshWikiEmbeddings(labId, [id]).catch(
+          logError('background', 'PUT /api/wiki/:id embedding 재생성 실패', { labId }),
+        );
+      });
+
       return reply.send(updated);
     } catch (err) {
       logError('background', 'PUT /api/wiki/:id 실패', { labId })(err);
@@ -324,6 +333,14 @@ export async function wikiRoutes(app: FastifyInstance) {
       if (!article) return reply.code(404).send({ error: '아티클을 찾을 수 없습니다' });
 
       await prisma.wikiArticle.delete({ where: { id } });
+
+      // 임베딩 정리 — 삭제된 아티클의 임베딩이 남아 벡터 검색에 유령 결과로 잡히지 않도록
+      try {
+        await deleteWikiEmbeddings(prisma, id);
+      } catch (err) {
+        logError('background', 'DELETE /api/wiki/:id embedding 정리 실패', { labId })(err);
+      }
+
       return reply.send({ message: '아티클 삭제 완료', id });
     } catch (err) {
       logError('background', 'DELETE /api/wiki/:id 실패', { labId })(err);

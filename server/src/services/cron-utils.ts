@@ -224,6 +224,8 @@ async function runOnce(fn: () => Promise<void>, label: string, periodMs?: number
     const durationMs = Date.now() - t0;
     const completedAt = new Date();
     console.error(`[${label}] 실패:`, msg);
+    // 상태 전이 판정용 — status 갱신 전의 직전 성공 여부
+    const prevSuccess = status?.lastSuccess;
     if (status) {
       status.lastCompletedAt = completedAt.toISOString();
       status.lastSuccess = false;
@@ -237,8 +239,32 @@ async function runOnce(fn: () => Promise<void>, label: string, periodMs?: number
         data: { completedAt, success: false, durationMs, errorMessage: msg.slice(0, 2000) },
       }).catch(() => {});
     }
+    // PI Slack 알림 — 성공→실패 전이 시 1회 (스팸 방지) + 이후 7회 연속 실패마다 리마인드.
+    // (deadline-reminder가 23일 연속 죽어 있어도 아무도 몰랐던 무알림 문제의 해결책 — 2026-07-13)
+    const shouldAlert = prevSuccess !== false || (status ? status.errorCount % 7 === 0 : false);
+    if (shouldAlert) {
+      notifyCronFailure(label, msg).catch(() => {});
+    }
   } finally {
     inFlightCrons.delete(label);
+  }
+}
+
+/** cron 실패를 PI Slack DM으로 알림 — slack-api 동적 import (순환 import 방지) */
+async function notifyCronFailure(label: string, errorMsg: string): Promise<void> {
+  try {
+    const { postSlackAdminDm } = await import('./cron-shared/slack-api.js');
+    await postSlackAdminDm(
+      [
+        `⚠️ *자동화 실패 알림* — \`${label}\``,
+        '',
+        `에러: ${errorMsg.slice(0, 300)}`,
+        '',
+        '_Settings → 시스템 상태 → 🕒 Cron 진단 대시보드에서 상세 확인. 같은 cron이 다시 성공하면 알림은 중단됩니다._',
+      ].join('\n'),
+    );
+  } catch (e: any) {
+    console.warn(`[${label}] 실패 알림 발송 불가:`, e?.message);
   }
 }
 

@@ -26,6 +26,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Client as NotionClient } from '@notionhq/client';
+import { createNotionClient } from './notion-client.js';
 import { env } from '../config/env.js';
 import { postSlackMessage } from './cron-shared/slack-api.js';
 
@@ -602,7 +603,7 @@ export async function runPaperMonitoring(): Promise<PaperMonitoringResult> {
     return result;
   }
 
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY); // undici fetch — 'Premature close' 회피
 
   // Step 0: 마지막 업데이트 + 기존 논문 제목
   const { sinceDate, excludeTitles } = await fetchLastUpdateAndExistingTitles(notion);

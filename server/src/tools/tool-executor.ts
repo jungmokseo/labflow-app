@@ -206,6 +206,16 @@ export async function executeToolCall(
 
 // ── search_lab_data ──────────────────────────────────
 
+// 명령/filler 토큰 (질의에서 통째로 제거) — 단어 내부 글자는 건드리지 않는다.
+// rag-engine.ts expandQuery와 동일 패턴 (이전 버그: 문자 클래스 전역 제거가
+// 단어 내부 글자까지 지워 사람 이름 훼손 — '손가영' → '손영').
+const SEARCH_QUERY_FILLER = new Set([
+  '해줘', '해주세요', '알려줘', '알려주세요', '보여줘', '보여주세요',
+  '뭐', '뭐야', '뭔지', '있어', '있나', '있는지', '좀', '해줄래', '알려줄래',
+]);
+// 토큰 끝의 1~2글자 조사만 제거 (stem이 2글자 이상 남을 때만).
+const SEARCH_TRAILING_JOSA = /(으로|에서|에게|까지|부터|을|를|이|가|은|는|의|로|에|와|과|도|만)$/;
+
 async function executeSearchLabData(
   input: Record<string, any>,
   ctx: ExecutorContext,
@@ -284,8 +294,15 @@ async function executeSearchLabData(
     : [];
 
   const queryLower = query.toLowerCase();
-  const words = query.replace(/[?？！!을를이가에서의로는은해줘줘요알려정보보여뭐있어내]/g, ' ')
-    .split(/\s+/).filter(w => w.length > 1);
+  // 단어 단위로 filler 제거 + 끝 조사만 절단 (rag-engine.ts expandQuery와 동일 패턴)
+  const rawTokens = query.replace(/[?？!！.,()[\]]/g, ' ').split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const tok of rawTokens) {
+    if (SEARCH_QUERY_FILLER.has(tok)) continue;
+    const stem = tok.replace(SEARCH_TRAILING_JOSA, '');
+    const finalTok = stem.length >= 2 ? stem : tok; // 조사 떼서 1글자만 남으면 원형 유지
+    if (finalTok.length > 1 && !SEARCH_QUERY_FILLER.has(finalTok)) words.push(finalTok);
+  }
 
   const fuzzy = (text: string, keyword: string) =>
     text.toLowerCase().includes(keyword.toLowerCase());
@@ -744,6 +761,16 @@ async function executeReadEmail(
       },
     });
 
+    // 인증/서버 에러를 '이메일 없음'으로 오변환하지 않도록 status 구분 (executeGetEmailBriefing과 동일)
+    if (emailRes.statusCode === 401) {
+      return '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
+    }
+    if (emailRes.statusCode !== 200) {
+      let serverError = '';
+      try { serverError = (JSON.parse(emailRes.body) as any)?.error || ''; } catch { /* body가 JSON이 아닐 수 있음 */ }
+      return `이메일 조회 실패: ${serverError || `서버 오류 (HTTP ${emailRes.statusCode})`}`;
+    }
+
     const emailData = JSON.parse(emailRes.body);
     if (!emailData.emails || emailData.emails.length === 0) {
       return searchTerms
@@ -818,6 +845,16 @@ async function executeDraftEmailReply(
         'x-dev-user-id': ctx.request.headers['x-dev-user-id'] as string || '',
       },
     });
+
+    // 인증/서버 에러를 '이메일 없음'으로 오변환하지 않도록 status 구분 (executeGetEmailBriefing과 동일)
+    if (emailRes.statusCode === 401) {
+      return '**Gmail 토큰이 만료되었습니다.**\n\n설정 → Gmail 재연동 버튼을 눌러 다시 인증해주세요.';
+    }
+    if (emailRes.statusCode !== 200) {
+      let serverError = '';
+      try { serverError = (JSON.parse(emailRes.body) as any)?.error || ''; } catch { /* body가 JSON이 아닐 수 있음 */ }
+      return `이메일 조회 실패: ${serverError || `서버 오류 (HTTP ${emailRes.statusCode})`}`;
+    }
 
     const emailData = JSON.parse(emailRes.body);
     if (!emailData.emails || emailData.emails.length === 0) {

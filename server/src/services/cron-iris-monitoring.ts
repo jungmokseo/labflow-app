@@ -20,6 +20,7 @@
  */
 
 import { Client as NotionClient } from '@notionhq/client';
+import { createNotionClient } from './notion-client.js';
 import { env } from '../config/env.js';
 
 // SKILL.md "고정 설정" — Notion DB ID (collection://e7f9a78c-0195-4db7-a3cb-df2047b4a74f)
@@ -291,7 +292,7 @@ export async function runIrisMonitoring(): Promise<IrisMonitoringResult> {
   }
 
   // [2단계] 기존 Notion DB 키 집합 조회
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY); // undici fetch — 'Premature close' 회피
   const existingKeys = await fetchExistingKeys(notion);
 
   // [3단계] 신규 과제 선별 — 공고번호 또는 ancmId로 매칭

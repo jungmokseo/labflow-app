@@ -67,7 +67,8 @@ const BUILT_IN_JOURNALS: JournalInfo[] = [
   { name: 'Advanced Electronic Materials', rssUrl: 'https://onlinelibrary.wiley.com/action/showFeed?jc=2199160x&type=etoc&feed=rss', publisher: 'Wiley', fields: ['전기전자'] },
 
   // === 센서 ===
-  { name: 'Nature Sensors', rssUrl: 'https://www.nature.com/natsens.rss', publisher: 'Nature', fields: ['센서'] },
+  // 'Nature Sensors'는 RSS 미제공(natsens.rss 404 — 2026-07-13 실측)으로 제외.
+  // 조용히 0편 수집되며 커버리지 착시를 만들던 항목 — RSS 개설 확인 후 재추가.
   { name: 'ACS Sensors', rssUrl: 'https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=ascefj', publisher: 'ACS', fields: ['센서'] },
   { name: 'Biosensors and Bioelectronics', rssUrl: 'https://rss.sciencedirect.com/publication/science/09565663', publisher: 'Elsevier', fields: ['센서', '바이오공학'] },
   { name: 'Sensors and Actuators B', rssUrl: 'https://rss.sciencedirect.com/publication/science/09254005', publisher: 'Elsevier', fields: ['센서'] },
@@ -1093,7 +1094,10 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     // 7일 이내 재실행 차단 (단, 설정 변경 시 예외)
     if (alert.lastRunAt) {
       const daysSinceLastRun = (Date.now() - alert.lastRunAt.getTime()) / (1000 * 60 * 60 * 24);
-      const configChanged = alert.updatedAt.getTime() > alert.lastRunAt.getTime();
+      // 설정 변경 판정에 60초 여유 — lastRunAt 기록 자체가 @updatedAt을 자동 갱신하므로
+      // 단순 비교(updatedAt > lastRunAt)는 항상 true가 되어 rate limit이 상시 우회됐음 (2026-07-13 검증).
+      // 실행 기록 이후 '별도의' 설정 저장만 변경으로 인정.
+      const configChanged = alert.updatedAt.getTime() > alert.lastRunAt.getTime() + 60_000;
 
       if (daysSinceLastRun < 7 && !configChanged) {
         const nextRunDate = new Date(alert.lastRunAt.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -1133,7 +1137,10 @@ export async function paperAlertRoutes(app: FastifyInstance) {
     if (q.theme) where.themes = { has: q.theme };
 
     const results = await prisma.paperAlertResult.findMany({
-      where, orderBy: [{ stars: 'desc' }, { relevance: 'desc' }, { createdAt: 'desc' }], take: 50,
+      // 최신 수집 우선 — stars 우선 정렬은 과거 ★★★가 상위 50을 독점해
+      // 새로 수집된 논문이 UI에 아예 노출되지 않던 문제 (2026-07-13 검증).
+      // 같은 수집일 안에서는 stars/관련도 순. take도 100으로 확대.
+      where, orderBy: [{ createdAt: 'desc' }, { stars: 'desc' }, { relevance: 'desc' }], take: 100,
     });
     const unreadCount = await prisma.paperAlertResult.count({ where: { alertId: alert.id, read: false } });
 

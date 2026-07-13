@@ -11,7 +11,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import { Client as NotionClient } from '@notionhq/client';
+import { createNotionClient, type NotionClient } from './notion-client.js';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { logError } from './error-logger.js';
@@ -24,6 +24,13 @@ function getAnthropicClient(): Anthropic {
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY가 설정되지 않았습니다');
   return new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 }
+
+// ── Ingest 실행 락 ────────────────────────────────────────
+// labId별 ingest 실행 락 — 동일 lab 중복 실행 방지.
+// 수동 트리거(routes/wiki.ts)와 cron(index.ts)이 같은 락을 공유해
+// 두 경로가 동시에 같은 큐 항목을 처리하는 것을 막는다.
+// (Railway는 단일 컨테이너 기준. 멀티 인스턴스면 DB 락 필요)
+export const ingestLocks = new Set<string>();
 
 // ── Ingest 이벤트 로그 (라이브 모니터링용 인메모리 링버퍼) ─
 export type IngestLogEvent = {
@@ -222,7 +229,7 @@ async function enqueueNotionData(labId: string): Promise<number> {
   }
 
   logIngestEvent(labId, 'info', 'Notion 워크스페이스 스캔 시작');
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY);
   let enqueued = 0;
   let searchCursor: string | undefined = undefined;
   let totalPagesFound = 0;
@@ -340,7 +347,7 @@ export async function diagnoseNotion(): Promise<{
   // 키 앞 6자만 노출 (예: "ntn_ab...", "secret...")
   const keyPreview = env.NOTION_API_KEY.slice(0, 6) + '...';
 
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY);
 
   try {
     // 1. 봇 본인 정보 — API 키 유효성 확인
@@ -609,6 +616,15 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
   ): Promise<void> {
     const existing = await prisma.wikiRawQueue.findFirst({ where: { labId, sourceId } });
     if (!existing) {
+      // content 기반 dedupe — GDrive sync가 행을 deleteMany+create로 재생성하면
+      // row id(=sourceId)가 매번 바뀌어 같은 내용이 '신규 소스'로 오인 재큐되던 문제 방지.
+      // 동일 sourceType+content가 이미 미처리 큐에 있으면 skip.
+      const dupPending = await prisma.wikiRawQueue.findFirst({
+        where: { labId, sourceType, content, processedAt: null },
+        select: { id: true },
+      });
+      if (dupPending) return;
+
       // 최초 등록
       await prisma.wikiRawQueue.create({
         data: { id: generateId(), labId, sourceType, sourceId, content },
@@ -776,6 +792,47 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
   return enqueued;
 }
 
+// ── 위키 임베딩 재생성 헬퍼 ────────────────────────────────
+
+/**
+ * 아티클 임베딩 재생성 (RAG용) — 이전 chunk 삭제 후 재생성.
+ * 기존에는 ingestAndCompile만 임베딩을 생성해 deepSynthesis·PUT 수정 아티클이
+ * 벡터 검색(search_wiki)에서 누락/stale 되는 버그가 있었음 → 공용 헬퍼로 분리해
+ * ingest / deepSynthesis / PUT 수정 경로에서 모두 재사용.
+ * 내부에서 에러를 모두 잡아 기록하므로 fire-and-forget 호출에 안전.
+ */
+export async function refreshWikiEmbeddings(labId: string, articleIds: string[]): Promise<void> {
+  if (articleIds.length === 0) return;
+  if (!env.OPENAI_API_KEY) return; // 임베딩 불가 환경 — searchWiki가 키워드 fallback으로 동작
+  try {
+    const articles = await prisma.wikiArticle.findMany({
+      where: { labId, id: { in: articleIds } },
+      select: { id: true, title: true, category: true, content: true },
+    });
+    for (const a of articles) {
+      try {
+        const chunks = chunkText(`# ${a.title}\n\n${a.content}`, 1500);
+        await deleteWikiEmbeddings(prisma, a.id); // 이전 chunk 제거 후 재생성
+        for (let i = 0; i < chunks.length; i++) {
+          const { embedding } = await generateEmbedding(chunks[i]);
+          await storeWikiEmbedding(prisma, {
+            articleId: a.id,
+            labId,
+            title: a.title,
+            category: a.category,
+            chunkIndex: i,
+            chunkText: chunks[i],
+          }, embedding);
+        }
+      } catch (err) {
+        logError('background', `[wiki-engine] embedding 실패: ${a.title}`, { labId })(err);
+      }
+    }
+  } catch (err) {
+    logError('background', '[wiki-engine] embedding 배치 실패', { labId })(err);
+  }
+}
+
 // ── ingestAndCompile ──────────────────────────────────────
 
 /**
@@ -787,6 +844,10 @@ export async function enqueueNewData(labId: string, userId: string): Promise<num
 const SONNET_PER_ITEM_CHAR_CAP = 5000;
 // 한 번에 Sonnet으로 보낼 큐 항목 수
 const SONNET_BATCH_SIZE = 5;
+// 배치 실패(응답 잘림/파싱 실패) 시 항목별 재시도 한도 — 초과 시 포기(processed 마킹)해 큐 정체 방지
+const INGEST_MAX_RETRIES = 3;
+// 큐 항목별 실패 횟수 (인메모리 — 스키마 변경 없이 재시도 관리, 재시작 시 초기화돼도 한도만 리셋됨)
+const ingestFailCounts = new Map<string, number>();
 
 export async function ingestAndCompile(labId: string, userId?: string): Promise<{ processed: number; updated: string[] }> {
   // 1. 미처리 큐 항목 (5개씩 — 과도한 prompt 방지)
@@ -801,12 +862,47 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
     return { processed: 0, updated: [] };
   }
 
+  // 1-1. 중복 content 스킵 — GDrive 재생성(sourceId 변경)으로 오염된 기존 큐의 자연 소진 경로.
+  //      같은 sourceType+content가 이미 처리(processedAt != null)됐거나 이번 배치 안에서 중복이면
+  //      Sonnet 호출 없이 processed로 마킹하고 건너뛴다.
+  const toProcess: typeof queue = [];
+  const skipIds: string[] = [];
+  const seenKeys = new Set<string>();
+  for (const q of queue) {
+    const key = `${q.sourceType} ${q.content}`;
+    if (seenKeys.has(key)) {
+      skipIds.push(q.id);
+      continue;
+    }
+    const dupProcessed = await prisma.wikiRawQueue.findFirst({
+      where: { labId, sourceType: q.sourceType, content: q.content, processedAt: { not: null } },
+      select: { id: true },
+    });
+    if (dupProcessed) {
+      skipIds.push(q.id);
+      continue;
+    }
+    seenKeys.add(key);
+    toProcess.push(q);
+  }
+  if (skipIds.length > 0) {
+    await prisma.wikiRawQueue.updateMany({
+      where: { id: { in: skipIds } },
+      data: { processedAt: new Date() },
+    });
+    logIngestEvent(labId, 'info', `중복 content 큐 항목 ${skipIds.length}건 스킵 (processed 마킹)`);
+  }
+  if (toProcess.length === 0) {
+    // 배치 전체가 중복 — API 호출 없이 종료 (processed > 0 반환으로 배치 루프는 계속 진행)
+    return { processed: skipIds.length, updated: [] };
+  }
+
   // 처리 예정 항목 로그
-  const itemsPreview = queue.map(q => {
+  const itemsPreview = toProcess.map(q => {
     const firstLine = q.content.split('\n')[0].slice(0, 60);
     return `${q.sourceType}: ${firstLine}`;
   }).join(' | ');
-  logIngestEvent(labId, 'info', `Sonnet 처리 시작 (${queue.length}개): ${itemsPreview}`);
+  logIngestEvent(labId, 'info', `Sonnet 처리 시작 (${toProcess.length}개): ${itemsPreview}`);
 
   // 2. 기존 위키 아티클 인덱스 (제목/카테고리/태그만)
   const existingArticles = await prisma.wikiArticle.findMany({
@@ -815,7 +911,7 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
   });
 
   // 2-1. paper_alert 있을 때만 관련 연구 아티클 본문 공급 (10개 × 300자로 축소)
-  const hasPaperAlert = queue.some(q => q.sourceType === 'paper_alert');
+  const hasPaperAlert = toProcess.some(q => q.sourceType === 'paper_alert');
   let researchContext = '';
   if (hasPaperAlert) {
     const researchArticles = await prisma.wikiArticle.findMany({
@@ -838,7 +934,7 @@ export async function ingestAndCompile(labId: string, userId?: string): Promise<
   const anthropic = getAnthropicClient();
 
   // 3. Sonnet에 보낼 queueText — 페이지당 5k로 제한 (DB는 30k 유지)
-  const queueText = queue.map((q, i) => {
+  const queueText = toProcess.map((q, i) => {
     const trimmed = q.content.length > SONNET_PER_ITEM_CHAR_CAP
       ? q.content.slice(0, SONNET_PER_ITEM_CHAR_CAP) + `\n[... ${q.content.length - SONNET_PER_ITEM_CHAR_CAP}자 생략]`
       : q.content;
@@ -877,11 +973,14 @@ ${existingText}${researchContext}
 ${queueText}`;
 
   let articles: any[] = [];
+  let truncated = false; // 응답이 max_tokens에서 잘렸는지 (잘리면 파싱 결과를 신뢰할 수 없음)
   try {
     // Prompt caching: system은 1회 전송 후 이후 호출에서 10% 비용으로 재사용
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2048,
+      // 2048 → 8192: 5개 항목 배치의 아티클 JSON이 2048에서 잘려 8주간 아티클 0개가 나오던
+      // 무음 실패의 원인 → 상향 (출력은 실사용 토큰만 과금되므로 상한 확대 비용 없음)
+      max_tokens: 8192,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: userMessage }],
     });
@@ -890,6 +989,7 @@ ${queueText}`;
     const inputTokens = (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
     const outputTokens = usage.output_tokens ?? 0;
     logApiCost(userId ?? 'system', 'claude-sonnet-4-6', inputTokens, outputTokens, 'wiki_ingest').catch(() => {});
+    truncated = response.stop_reason === 'max_tokens';
     // Sonnet 4.6 multi-block response 대응 — thinking + text 가능
     const textBlock = response.content.find(b => b.type === 'text');
     const text = textBlock?.type === 'text' ? textBlock.text : '';
@@ -899,7 +999,42 @@ ${queueText}`;
   } catch (err) {
     logIngestEvent(labId, 'error', `Sonnet 호출 실패: ${(err as any)?.message ?? err}`);
     logError('background', '[wiki-engine] Sonnet ingest 호출 실패', { labId })(err);
-    return { processed: 0, updated: [] };
+    // 호출 실패 시 processed 마킹하지 않음 — 다음 실행에서 재시도 (스킵된 중복만 카운트)
+    return { processed: skipIds.length, updated: [] };
+  }
+
+  // 4-1. 실패 판정 — 기존에는 파싱 실패/아티클 0개여도 무조건 processed 마킹해
+  //      큐 내용이 위키에 반영되지 않은 채 소진되던 버그(2026-05-19 이후 아티클 0개).
+  //      잘림 또는 아티클 0개면 마킹하지 않고 재시도, INGEST_MAX_RETRIES회 초과 항목만 포기 마킹.
+  if (truncated || articles.length === 0) {
+    const reason = truncated
+      ? '응답이 max_tokens에서 잘림 (stop_reason=max_tokens)'
+      : '아티클 0개 (JSON 파싱 실패 또는 빈 응답)';
+    const giveUpIds: string[] = [];
+    for (const q of toProcess) {
+      const fails = (ingestFailCounts.get(q.id) ?? 0) + 1;
+      ingestFailCounts.set(q.id, fails);
+      if (fails >= INGEST_MAX_RETRIES) {
+        giveUpIds.push(q.id);
+        ingestFailCounts.delete(q.id);
+      }
+    }
+    if (giveUpIds.length > 0) {
+      // 재시도 한도 초과 — 큐 정체(head-of-line blocking) 방지를 위해 포기 마킹.
+      // content는 큐 행에 남아 있어 필요 시 processedAt 리셋으로 복구 가능.
+      await prisma.wikiRawQueue.updateMany({
+        where: { id: { in: giveUpIds } },
+        data: { processedAt: new Date() },
+      });
+    }
+    logIngestEvent(labId, 'error', `Ingest 실패: ${reason} — 재시도 대기 ${toProcess.length - giveUpIds.length}건, 포기 ${giveUpIds.length}건`);
+    // 무음 실패 방지 — ErrorLog에 영속 기록
+    logError('background', `[wiki-engine] ingest 배치 실패: ${reason}`, {
+      labId,
+      queueIds: toProcess.map(q => q.id),
+      giveUpIds,
+    })(new Error(reason));
+    return { processed: skipIds.length + giveUpIds.length, updated: [] };
   }
 
   // 5. 아티클 upsert
@@ -985,41 +1120,26 @@ ${queueText}`;
       try {
         const upserted = await prisma.wikiArticle.findMany({
           where: { labId, title: { in: updatedTitles } },
-          select: { id: true, title: true, category: true, content: true },
+          select: { id: true },
         });
-        for (const a of upserted) {
-          try {
-            const chunks = chunkText(`# ${a.title}\n\n${a.content}`, 1500);
-            await deleteWikiEmbeddings(prisma, a.id); // 이전 chunk 제거 후 재생성
-            for (let i = 0; i < chunks.length; i++) {
-              const { embedding } = await generateEmbedding(chunks[i]);
-              await storeWikiEmbedding(prisma, {
-                articleId: a.id,
-                labId,
-                title: a.title,
-                category: a.category,
-                chunkIndex: i,
-                chunkText: chunks[i],
-              }, embedding);
-            }
-          } catch (err) {
-            logError('background', `[wiki-engine] embedding 실패: ${a.title}`, { labId })(err);
-          }
-        }
+        // 공용 헬퍼 재사용 (deepSynthesis / PUT 수정 경로와 동일 로직)
+        await refreshWikiEmbeddings(labId, upserted.map(a => a.id));
       } catch (err) {
         logError('background', '[wiki-engine] embedding 배치 실패', { labId })(err);
       }
     });
   }
 
-  // 7. 처리된 큐 마킹
+  // 7. 처리된 큐 마킹 — 파싱 성공(articles.length > 0) 시에만 도달하므로 여기서 마킹
   await prisma.wikiRawQueue.updateMany({
-    where: { id: { in: queue.map(q => q.id) } },
+    where: { id: { in: toProcess.map(q => q.id) } },
     data: { processedAt: now },
   });
+  // 성공한 항목의 실패 카운트 정리
+  for (const q of toProcess) ingestFailCounts.delete(q.id);
 
-  console.log(`[wiki-engine] ingestAndCompile 완료: ${queue.length}개 처리, ${updatedTitles.length}개 아티클 업데이트, 제목: ${updatedTitles.join(', ') || '(없음)'}`);
-  return { processed: queue.length, updated: updatedTitles };
+  console.log(`[wiki-engine] ingestAndCompile 완료: ${toProcess.length}개 처리(중복 스킵 ${skipIds.length}개), ${updatedTitles.length}개 아티클 업데이트, 제목: ${updatedTitles.join(', ') || '(없음)'}`);
+  return { processed: skipIds.length + toProcess.length, updated: updatedTitles };
 }
 
 // ── deepSynthesis ─────────────────────────────────────────
@@ -1085,6 +1205,7 @@ ${articlesText}
   // 3. 업데이트된 아티클 upsert
   const now = new Date();
   let updateCount = 0;
+  const updatedTitles: string[] = []; // 임베딩 재생성 대상
 
   for (const article of updatedArticles) {
     if (!article.title || !article.category || !article.content) continue;
@@ -1110,9 +1231,26 @@ ${articlesText}
         now,
       );
       updateCount++;
+      updatedTitles.push(article.title);
     } catch (err) {
       logError('background', `[wiki-engine] deepSynthesis upsert 실패: ${article.title}`, { labId })(err);
     }
+  }
+
+  // 4. Embedding 재생성 — 기존에는 ingest 경로만 임베딩을 생성해
+  //    synthesis 아티클이 벡터 검색(search_wiki)에서 누락되던 버그 수정
+  if (updatedTitles.length > 0) {
+    setImmediate(async () => {
+      try {
+        const upserted = await prisma.wikiArticle.findMany({
+          where: { labId, title: { in: updatedTitles } },
+          select: { id: true },
+        });
+        await refreshWikiEmbeddings(labId, upserted.map(a => a.id));
+      } catch (err) {
+        logError('background', '[wiki-engine] deepSynthesis embedding 배치 실패', { labId })(err);
+      }
+    });
   }
 
   console.log(`[wiki-engine] deepSynthesis 완료: ${updateCount}개 아티클 업데이트`);

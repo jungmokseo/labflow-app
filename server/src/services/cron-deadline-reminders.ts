@@ -19,6 +19,7 @@
  */
 
 import { Client as NotionClient } from '@notionhq/client';
+import { createNotionClient } from './notion-client.js';
 import { env } from '../config/env.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
 import { lookupSlackUserByEmail, postSlackMessage } from './cron-shared/slack-api.js';
@@ -208,7 +209,7 @@ export async function runDeadlineReminders(): Promise<DeadlineReminderResult> {
     throw new Error('SLACK_BOT_TOKEN 미설정 — Slack DM 불가');
   }
 
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY); // undici fetch — 'Premature close' 회피
   const tasks = await fetchActiveTasks(notion);
   result.totalScanned = tasks.length;
 

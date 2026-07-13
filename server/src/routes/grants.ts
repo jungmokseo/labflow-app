@@ -105,7 +105,8 @@ export async function grantRoutes(app: FastifyInstance) {
       if (!labId) return reply.code(400).send({ error: 'LAB_ID 미설정' });
 
       const projects = await prisma.project.findMany({
-        where: { labId },
+        // archived = gdrive sync가 정리한 스텁/삭제·개명 row — 목록·KPI에서 제외
+        where: { labId, status: { not: 'archived' } },
         orderBy: [{ status: 'asc' }, { syncedAt: 'desc' }],
       });
 
@@ -267,9 +268,9 @@ export async function grantRoutes(app: FastifyInstance) {
       const results = await syncAllGdriveData(labId);
       const projectResult = results.find(r => r.file === '과제 정보');
 
-      // detailFields 매칭 통계 — 사용자가 sync 후 결과를 정확히 알 수 있도록
+      // detailFields 매칭 통계 — 사용자가 sync 후 결과를 정확히 알 수 있도록 (archived 스텁 제외)
       const allProjects = await prisma.project.findMany({
-        where: { labId },
+        where: { labId, status: { not: 'archived' } },
         select: { metadata: true },
       });
       const detailMatched = allProjects.filter(p => {

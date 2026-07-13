@@ -27,6 +27,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Client as NotionClient } from '@notionhq/client';
+import { createNotionClient } from './notion-client.js';
 import { google, type gmail_v1 } from 'googleapis';
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
@@ -184,11 +185,16 @@ async function searchWeeklyReports(
   const afterEpoch = Math.floor(afterDate.getTime() / 1000);
   const results: FoundMail[] = [];
 
-  // 이메일 확인된 멤버: from: 쿼리 묶어서 1회 호출
+  // 주간보고 제목 검증 — cron-general-email-briefing의 WEEKLY_REPORT_PATTERN과 동일 기준.
+  // 이전엔 from: 필터만 있어 멤버의 '가장 최신 메일'(견적서·안내메일 등)이 주간보고로
+  // 오요약되어 Notion에 기록되는 사고가 실제 발생 (2026-07-13 검증에서 production 실증).
+  const WEEKLY_SUBJECT = /weekly\s*report|주간\s*진행\s*사항|주간\s*보고|주간보고/i;
+
+  // 이메일 확인된 멤버: from: 쿼리 묶어서 1회 호출 (subject 필터 포함)
   const emailedMembers = members.filter(m => m.email);
   if (emailedMembers.length > 0) {
     const fromQuery = emailedMembers.map(m => `from:${m.email}`).join(' OR ');
-    const q = `(${fromQuery}) after:${afterEpoch}`;
+    const q = `(${fromQuery}) subject:("Weekly Report" OR 주간보고 OR "주간 진행사항") after:${afterEpoch}`;
     const list = await gmail.users.messages.list({ userId: 'me', maxResults: 100, q });
     const ids = (list.data.messages || []).map(m => m.id!);
     for (const id of ids) {
@@ -197,6 +203,8 @@ async function searchWeeklyReports(
         const headers = det.data.payload?.headers || [];
         const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from')?.value || '';
         const subject = headers.find(h => h.name?.toLowerCase() === 'subject')?.value || '';
+        // Gmail subject: 검색은 토큰 기반이라 느슨함 — regex로 재검증 (비주간보고 메일 차단의 최종 방어선)
+        if (!WEEKLY_SUBJECT.test(subject)) continue;
         const matched = emailedMembers.find(m => m.email && fromHeader.toLowerCase().includes(m.email.toLowerCase()));
         if (!matched) continue;
         results.push({
@@ -225,6 +233,8 @@ async function searchWeeklyReports(
           const headers = det.data.payload?.headers || [];
           const fromHeader = headers.find(h => h.name?.toLowerCase() === 'from')?.value || '';
           const subject = headers.find(h => h.name?.toLowerCase() === 'subject')?.value || '';
+          // Gmail subject: 검색은 토큰 기반이라 느슨함 — regex로 재검증
+          if (!WEEKLY_SUBJECT.test(subject)) continue;
           // 이름 매칭 — 발신자 표시명에 한글 이름 포함 시 해당 멤버에 귀속
           const matched = unmappedMembers.find(m => fromHeader.includes(m.name));
           if (!matched) continue;
@@ -296,13 +306,19 @@ async function summarizeReport(memberName: string, body: string, scope: 'student
 // Notion 페이지 업데이트 (SKILL.md 4-5단계)
 // ─────────────────────────────────────────────────────────
 
-/** Notion 페이지의 모든 블록을 가져와 멤버 섹션 시작 블록 ID를 찾는다 */
-async function findMemberSectionBlockId(
+/**
+ * Notion 페이지에서 멤버 섹션 시작 블록 ID + 그 섹션의 기존 bullet 첫 줄 목록을 찾는다.
+ * bullet 첫 줄은 멱등성 검사용 — 같은 날짜(YYYY.MM.DD:) bullet이 이미 있으면 재삽입 금지
+ * (이전엔 재실행마다 중복 bullet이 쌓여 실제 3중 중복이 발생했음).
+ */
+async function findMemberSection(
   notion: NotionClient,
   pageId: string,
   memberName: string,
-): Promise<string | null> {
+): Promise<{ blockId: string; bulletHeads: string[] } | null> {
   let cursor: string | undefined;
+  let sectionBlockId: string | null = null;
+  const bulletHeads: string[] = [];
   do {
     const resp: any = await notion.blocks.children.list({
       block_id: pageId,
@@ -310,17 +326,24 @@ async function findMemberSectionBlockId(
       start_cursor: cursor,
     });
     for (const b of resp.results) {
-      // heading_1/2/3 의 rich_text에 멤버 이름이 포함되면 해당 섹션
       const richText =
         b.heading_1?.rich_text || b.heading_2?.rich_text || b.heading_3?.rich_text;
       if (Array.isArray(richText)) {
+        // 다음 heading을 만나면 현재 멤버 섹션 종료
+        if (sectionBlockId) return { blockId: sectionBlockId, bulletHeads };
         const text = richText.map((t: any) => t.plain_text || '').join('');
-        if (text.includes(memberName)) return b.id;
+        if (text.includes(memberName)) sectionBlockId = b.id;
+        continue;
+      }
+      // 멤버 섹션 안의 bullet 첫 줄 수집
+      if (sectionBlockId && b.type === 'bulleted_list_item') {
+        const bt = (b.bulleted_list_item?.rich_text || []).map((t: any) => t.plain_text || '').join('');
+        if (bt) bulletHeads.push(bt);
       }
     }
     cursor = resp.has_more ? resp.next_cursor : undefined;
   } while (cursor);
-  return null;
+  return sectionBlockId ? { blockId: sectionBlockId, bulletHeads } : null;
 }
 
 /**
@@ -395,10 +418,8 @@ async function processScope(
 
   for (const [memberName, mail] of latestByMember) {
     try {
-      const summary = await summarizeReport(memberName, mail.body, scope);
-
-      const blockId = await findMemberSectionBlockId(notion, pageId, memberName);
-      if (!blockId) {
+      const section = await findMemberSection(notion, pageId, memberName);
+      if (!section) {
         result.errors.push({ member: memberName, reason: 'Notion 페이지에서 멤버 섹션 미발견' });
         continue;
       }
@@ -407,7 +428,15 @@ async function processScope(
       const kst = new Date(mail.receivedAt.getTime() + 9 * 60 * 60 * 1000);
       const dateStr = `${kst.getUTCFullYear()}.${String(kst.getUTCMonth() + 1).padStart(2, '0')}.${String(kst.getUTCDate()).padStart(2, '0')}`;
 
-      await insertSummaryBullet(notion, pageId, blockId, dateStr, summary);
+      // 멱등성 — 같은 날짜 bullet이 이미 있으면 skip (재실행/수동 트리거 중복 방지).
+      // 요약 LLM 호출 전에 검사해 불필요한 API 비용도 절약.
+      if (section.bulletHeads.some(h => h.startsWith(`${dateStr}:`))) {
+        console.log(`[email-briefing] ${memberName} ${dateStr} bullet 이미 존재 — skip`);
+        continue;
+      }
+
+      const summary = await summarizeReport(memberName, mail.body, scope);
+      await insertSummaryBullet(notion, pageId, section.blockId, dateStr, summary);
       result.membersUpdated++;
 
       // Notion rate limit 안전 페이스
@@ -433,7 +462,7 @@ export async function runEmailBriefing(scope: 'student' | 'company' | 'both' = '
 
   if (!env.NOTION_API_KEY) throw new Error('NOTION_API_KEY 미설정');
 
-  const notion = new NotionClient({ auth: env.NOTION_API_KEY });
+  const notion = createNotionClient(env.NOTION_API_KEY); // undici fetch — 'Premature close' 회피
   const gmail = await buildGmailClient();
 
   if (scope === 'student' || scope === 'both') {

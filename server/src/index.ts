@@ -46,7 +46,7 @@ import { internalTriggerRoutes } from './routes/internal-trigger.js';
 import { setupRequestContextHook } from './middleware/auth.js';
 import { resolveLabPermission } from './middleware/permissions.js';
 import { syncAllGdriveData } from './services/gdrive-sync.js';
-import { enqueueNewData, ingestAndCompile, deepSynthesis } from './services/wiki-engine.js';
+import { enqueueNewData, ingestAndCompile, deepSynthesis, ingestLocks } from './services/wiki-engine.js';
 import { prisma } from './config/prisma.js';
 
 async function buildApp() {
@@ -221,30 +221,48 @@ async function start() {
 
       // ── Wiki 자동 합성 크론 ──────────────────────────────
       if (env.LAB_ID && env.ANTHROPIC_API_KEY) {
+        // 기존에는 실행당 1배치(5건)만 처리해 백로그가 계속 쌓였음(유입 > 처리) →
+        // 수동 트리거(routes/wiki.ts)처럼 멀티배치 루프로 소진. 실행당 최대 50배치(250건).
+        const WIKI_CRON_MAX_BATCHES = 50;
+        const WIKI_CRON_BATCH_DELAY_MS = 2000; // 배치 간 delay — Anthropic API 부담 제어
+
+        const runWikiIngest = async (label: string) => {
+          const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID! } });
+          if (!lab) return;
+          const owner = await prisma.user.findUnique({ where: { id: lab.ownerId } });
+          if (!owner) return;
+
+          // 수동 ingest(routes/wiki.ts)와 같은 락 공유 — 동일 큐 중복 처리 방지
+          if (ingestLocks.has(env.LAB_ID!)) {
+            console.log(`[wiki-cron] ${label} 스킵 — ingest 이미 진행 중`);
+            return;
+          }
+          ingestLocks.add(env.LAB_ID!);
+          try {
+            await enqueueNewData(env.LAB_ID!, owner.id);
+            for (let batch = 1; batch <= WIKI_CRON_MAX_BATCHES; batch++) {
+              // owner.id 전달 — 누락 시 지식그래프(buildGraphFromText)가 cron 경로에서
+              // 전혀 자라지 않고 비용 귀속도 'system'으로 빠지던 버그 수정
+              const result = await ingestAndCompile(env.LAB_ID!, owner.id);
+              if (result.processed === 0) break;
+              await new Promise(res => setTimeout(res, WIKI_CRON_BATCH_DELAY_MS));
+            }
+            console.log(`[wiki-cron] ${label} 완료`);
+          } finally {
+            ingestLocks.delete(env.LAB_ID!);
+          }
+        };
+
         // 서버 시작 30초 후 ingest 1회
         setTimeout(async () => {
-          try {
-            const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID! } });
-            if (!lab) return;
-            const owner = await prisma.user.findUnique({ where: { id: lab.ownerId } });
-            if (!owner) return;
-            await enqueueNewData(env.LAB_ID!, owner.id);
-            await ingestAndCompile(env.LAB_ID!);
-            console.log('[wiki-cron] 시작 인제스트 완료');
-          } catch (e: any) { console.error('[wiki-cron] 시작 인제스트 실패:', e.message); }
+          try { await runWikiIngest('시작 인제스트'); }
+          catch (e: any) { console.error('[wiki-cron] 시작 인제스트 실패:', e.message); }
         }, 30000);
 
         // 24시간마다 ingest
         setInterval(async () => {
-          try {
-            const lab = await prisma.lab.findUnique({ where: { id: env.LAB_ID! } });
-            if (!lab) return;
-            const owner = await prisma.user.findUnique({ where: { id: lab.ownerId } });
-            if (!owner) return;
-            await enqueueNewData(env.LAB_ID!, owner.id);
-            await ingestAndCompile(env.LAB_ID!);
-            console.log('[wiki-cron] 정기 인제스트 완료');
-          } catch (e: any) { console.error('[wiki-cron] 인제스트 실패:', e.message); }
+          try { await runWikiIngest('정기 인제스트'); }
+          catch (e: any) { console.error('[wiki-cron] 인제스트 실패:', e.message); }
         }, 24 * 60 * 60 * 1000);
 
         // 7일마다 Opus deep synthesis
@@ -298,14 +316,19 @@ async function start() {
           );
         }, 'email-briefing-cron');
 
-        // 4. IRIS R&D 공고 — 매주 월 KST 10:00 (크롤 + 신규만 Notion DB 추가)
-        scheduleWeeklyKst(1, 10, 0, async () => {
-          const r = await runIrisMonitoring();
-          console.log(
-            `[iris-monitoring-cron] crawled=${r.totalCrawled} new=${r.newProjectsAdded} ` +
-            `skip=${r.skippedExisting} errors=${r.errors.length}`,
-          );
-        }, 'iris-monitoring-cron');
+        // 4. IRIS R&D 공고 — ⚠️ 스케줄 비활성 (2026-07-13).
+        // 운영 개시 이래 성공 0회 (Notion DB e7f9a78c 404 — integration 미공유/ID 오류),
+        // 사용자 결정: '무시'. 매주 실패 알림·cron_runs 노이즈만 남겨 스케줄에서 제외.
+        // 재개하려면: Notion IRIS DB를 integration에 공유 + cron-iris-monitoring.ts의 DB ID 확인 후 아래 주석 해제.
+        // 수동 실행은 유지: POST /api/internal/run-cron/iris-monitoring-cron
+        // scheduleWeeklyKst(1, 10, 0, async () => {
+        //   const r = await runIrisMonitoring();
+        //   console.log(
+        //     `[iris-monitoring-cron] crawled=${r.totalCrawled} new=${r.newProjectsAdded} ` +
+        //     `skip=${r.skippedExisting} errors=${r.errors.length}`,
+        //   );
+        // }, 'iris-monitoring-cron');
+        void runIrisMonitoring; // 미사용 import 방지 (수동 트리거 경로에서 계속 사용됨)
 
         // 5. 일반 이메일 브리핑 — 매일 KST 07:00 (Gmail 24h → 분류 → PI Slack DM)
         if (env.SLACK_BOT_TOKEN && env.ADMIN_USER_ID) {

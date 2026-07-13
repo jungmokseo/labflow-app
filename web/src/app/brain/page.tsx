@@ -615,7 +615,8 @@ export default function BrainPage() {
         setActiveChannelId(pollChannelId);
         try {
           const messagesRes = await getChannelMessages(pollChannelId);
-          const messages = (messagesRes as any).data || [];
+          // 서버는 raw 배열을 반환하므로 .data만 읽으면 항상 [] — 다른 호출부와 동일 패턴으로 방어
+          const messages = (messagesRes as any).data || messagesRes || [];
           if (Array.isArray(messages)) {
             storeMessages(pollChannelId, messages);
           }

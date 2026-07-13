@@ -243,13 +243,6 @@ export async function deleteCapture(id: string) {
   return apiFetch<{ success: boolean }>(`/api/captures/${id}`, { method: 'DELETE' });
 }
 
-export async function classifyCapture(id: string) {
-  return apiFetch<{ success: boolean; data: Capture }>('/api/captures/classify', {
-    method: 'POST',
-    body: JSON.stringify({ captureId: id }),
-  });
-}
-
 export async function deleteCompletedCaptures() {
   return apiFetch<{ success: boolean; deletedCount: number }>('/api/captures/completed', { method: 'DELETE' });
 }
@@ -1590,13 +1583,6 @@ export async function addCustomJournal(data: { name: string; rssUrl: string; pub
   });
 }
 
-export async function validateRssUrl(rssUrl: string) {
-  return apiFetch<{ valid: boolean; itemCount: number; sampleTitle: string | null }>('/api/papers/journals/validate', {
-    method: 'POST',
-    body: JSON.stringify({ rssUrl }),
-  });
-}
-
 export async function savePaperAlert(data: { keywords: string[]; journals: string[]; schedule?: string }) {
   return apiFetch<{ success: boolean; data: PaperAlertSetting }>('/api/papers/alerts', {
     method: 'POST',
@@ -1604,16 +1590,15 @@ export async function savePaperAlert(data: { keywords: string[]; journals: strin
   });
 }
 
-export async function runPaperCrawl(alertId?: string) {
-  const path = alertId ? `/api/papers/alerts/${alertId}/run` : '/api/papers/alerts/run';
-  return apiFetch<{ success: boolean; data: PaperAlertResult[]; count: number }>(path, {
+// 즉시 응답 + 백그라운드 수집 — 결과는 getPaperAlertResults 폴링으로 확인
+export async function runPaperCrawl() {
+  return apiFetch<{ success: boolean; status: string; message: string }>('/api/papers/alerts/run', {
     method: 'POST',
   });
 }
 
-export async function getPaperAlertResults(alertId?: string) {
-  const path = alertId ? `/api/papers/alerts/${alertId}/results` : '/api/papers/alerts/results';
-  return apiFetch<{ success: boolean; data: PaperAlertResult[]; results?: PaperAlertResult[]; unreadCount?: number }>(path);
+export async function getPaperAlertResults() {
+  return apiFetch<{ success: boolean; data: PaperAlertResult[]; results?: PaperAlertResult[]; unreadCount?: number }>('/api/papers/alerts/results');
 }
 
 export async function resetPaperAlertResults() {
@@ -1739,10 +1724,6 @@ export interface CostSummary {
 
 export async function getCostSummary(days = 30): Promise<CostSummary> {
   return apiFetch<CostSummary>(`/api/brain/cost-summary?days=${days}`);
-}
-
-export async function costCorrection() {
-  return apiFetch<{ success: boolean; message: string; totalCorrected: number; corrections: any[] }>('/api/brain/cost-correction', { method: 'POST' });
 }
 
 // ── 헬스 체크 ──────────────────────────────────────

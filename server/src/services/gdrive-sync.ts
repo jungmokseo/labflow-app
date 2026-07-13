@@ -439,10 +439,14 @@ async function syncProjectInfo(labId: string): Promise<number> {
       if (HANDLED_KEYWORDS.some(kw => h.includes(kw))) handledIndexes.add(i);
     });
 
+    // 이번 sync에서 확인한 과제명 — 시트에서 삭제/개명된 row의 archive 판정에 사용
+    const seenNames = new Set<string>();
+
     for (let i = 1; i < mainSheet.rows.length; i++) {
       const row = mainSheet.rows[i];
       const name = row[col('과제명')]?.trim();
       if (!name) continue;
+      seenNames.add(name);
 
       const knownData = {
         businessName:   row[col('사업명')]?.trim() || undefined,
@@ -464,16 +468,67 @@ async function syncProjectInfo(labId: string): Promise<number> {
       });
 
       // 기존 metadata 보존 + sheetExtras만 갱신 (PI 입력 namespace는 별개)
-      const existing = await prisma.project.findFirst({ where: { labId, name }, select: { metadata: true } });
+      const existing = await prisma.project.findFirst({ where: { labId, name }, select: { metadata: true, status: true } });
       const md = (existing?.metadata as Record<string, unknown> | null) || {};
       const newMd = { ...md, sheetExtras: extras };
 
       await prisma.project.upsert({
         where: { labId_name: { labId, name } },
-        update: { ...knownData, metadata: newMd as any },
+        // 시트에 다시 나타난 과제는 archive 해제 (그 외 status는 sync가 건드리지 않음)
+        update: { ...knownData, metadata: newMd as any, ...(existing?.status === 'archived' ? { status: 'active' } : {}) },
         create: { labId, name, ...knownData, metadata: newMd as any },
       });
       synced++;
+    }
+
+    // 1.5단계: 시트에서 삭제/개명된 과제 정리 — 이번 sync에서 못 본 gdrive 출처 row
+    // (gdriveRowIndex 보유 = 과거 "과제 정보" 탭에서 생성)를 archive.
+    // 하드삭제 금지 — PI 입력 metadata 보존, 시트에 이름이 다시 나타나면 위 upsert가 복구.
+    if (seenNames.size > 0) {
+      const stale = await prisma.project.updateMany({
+        where: {
+          labId,
+          gdriveRowIndex: { not: null },
+          status: { not: 'archived' },
+          name: { notIn: Array.from(seenNames) },
+        },
+        data: { status: 'archived' },
+      });
+      if (stale.count > 0) {
+        console.log(`[gdrive] 시트에 없는 과제 ${stale.count}건 archive (삭제/개명된 row)`);
+      }
+
+      // 1.6단계: 레거시 스텁 정리 — 구버전 sync가 탭명으로 생성한 이름뿐인 row
+      // (gdriveRowIndex/period 없음, syncedAt만 있음)가 실과제와 이름 포함관계면 archive.
+      // 스텁이 남아 있으면 2단계 탭 매칭에서 detailFields·사사문구를 흡수해
+      // 실과제 row에 세부 정보가 동기화되지 않는 문제의 데이터 정리.
+      const realRows = await prisma.project.findMany({
+        where: { labId, gdriveRowIndex: { not: null }, status: { not: 'archived' } },
+        select: { name: true, businessName: true },
+      });
+      const stubs = await prisma.project.findMany({
+        where: { labId, gdriveRowIndex: null, period: null, syncedAt: { not: null }, status: { not: 'archived' } },
+        select: { id: true, name: true },
+      });
+      const stubArchiveIds: string[] = [];
+      for (const stub of stubs) {
+        const ns = normalizeProjectName(stub.name);
+        if (ns.length < 4) continue; // 짧은 이름 오매칭 방지 (findMatchingProjectForSheet와 동일 가드)
+        const overlapsReal = realRows.some(r => {
+          const nn = normalizeProjectName(r.name);
+          const nb = normalizeProjectName(r.businessName);
+          return (nn.length >= 4 && (nn.includes(ns) || ns.includes(nn))) ||
+                 (nb.length >= 4 && (nb.includes(ns) || ns.includes(nb)));
+        });
+        if (overlapsReal) stubArchiveIds.push(stub.id);
+      }
+      if (stubArchiveIds.length > 0) {
+        await prisma.project.updateMany({
+          where: { id: { in: stubArchiveIds } },
+          data: { status: 'archived' },
+        });
+        console.log(`[gdrive] 레거시 스텁 ${stubArchiveIds.length}건 archive (실과제와 이름 중복)`);
+      }
     }
   }
 
@@ -537,6 +592,9 @@ async function syncProjectInfo(labId: string): Promise<number> {
 // ── 시트 탭명 ↔ Project 매칭 ────────────────────────────────────
 //
 // 매칭 우선순위:
+//  0) 실과제("과제 정보" 탭 출처, gdriveRowIndex 보유) 그룹을 먼저 전 단계 검사하고,
+//     실과제에서 못 찾을 때만 나머지(레거시 스텁 등) 그룹 검사 —
+//     이름만 있는 스텁이 실과제보다 먼저 매칭되어 detailFields를 흡수하는 문제 방지
 //  1) shortName 정확 일치
 //  2) businessName 정확 일치
 //  3) name 정확 일치
@@ -549,41 +607,43 @@ function normalizeProjectName(s: string | null | undefined): string {
 }
 
 async function findMatchingProjectForSheet(labId: string, sheetName: string) {
-  // 1~3순위: 정확 일치
-  const exact = await prisma.project.findFirst({
-    where: {
-      labId,
-      OR: [
-        { shortName: sheetName },
-        { businessName: sheetName },
-        { name: sheetName },
-      ],
-    },
-  });
-  if (exact) return exact;
-
-  // 4~5순위: 정규화 후 메모리 검색
-  const norm = normalizeProjectName(sheetName);
-  if (!norm) return null;
-
   const all = await prisma.project.findMany({
-    where: { labId },
-    select: { id: true, name: true, shortName: true, businessName: true },
+    where: { labId, status: { not: 'archived' } },
+    select: { id: true, name: true, shortName: true, businessName: true, gdriveRowIndex: true },
   });
 
-  for (const p of all) {
-    const ns = normalizeProjectName(p.shortName);
-    const nb = normalizeProjectName(p.businessName);
-    const nn = normalizeProjectName(p.name);
-    if (
-      (ns && ns === norm) ||
-      (nb && nb === norm) ||
-      (nn && nn === norm) ||
-      (nn && norm.length >= 4 && nn.startsWith(norm)) ||
-      (nn && norm.length >= 4 && nn.includes(norm)) ||
-      (nb && norm.length >= 4 && nb.includes(norm))
-    ) {
-      return prisma.project.findUnique({ where: { id: p.id } });
+  const norm = normalizeProjectName(sheetName);
+
+  // 실과제 우선 — 스텁(1단계 시트에 없는 row)은 후순위 그룹으로 강등
+  const groups = [
+    all.filter(p => p.gdriveRowIndex !== null),
+    all.filter(p => p.gdriveRowIndex === null),
+  ];
+
+  for (const group of groups) {
+    // 1~3순위: 정확 일치
+    const exact =
+      group.find(p => p.shortName === sheetName) ||
+      group.find(p => p.businessName === sheetName) ||
+      group.find(p => p.name === sheetName);
+    if (exact) return prisma.project.findUnique({ where: { id: exact.id } });
+
+    // 4~5순위: 정규화 후 메모리 검색
+    if (!norm) continue;
+    for (const p of group) {
+      const ns = normalizeProjectName(p.shortName);
+      const nb = normalizeProjectName(p.businessName);
+      const nn = normalizeProjectName(p.name);
+      if (
+        (ns && ns === norm) ||
+        (nb && nb === norm) ||
+        (nn && nn === norm) ||
+        (nn && norm.length >= 4 && nn.startsWith(norm)) ||
+        (nn && norm.length >= 4 && nn.includes(norm)) ||
+        (nb && norm.length >= 4 && nb.includes(norm))
+      ) {
+        return prisma.project.findUnique({ where: { id: p.id } });
+      }
     }
   }
   return null;
