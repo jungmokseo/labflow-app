@@ -32,7 +32,9 @@ import { postSlackMessage } from './cron-shared/slack-api.js';
 
 // ── 상수 (SKILL.md Step 0·3·4·6) ──────────────────────────
 const NOTION_SUMMARY_PAGE_ID = '312f9f176cf481b9a4caf3c23c20b7c0';
-const NOTION_PAPERS_DB_ID = '9d138950-c9f7-430b-a2f8-a6f45c091af0';
+// 2026-07-13: 구 DB(9d138950…) 삭제·재생성되어 object_not_found 발생 → 현행 "📊 논문 모니터링 DB"로 갱신.
+// 스키마(논문 제목/저널/연구 테마/관련도/발행일/초록/연관성 분석/관련 연구자/DOI/수집일) 동일 확인.
+const NOTION_PAPERS_DB_ID = '0fc58e544c6d43b2930a62f67de86ff0';
 const SLACK_CHANNEL_RESEARCH_TRENDS = 'C0B0R3M4X8T'; // #연구동향
 const NOTION_PUBLIC_URL = 'https://conscious-grade-b90.notion.site/312f9f176cf481b9a4caf3c23c20b7c0';
 
@@ -117,9 +119,15 @@ async function fetchRssFeed(journal: string, url: string): Promise<Array<{ title
   const ctrl = new AbortController();
   const timeoutId = setTimeout(() => ctrl.abort(), 15_000);
   try {
+    // 주의: ACS(pubs.acs.org)는 Atypon/Cloudflare가 데이터센터 IP를 UA와 무관하게 403 차단 →
+    // ACS Nano·ACS Sensors 2개 저널은 서버 RSS 수집 불가(2026-07-13 브라우저 UA로도 403 확인).
+    // errors 배열에만 기록되는 무해한 known-limitation(cron 실패 아님). 나머지 12개 저널은 정상.
     const res = await fetch(url, {
       signal: ctrl.signal,
-      headers: { 'User-Agent': 'BLISS-Lab-PaperMonitor/1.0 (jungmok.seo@gmail.com)' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; BLISS-Lab-PaperMonitor/1.0; +mailto:jungmok.seo@gmail.com)',
+        'Accept': 'application/rss+xml, application/xml, text/xml, application/atom+xml, */*',
+      },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const xml = await res.text();
