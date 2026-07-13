@@ -248,7 +248,7 @@ export default function GrantsPage() {
         <p className="text-[11px] text-text-muted/70 text-center pt-3">
           기간·과제번호·부처 정보는{' '}
           <a href={SHEETS_URL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google Sheets</a>
-          에서 편집 (매시간 sync) · 목표/담당 학생/마일스톤은 카드 [편집] 또는 [+] 버튼으로
+          에서 편집 (매일 자동 sync · 즉시 반영은 [동기화] 버튼) · 목표/담당 학생/마일스톤은 카드 [편집] 또는 [+] 버튼으로
         </p>
 
         {/* OAuth 진단 패널 — OWNER 전용. sync 실패 원인 추적용. */}

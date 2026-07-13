@@ -67,7 +67,7 @@ async function syncActionItemCaptures(
       status: 'queued_for_review',
     }));
 
-  // 1. 기존 (meetingId 기반) active Capture 모두 archive
+  // 1. 기존 (meetingId 기반) active Capture 모두 archive — 단 미검토(unreviewed)만.
   const archived = await basePrismaClient.capture.updateMany({
     where: {
       userId,
@@ -81,10 +81,26 @@ async function syncActionItemCaptures(
 
   if (taskCandidates.length === 0) return { created: 0, archived: archived.count };
 
+  // 1.5. 이미 확정(reviewed:true)된 이 회의의 capture 제목 수집 —
+  // 같은 액션을 재생성하면 PI가 확정한 task 옆에 unreviewed 중복이 또 생김
+  // (회의를 다시 저장하거나 체크리스트 토글만 해도 발생). 확정된 제목과 일치하는 후보는 skip.
+  const reviewedExisting = await basePrismaClient.capture.findMany({
+    where: {
+      userId,
+      sourceType: 'meeting',
+      reviewed: true,
+      metadata: { path: ['meetingId'], equals: meetingId },
+    },
+    select: { summary: true },
+  });
+  const normTitle = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').replace(/\[완료\]\s*/g, '').trim();
+  const reviewedTitles = new Set(reviewedExisting.map(c => normTitle(c.summary || '')));
+
   // 2. 새 actionItems로 Capture 생성
   let created = 0;
   for (let idx = 0; idx < taskCandidates.length; idx++) {
     const task = taskCandidates[idx];
+    if (reviewedTitles.has(normTitle(task.title))) continue; // 이미 확정된 액션 — 중복 생성 방지
     const actionDate = task.dueDate ? new Date(`${task.dueDate}T00:00:00.000Z`) : undefined;
     try {
       await basePrismaClient.capture.create({
@@ -1147,8 +1163,10 @@ export async function meetingRoutes(app: FastifyInstance) {
       learnCorrectionPatterns(existing.summary, body.summary, user.id).catch(logError('meeting', 'summary 수정 시 교정 패턴 학습 실패', { userId: user.id }));
     }
 
-    // actionItems가 수정된 경우 Capture 재동기화
-    if (body.actionItems !== undefined) {
+    // actionItems 또는 nextSteps가 수정된 경우 Capture 재동기화 —
+    // taskCandidates(opsPacket)는 nextSteps도 포함하므로 nextSteps-only 편집에서도 재동기화 필요
+    // (이전엔 actionItems guard만 있어 nextSteps 변경이 검토 큐에 반영되지 않았음).
+    if (body.actionItems !== undefined || body.nextSteps !== undefined) {
       syncActionItemCaptures(
         user.id,
         request.labId ?? null,

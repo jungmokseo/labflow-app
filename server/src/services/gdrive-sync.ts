@@ -339,6 +339,13 @@ export async function syncAllGdriveData(labId: string): Promise<{ file: string; 
     { name: '계정 정보', fileId: env.GDRIVE_FILE_ACCOUNTS, fn: () => syncLabAccounts(labId) },
   ];
 
+  // 인증 계열 에러 시 stale 캐시가 원인일 수 있어 1회 리셋+재시도.
+  // (2026-07-13 발견: env 토큰이 6/24 만료된 뒤 module-level _auth 캐시가 영구 잔존 —
+  //  cron 경로는 resetAuthCache를 호출하지 않아 19일간 전건 invalid_grant.
+  //  DB GmailToken은 7/11 재연결로 fresh했지만 캐시 때문에 fallback이 작동할 기회가 없었음.)
+  let authRetried = false;
+  const isAuthError = (msg: string) => /invalid_grant|unauthorized|401|invalid_token|token.*expired/i.test(msg || '');
+
   for (const task of tasks) {
     if (!task.fileId) {
       console.log(`[gdrive] ${task.name} 스킵 (환경변수 미설정)`);
@@ -350,6 +357,19 @@ export async function syncAllGdriveData(labId: string): Promise<{ file: string; 
       results.push({ file: task.name, rows, status: 'success' });
       console.log(`[gdrive] ${task.name} 완료 (${rows}건)`);
     } catch (e: any) {
+      if (isAuthError(e.message) && !authRetried) {
+        authRetried = true;
+        console.warn(`[gdrive] ${task.name} 인증 에러 → 캐시 리셋 후 재시도 (fresh 토큰으로 재인증)`);
+        resetAuthCache();
+        try {
+          const rows = await task.fn();
+          results.push({ file: task.name, rows, status: 'success' });
+          console.log(`[gdrive] ${task.name} 재시도 성공 (${rows}건)`);
+          continue;
+        } catch (e2: any) {
+          e = e2;
+        }
+      }
       console.error(`[gdrive] ${task.name} 실패:`, e.message);
       results.push({ file: task.name, rows: 0, status: 'error', error: e.message });
     }
@@ -372,6 +392,21 @@ export async function syncAllGdriveData(labId: string): Promise<{ file: string; 
     } catch (_e) {
       // 로그 저장 실패는 무시
     }
+  }
+
+  // 전건 실패 → ErrorLog 표면화 (이전엔 GdriveSyncLog에만 남아 settings 에러 탭·대시보드 어디에도 안 보였음)
+  const attempted = results.length;
+  if (attempted > 0 && results.every(r => r.status === 'error')) {
+    try {
+      await prisma.errorLog.create({
+        data: {
+          category: 'gdrive',
+          severity: 'error',
+          message: `GDrive 동기화 전건 실패 (${attempted}개 파일): ${results[0].error?.slice(0, 250) || 'unknown'}`,
+          context: { files: results.map(r => r.file) },
+        },
+      });
+    } catch (_e) { /* 로그 실패 무시 */ }
   }
 
   return results;

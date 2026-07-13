@@ -28,6 +28,7 @@ import {
   monitorManuscriptMail,
   getUnmatchedEvents,
   linkUnmatchedEvent,
+  reprocessUnmatchedEvents,
 } from '../services/manuscript-mail-monitor.js';
 import { logError } from '../services/error-logger.js';
 import { basePrismaClient as prisma } from '../config/prisma.js';
@@ -198,6 +199,19 @@ export async function manuscriptRoutes(app: FastifyInstance) {
       return reply.send({ ok: true, ...r });
     } catch (err) {
       return failWith(reply, 500, 'Gmail 스캔 실패', err);
+    }
+  });
+
+  // POST 미매칭 이벤트 일괄 재처리 — Gmail 원문 재조회 → 재분류·재매칭·Notion 반영.
+  // 분류/매칭 로직 개선을 과거 이벤트에 소급 적용 (scan-mail도 완료 후 자동 수행하지만 단독 트리거용).
+  app.post('/api/manuscripts/reprocess-events', { preHandler: requirePermission('OWNER') }, async (request, reply) => {
+    try {
+      const userId = request.userId;
+      if (!userId) return reply.code(401).send({ error: 'user 없음' });
+      const r = await reprocessUnmatchedEvents(userId);
+      return reply.send({ ok: true, ...r });
+    } catch (err) {
+      return failWith(reply, 500, '재처리 실패', err);
     }
   });
 

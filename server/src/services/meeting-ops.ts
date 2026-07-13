@@ -62,7 +62,12 @@ function uniqueNonEmpty(values: unknown[], limit: number): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const value of values) {
-    const text = normalizeLine(value).replace(/^[-*]\s*/, '');
+    const raw = normalizeLine(value);
+    // 마크다운 헤딩 줄('## 결정 사항', '## 확인 필요 사항' 등)은 사실이 아니라 구조 —
+    // 이걸 통과시키면 extractDecisions/extractOpenQuestions의 키워드 regex에 매칭되어
+    // 무의미 항목이 decisions/openQuestions로 적재되고 readiness score가 과대 산정됨.
+    if (/^#{1,6}\s/.test(raw)) continue;
+    const text = raw.replace(/^[-*]\s*/, '');
     const key = text.toLowerCase();
     if (!text || seen.has(key)) continue;
     seen.add(key);
@@ -142,13 +147,19 @@ export function parseActionDueDate(text: string, baseDate: Date = new Date()): {
     return { dueDate: toDateOnly(date), dueText: koreanDate[0] };
   }
 
-  const slashDate = normalized.match(/\b(\d{1,2})[./](\d{1,2})\b/);
+  // 월/일 표기 — '.' 구분자는 소수(0.5 mm, 3.5 V 등)와 충돌하므로 '/'만 허용.
+  // 추가로 월 1-12·일 1-31 범위 검증 + 단위가 바로 뒤따르면 제외 (연구실 회의록엔 수치 표기가 흔함).
+  const slashDate = normalized.match(/\b(\d{1,2})\/(\d{1,2})\b(?!\s*(?:mm|cm|um|µm|nm|ml|ul|µl|mg|kg|g\b|v\b|%|도|시))/i);
   if (slashDate) {
-    const date = rollForwardIfPast(
-      new Date(baseDate.getFullYear(), Number(slashDate[1]) - 1, Number(slashDate[2])),
-      baseDate,
-    );
-    return { dueDate: toDateOnly(date), dueText: slashDate[0] };
+    const month = Number(slashDate[1]);
+    const day = Number(slashDate[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = rollForwardIfPast(
+        new Date(baseDate.getFullYear(), month - 1, day),
+        baseDate,
+      );
+      return { dueDate: toDateOnly(date), dueText: slashDate[0] };
+    }
   }
 
   const weekday = normalized.match(/(이번|다음)\s*주\s*([월화수목금토일])(?:요일)?(?:까지|중|안에)?/);
